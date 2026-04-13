@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LootLingua | قاموس الأساطير</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Toast -->
+<div id="toastMessage" class="toast-msg"></div>
+
+<!-- ── Hamburger ── -->
+<div class="menu-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
+
+<!-- ── Sidebar ── -->
+<div id="sidebar" class="sidebar">
+  <div class="sidebar-header"><h2>LootLingua 🎮</h2></div>
+  <nav>
+    <a href="#" class="nav-link active" onclick="loadPersonalDictionary()"><i class="fas fa-user-shield"></i> قاموسك الشخصي</a>
+    <div class="sidebar-divider">موسوعة الأساطير</div>
+    <a href="#" class="nav-link" onclick="loadGameDictionary('minecraft')"><i class="fas fa-cube"></i> Minecraft Dict</a>
+    <a href="#" class="nav-link" onclick="loadGameDictionary('pubg')"><i class="fas fa-crosshairs"></i> PUBG Terms</a>
+    <div class="sidebar-divider">الحساب</div>
+    <button id="loginBtn"  class="auth-btn" onclick="login()">تسجيل دخول بـ Google 🚀</button>
+    <button id="logoutBtn" class="auth-btn" onclick="showModal('logoutModal')">تسجيل الخروج</button>
+  </nav>
+</div>
+
+<div id="overlay" class="overlay" onclick="toggleSidebar()"></div>
+
+<!-- ── Main ── -->
+<main class="main-content">
+  <header class="page-header">
+    <h1>⚔️ قاموسك الشخصي</h1>
+    <div class="stats-bar">
+      <span id="totalCount">إجمالي الكلمات: 0</span>
+      <span id="starredCount">⭐ الصعبة: 0</span>
+    </div>
+  </header>
+
+  <!-- بطاقة الإضافة -->
+  <div class="card-box" id="personalControls">
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai"><i class="fas fa-search"></i></button>
+      <input type="text" id="wordInput" placeholder="الكلمة بالإنجليزي (مثال: Sword)" dir="ltr">
+    </div>
+
+    <!-- صندوق الاقتراحات -->
+    <div id="suggestionsBox">
+      <p style="font-size:13px; color:var(--accent); font-weight:bold; margin:0; padding:10px 14px 4px;">اختر المعنى الأنسب:</p>
+      <div id="suggestionsList"></div>
+    </div>
+
+    <input type="text" id="meaningInput" placeholder="المعنى بالعربي" style="margin-bottom:10px;">
+    <textarea id="exampleInput" placeholder="جملة مثال (اختياري)" rows="2" style="margin-bottom:10px;"></textarea>
+
+    <select id="categoryInput" style="margin-bottom:14px;">
+      <option value="عام">عام</option>
+      <option value="فعل">فعل</option>
+      <option value="اسم">اسم</option>
+      <option value="صفة">صفة</option>
+      <option value="أداة">أداة</option>
+      <option value="ظرف">ظرف</option>
+      <option value="جمل">جمل شائعة</option>
+    </select>
+
+    <button class="btn-main" id="addBtn" onclick="addWord()">إضافة للقاموس 💾</button>
+  </div>
+
+  <!-- شريط الأدوات -->
+  <div class="toolbar">
+    <button id="toolAll"     class="btn-tool active-tool" onclick="setFilter('all')">الكل</button>
+    <button id="toolStarred" class="btn-tool" onclick="setFilter('starred')"><i class="fas fa-star"></i> الصعبة</button>
+    <button id="reorderBtn"  class="btn-tool" onclick="toggleReorderMode()"><i class="fas fa-sort-amount-down"></i></button>
+    <button class="btn-tool" onclick="openQuizSetup()"><i class="fas fa-gamepad"></i> كويز</button>
+  </div>
+
+  <input type="text" id="searchInput" placeholder="🔎 ابحث في قاموسك..." oninput="render()" style="margin-bottom:8px;">
+  <select id="searchFilter" onchange="render()" style="margin-bottom:16px;">
+    <option value="all">بحث في الكل</option>
+    <option value="word">الكلمة فقط</option>
+    <option value="meaning">المعنى فقط</option>
+    <option value="example">الجملة فقط</option>
+  </select>
+
+  <ul id="list"></ul>
+
+  <!-- تصدير / استيراد -->
+  <div class="backup-zone">
+    <button class="btn-backup" onclick="exportData()">📥 تصدير JSON</button>
+    <button class="btn-backup" onclick="document.getElementById('importFile').click()">📤 استيراد JSON</button>
+    <input type="file" id="importFile" style="display:none;" onchange="importData(event)">
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════
+     QUIZ SETUP OVERLAY
+═══════════════════════════════════════════ -->
+<div id="quizSetupOverlay" class="quiz-overlay">
+  <div class="quiz-setup-box">
+    <h3>🧠 إعدادات الاختبار</h3>
+    <p>حدد الكلمات اللي حاب تختبرها:</p>
+    <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')">🆕 كلمات جديدة (آخر 10)</button>
+    <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')">🗑️ تحدي النسيان (الأكثر خطأ)</button>
+    <button class="setup-btn btn-old"     onclick="startActualQuiz('old')">🕰️ مراجعة الذكريات (أقدم 10)</button>
+    <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')">⭐ الكلمات الصعبة</button>
+    <button class="setup-btn btn-all"     onclick="startActualQuiz('all')">🌍 كل الكلمات (عشوائي)</button>
+    <button class="btn-close-quiz" onclick="closeQuizSetup()">إلغاء</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     QUIZ FLASHCARD OVERLAY
+═══════════════════════════════════════════ -->
+<div id="quizOverlay" class="quiz-overlay">
+  <div class="quiz-card-meta">
+    <span id="quizCardCounter">1 / 10</span>
+    <button class="btn-close-quiz" style="margin:0;" onclick="closeQuiz()">إغلاق ✕</button>
+  </div>
+  <div class="quiz-card-bar"><div id="quizCardProgress"></div></div>
+
+  <div class="card-container">
+    <div class="card" id="mainCard" onclick="flipCard()">
+      <!-- وجه الكرت (السؤال) -->
+      <div class="card-face card-front">
+        <button class="quiz-sound-btn" onclick="playQuizSound(event)">
+          <i class="fas fa-volume-up"></i>
+        </button>
+        <div class="quiz-word" id="cardFrontText">الكلمة</div>
+        <button class="hint-btn" onclick="showHint(event)">اعرض المثال 💡</button>
+        <div class="hint-text" id="quizHintText"></div>
+      </div>
+      <!-- ظهر الكرت (الجواب) -->
+      <div class="card-face card-back">
+        <div class="quiz-meaning" id="cardBackText">المعنى</div>
+        <div class="quiz-example" id="cardBackExample"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quiz-controls">
+    <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها 🗑️</button>
+    <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها ✅</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL: تأكيد الحذف
+═══════════════════════════════════════════ -->
+<div id="deleteModal" class="custom-modal">
+  <div class="modal-content">
+    <div class="modal-icon">🗑️</div>
+    <h2>حذف الكلمة؟</h2>
+    <p>هذا الإجراء لا يمكن التراجع عنه</p>
+    <div class="modal-buttons">
+      <button id="deleteConfirmBtn" class="btn-confirm">نعم، احذف</button>
+      <button onclick="hideModal('deleteModal')" class="btn-cancel">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL: تأكيد الخروج
+═══════════════════════════════════════════ -->
+<div id="logoutModal" class="custom-modal">
+  <div class="modal-content">
+    <div class="modal-icon">❗</div>
+    <h2>متأكد أنك تريد تسجيل الخروج؟</h2>
+    <p>لن تذهب الكلمات، لكن لن تستطيع تخزين كلماتك سحابياً</p>
+    <div class="modal-buttons">
+      <button onclick="confirmLogout()" class="btn-confirm">نعم، سجل خروج</button>
+      <button onclick="hideModal('logoutModal')" class="btn-cancel">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     FIREBASE
+═══════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import {
+    getAuth, signInWithPopup, signOut,
+    GoogleAuthProvider, onAuthStateChanged, getRedirectResult
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import {
+    getFirestore, collection, addDoc, query,
+    orderBy, deleteDoc, doc, updateDoc, onSnapshot
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyDQB5N4wxJw69-tb8suI2T2SfEfCpwFA2c",
+    authDomain:        "quizapp-ede17.firebaseapp.com",
+    projectId:         "quizapp-ede17",
+    storageBucket:     "quizapp-ede17.firebasestorage.app",
+    messagingSenderId: "473471031803",
+    appId:             "1:473471031803:web:1b803237aeb0444040535e",
+    measurementId:     "G-C06S6C7JYT"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // handle redirect result (for mobile)
+  window.addEventListener("load", async () => {
+    try { await getRedirectResult(auth); } catch (e) { console.error(e.message); }
+  });
+
+  onAuthStateChanged(auth, (user) => {
+    document.getElementById('logoutBtn').style.display = user ? 'block' : 'none';
+    document.getElementById('loginBtn').style.display  = user ? 'none'  : 'block';
+    if (user) loadWordsFromCloud(user);
+    else { window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || []; render(); }
+  });
+
+  // Google Sign-In
+  window.login = async function() {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      console.error(e.code, e.message);
+      if (e.code === 'auth/popup-blocked') alert("الـ popup اتعطل من المتصفح. جرب تفتح من تاب مختلف أو تسمح لـ popups للموقع.");
+    }
+  };
+
+  // Logout
+  window.confirmLogout = function() {
+    signOut(auth).then(() => hideModal('logoutModal'));
+  };
+
+  // Load from Firestore
+  function loadWordsFromCloud(user) {
+    const q = query(collection(db, "users", user.uid, "words"), orderBy("createdAt", "desc"));
+    onSnapshot(q, (snapshot) => {
+      const cloudWords = snapshot.docs.map(d => ({
+        id:          d.id,
+        word:        d.data().text   || d.data().word || '',
+        meaning:     d.data().meaning     || '',
+        example:     d.data().example     || '',
+        category:    d.data().category    || 'عام',
+        starred:     d.data().starred     || false,
+        forgetCount: d.data().forgetCount || 0
+      }));
+      if (cloudWords.length > 0) {
+        window.words = cloudWords;
+        saveAndRender();
+      }
+    });
+  }
+
+  // CRUD
+  window.saveWordToCloud = async function(wordText, wordCategory, meaning, example) {
+    const user = auth.currentUser;
+    if (!user) return null;
+    try {
+      const ref = await addDoc(collection(db, "users", user.uid, "words"), {
+        text: wordText, category: wordCategory,
+        meaning, example, starred: false, forgetCount: 0,
+        createdAt: new Date()
+      });
+      return ref.id;
+    } catch (e) { console.error("فشل الرفع:", e); return null; }
+  };
+
+  window.updateWordInCloud = async function(docId, data) {
+    const user = auth.currentUser;
+    if (!user || !docId) return;
+    const update = {};
+    if ('word'        in data) update.text        = data.word;
+    if ('meaning'     in data) update.meaning     = data.meaning;
+    if ('example'     in data) update.example     = data.example;
+    if ('category'    in data) update.category    = data.category;
+    if ('starred'     in data) update.starred     = data.starred;
+    if ('forgetCount' in data) update.forgetCount = data.forgetCount;
+    try { await updateDoc(doc(db, "users", user.uid, "words", docId), update); }
+    catch (e) { console.error("خطأ في التحديث:", e); }
+  };
+
+  window.deleteWordFromCloud = async function(id) {
+    const user = auth.currentUser;
+    if (!user || !id) return;
+    try { await deleteDoc(doc(db, "users", user.uid, "words", id)); }
+    catch (e) { console.error("خطأ بالحذف:", e); }
+  };
+</script>
+
+<script src="script.js"></script>
+</body>
+</html>
