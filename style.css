@@ -25,6 +25,18 @@ body {
   transition: background-image 0.5s ease-in-out;
 }
 
+/* إلغاء لون التحديد الأزرق عند اللمس على التلفونات */
+* {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none; /* لمنع ظهور قائمة النسخ عند الضغط المطول على الأزرار */
+}
+
+/* إذا بدك زر الصوت أو الكرت يعطي استجابة بصرية حلوة بدل اللون الأزرق البشع */
+.word-card:active, .icon-circle:active, .btn-add-mine:active {
+    transform: scale(0.96); /* حركة تصغير خفيفة بتحسسك إنك ضغطت زر حقيقي */
+    transition: transform 0.1s;
+}
+
 /* ── Sidebar ──────────────────────────────── */
 .sidebar {
   position: fixed; top: 0; right: -290px;
