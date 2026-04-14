@@ -1,3 +1,20 @@
+/* شطب التحديد الأزرق البشع في التلفونات */
+* {
+    -webkit-tap-highlight-color: transparent !important;
+    outline: none !important;
+    -ms-touch-action: manipulation;
+    touch-action: manipulation;
+}
+
+/* حركة ضغط احترافية للأزرار والكروت بدل اللون الأزرق */
+.word-card:active, 
+.icon-circle:active, 
+.btn-add-mine:active, 
+.nav-link:active {
+    transform: scale(0.95); /* بصغر حجم العنصر شوي عند الضغط */
+    transition: transform 0.1s;
+}
+
 :root {
   --main-bg:    #0f172a;
   --card-bg:    #1e293b;
@@ -23,18 +40,6 @@ body {
   color: var(--text-white);
   overflow-x: hidden;
   transition: background-image 0.5s ease-in-out;
-}
-
-/* إلغاء لون التحديد الأزرق عند اللمس على التلفونات */
-* {
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none; /* لمنع ظهور قائمة النسخ عند الضغط المطول على الأزرار */
-}
-
-/* إذا بدك زر الصوت أو الكرت يعطي استجابة بصرية حلوة بدل اللون الأزرق البشع */
-.word-card:active, .icon-circle:active, .btn-add-mine:active {
-    transform: scale(0.96); /* حركة تصغير خفيفة بتحسسك إنك ضغطت زر حقيقي */
-    transition: transform 0.1s;
 }
 
 /* ── Sidebar ──────────────────────────────── */
