@@ -365,7 +365,7 @@ const gameData = {
         text: "Creeper",
         meaning: "وحش أخضر صامت يقترب منك وينفجر",
         example: "A Creeper snuck up behind me and exploded!",
-        img: "https://minecraft.wiki/images/thumb/Creeper_JE3_BE1.png/293px-Creeper_JE3_BE1.png?dc7b2&20250323051424"
+        img: "https://minecraft.wiki/images/Creeper_face_1.png?b6233"
       },
       {
         text: "Nether",
