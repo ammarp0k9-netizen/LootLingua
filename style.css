@@ -511,3 +511,53 @@ ul { list-style: none; padding: 0; margin: 0; }
   background: var(--accent);
   border-radius: 3px 0 0 3px;
 }
+
+/* ── تنسيق خلفية الألعاب (LootLingua) ── */
+
+/* 1. جعل الـ body مستعد للطبقة الوهمية */
+body {
+    position: relative;
+    /*Existing styles...*/
+}
+
+/* 2. الطبقة الوهمية التي ستحمل صورة ماين كرافت (تضبضب) */
+body::before {
+    content: "";
+    position: fixed; /* ثابتة على الشاشة */
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: -2; /* تحت كل إشي بمليار مرة */
+    
+    background-size: cover;
+    background-position: center;
+    
+    transition: opacity 0.5s ease-in-out, filter 0.5s ease-in-out; /* حركة ناعمة */
+    opacity: 0; /* مخفية بالوضع الطبيعي */
+    filter: blur(10px) brightness(0.5); /* الـ Blur (تضبضب) وتغريق الإضاءة */
+}
+
+/* 3. الطبقة الكحلية الشفافة عشان تعطي لون الموقع فوق الصورة */
+body::after {
+    content: "";
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: -1; /* تحت الكلمات وفوق الصورة */
+    
+    /* لون كحلي غامق شفاف (زي الموقع) */
+    background-color: rgba(15, 23, 42, 0.85); 
+    
+    opacity: 0; /* مخفية بالوضع الطبيعي */
+    transition: opacity 0.5s ease-in-out;
+}
+
+/* ── عند تفعيل وضع الألعاب (بواسطة الجافاسكربت) ── */
+body.game-page-active::before,
+body.game-page-active::after {
+     opacity: 1; /* إظهار الطبقات */
+ }
+
+/* تنسيقات أخرى (تأكد إنها موجودة عندك) */
+.page-header p#starredCount {
+   transition: opacity 0.3s;
+}
