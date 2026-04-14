@@ -426,6 +426,36 @@ const gameData = {
         meaning: "مدى تحمل الأداة قبل الكسر", 
         example: "My diamond pickaxe has low durability, I need to mend it.", 
         img: "https://minecraft.wiki/images/thumb/Durability_bars.png/544px-Durability_bars.png?dda91" 
+      },
+      { 
+        text: "XP (Experience)", 
+        meaning: "نقاط الخبرة: النقاط اللي بتجمعها عشان تطور أسلحتك.", 
+        example: "I need to kill more mobs to get XP for my sword enchantments.", 
+        img: "https://minecraft.wiki/images/Experience_Orb_Value_3-6.png?6de8c" 
+      },
+      { 
+        text: "AFK (Away From Keyboard)", 
+        meaning: "بعيد عن الجهاز: لما تترك اللعبة شغالة وتروح تعمل إشي ثاني.", 
+        example: "I’ll be AFK for 10 minutes at the iron farm.", 
+        img: "https://minecraft.wiki/images/EntitySprite_steve.png?856f8" 
+      },
+      { 
+        text: "Smelting", 
+        meaning: "صهر: عملية تحويل الخامات (زي الحديد) لسبائك باستخدام الفرن.", 
+        example: "I’m smelting the iron ore in the furnace to get iron ingots.", 
+        img: "https://minecraft.wiki/images/Furnace_GUI.png?8d780" 
+      },
+      { 
+        text: "Inventory", 
+        meaning: "قائمة الأغراض: الشاشة اللي بتعرض كل الأغراض اللي معك.", 
+        example: "My inventory is full of dirt; I need to throw some away.", 
+        img: "https://minecraft.wiki/images/thumb/Inventory.png/176px-Inventory.png?9e5ea" 
+      },
+      { 
+        text: "Pillagers", 
+        meaning: "النهّابون: الأعداء اللي بشنوا غارات على القرى.", 
+        example: "A group of Pillagers is attacking the village, get your bow!", 
+        img: "https://minecraft.wiki/images/EntitySprite_evoker.png?f236e" 
       }
     ]
   },
