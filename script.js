@@ -402,7 +402,7 @@ const gameData = {
         meaning: "كائن حي متحرك في اللعبة — عدائي أو ودّي",
         example: "Zombies are hostile mobs that spawn at night.",
         img: "https://minecraft.wiki/images/NPCFace.png?2fe0f"
-      }
+      },
       { 
         text: "Spawn Point", 
         meaning: "مكان إعادة الإحياء بعد الموت", 
