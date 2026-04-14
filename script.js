@@ -403,6 +403,30 @@ const gameData = {
         example: "Zombies are hostile mobs that spawn at night.",
         img: "https://minecraft.wiki/images/NPCFace.png?2fe0f"
       }
+      { 
+        text: "Spawn Point", 
+        meaning: "مكان إعادة الإحياء بعد الموت", 
+        example: "I slept in the bed to reset my spawn point near the village.", 
+        img: "https://minecraft.wiki/images/White_Bed_JE2_BE2.png" 
+      },
+      { 
+        text: "Mob Spawner", 
+        meaning: "قفص توليد الوحوش التلقائي", 
+        example: "We found a spider mob spawner and turned it into an XP farm.", 
+        img: "https://minecraft.wiki/images/thumb/Monster_Spawner_JE4.png/150px-Monster_Spawner_JE4.png?64df6" 
+      },
+      { 
+        text: "Hardcore Mode", 
+        meaning: "طور اللعبة بحياة واحدة فقط", 
+        example: "I've survived for 500 days in my Hardcore mode world!", 
+        img: "https://minecraft.wiki/images/Hardcore_Heart.svg?dcc51" 
+      },
+      { 
+        text: "Durability", 
+        meaning: "مدى تحمل الأداة قبل الكسر", 
+        example: "My diamond pickaxe has low durability, I need to mend it.", 
+        img: "https://minecraft.wiki/images/thumb/Durability_bars.png/544px-Durability_bars.png?dda91" 
+      }
     ]
   },
   pubg: {
