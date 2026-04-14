@@ -11,6 +11,17 @@ let quizIndex        = 0;
 let currentStreak    = 0;
 let pendingDeleteId  = null;
 let userXP           = parseInt(localStorage.getItem('userXP')) || 0;
+let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg'
+
+// ── Fluent Emoji helper (Microsoft CDN) ──────────────────
+// https://github.com/microsoft/fluentui-emoji
+const FE_BASE = 'https://cdn.jsdelivr.net/npm/fluentui-emoji@latest/icons';
+
+// نستخدم inline <img> بدل نص الإيموجي في الأماكن المهمة
+function fe(name, size = 20) {
+  // name مثل: 'star', 'sword', 'fire' — تتطابق مع أسماء الملفات
+  return `<img src="${FE_BASE}/${name}/flat/default.svg" width="${size}" height="${size}" style="vertical-align:middle; display:inline-block;" alt="" onerror="this.style.display='none'">`;
+}
 
 // ═══════════════════════════════════════════════════════
 // Sidebar
@@ -18,6 +29,13 @@ let userXP           = parseInt(localStorage.getItem('userXP')) || 0;
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('overlay').classList.toggle('show');
+}
+
+function setActiveNavLink(key) {
+  // key: 'personal' | 'minecraft' | 'pubg'
+  document.querySelectorAll('.nav-link[data-view]').forEach(l => {
+    l.classList.toggle('active', l.dataset.view === key);
+  });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -29,7 +47,7 @@ function hideModal(id) { document.getElementById(id).style.display = 'none'; }
 function showToast(msg) {
   const t = document.getElementById('toastMessage');
   if (!t) return;
-  t.innerText = msg;
+  t.innerHTML = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
@@ -40,7 +58,6 @@ function showToast(msg) {
 function updateXP(amount) {
   userXP += amount;
   localStorage.setItem('userXP', userXP);
-  // لو أضفنا شريط XP لاحقاً رح يشتغل تلقائياً
 }
 
 // ═══════════════════════════════════════════════════════
@@ -52,8 +69,10 @@ function saveAndRender() {
 }
 
 function clearInputs() {
-  const fields = ['wordInput','meaningInput','exampleInput'];
-  fields.forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['wordInput','meaningInput','exampleInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   const cat = document.getElementById('categoryInput');
   if (cat) cat.value = 'عام';
   const list = document.getElementById('suggestionsList');
@@ -82,7 +101,7 @@ window.addWord = async function() {
     );
     if (window.updateWordInCloud) await window.updateWordInCloud(editId, { word: w, meaning: m, example: ex, category: c });
     editId = null;
-    btn.innerText = 'إضافة للقاموس 💾';
+    btn.innerHTML = 'إضافة للقاموس ' + fe('floppy-disk', 18);
     btn.style.background = '';
   } else {
     const newWord = { id: Date.now().toString(), word: w, meaning: m, example: ex, category: c, starred: false, forgetCount: 0 };
@@ -112,7 +131,7 @@ window.editWord = function(id, event) {
   document.getElementById('categoryInput').value = item.category;
   editId = id;
   const btn = document.getElementById('addBtn');
-  btn.innerText = 'تحديث الكلمة 💾';
+  btn.innerHTML = 'تحديث الكلمة ' + fe('floppy-disk', 18);
   btn.style.background = '#059669';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
@@ -146,7 +165,7 @@ window.toggleStar = function(id, event) {
 };
 
 // ═══════════════════════════════════════════════════════
-// Sound — speechSynthesis
+// Sound
 // ═══════════════════════════════════════════════════════
 window.playSound = function(identifier, event) {
   if (event) event.stopPropagation();
@@ -190,8 +209,8 @@ window.fetchSuggestions = async function() {
 
     let html = '';
     suggestions.forEach((s, i) => {
-      const safeAr = (s.ar  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      const safeEx = (s.ex  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const safeAr  = (s.ar  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const safeEx  = (s.ex  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safePos = (s.pos || 'عام').replace(/'/g,"\\'");
       html += `
         <div class="sug-item ${i >= 4 ? 'extra-meaning' : ''}" ${i >= 4 ? 'style="display:none"' : ''}
@@ -324,37 +343,139 @@ window.importData = async function(event) {
 // ═══════════════════════════════════════════════════════
 // Game Dictionaries
 // ═══════════════════════════════════════════════════════
+
+// ── صور موثوقة من Wikimedia Commons وروابط مستقرة ──────
+// Minecraft: نستخدم Wikimedia مباشرة
+// PUBG: نستخدم SVG icons من cdnjs / svg repos
+
 const gameData = {
   minecraft: {
-    title: "Minecraft Dictionary ⛏️",
+    title: "Minecraft Dictionary",
+    titleIcon: "https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/26cf.svg", // ⛏
     desc:  "اجمع الموارد وافهم كل مصطلحات اللعبة!",
     bg:    "https://images.alphacoders.com/109/1099238.png",
     words: [
-      { text: "Obsidian", meaning: "حجر بركاني صلب جداً",    img: "https://minecraft.wiki/images/Obsidian_JE3_BE2.png" },
-      { text: "Creeper",  meaning: "وحش متفجر صامت خطير",    img: "https://minecraft.wiki/images/Creeper_JE2_BE2.png" },
-      { text: "Nether",   meaning: "العالم السفلي (الجحيم)",  img: "https://minecraft.wiki/images/Netherrack_JE4_BE2.png" },
-      { text: "Enchant",  meaning: "تطوير الأسلحة بالسحر",    img: "https://minecraft.wiki/images/Enchanting_Table_JE4_BE2.png" },
-      { text: "Respawn",  meaning: "العودة للحياة بعد الموت", img: "https://cdn-icons-png.flaticon.com/512/458/458534.png" }
+      {
+        text: "Obsidian",
+        meaning: "حجر بركاني صلب جداً — يتكوّن من تلاقي الماء مع الحمم",
+        example: "You need Obsidian to build a Nether portal.",
+        img: "https://minecraft.wiki/images/Obsidian_JE3_BE2.png?format=original"
+      },
+      {
+        text: "Creeper",
+        meaning: "وحش أخضر صامت يقترب منك وينفجر",
+        example: "A Creeper snuck up behind me and exploded!",
+        img: "https://minecraft.wiki/images/Creeper_JE2_BE2.png?format=original"
+      },
+      {
+        text: "Nether",
+        meaning: "العالم السفلي — بيئة جهنمية تحت عالم العادي",
+        example: "Build a portal to travel to the Nether.",
+        img: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Netherrack_JE4_BE2.png/64px-Netherrack_JE4_BE2.png"
+      },
+      {
+        text: "Enchant",
+        meaning: "تحسين الأسلحة والأدوات بقوى سحرية",
+        example: "Enchant your sword with Sharpness V.",
+        img: "https://minecraft.wiki/images/Enchanting_Table_JE4_BE2.png?format=original"
+      },
+      {
+        text: "Respawn",
+        meaning: "العودة للحياة من جديد بعد الموت",
+        example: "Set your respawn point using a bed.",
+        img: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Ender_Dragon_JE4.png/64px-Ender_Dragon_JE4.png"
+      },
+      {
+        text: "Crafting",
+        meaning: "صنع الأدوات والأسلحة من الموارد المجموعة",
+        example: "Open the crafting table to build a sword.",
+        img: "https://minecraft.wiki/images/Crafting_Table_JE4_BE3.png?format=original"
+      },
+      {
+        text: "Biome",
+        meaning: "منطقة جغرافية في العالم لها طبيعة وكائنات خاصة",
+        example: "The desert biome is dry and sandy.",
+        img: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Grass_Block_JE7_BE6.png/64px-Grass_Block_JE7_BE6.png"
+      },
+      {
+        text: "Mob",
+        meaning: "كائن حي متحرك في اللعبة — عدائي أو ودّي",
+        example: "Zombies are hostile mobs that spawn at night.",
+        img: "https://minecraft.wiki/images/Zombie_JE3_BE2.png?format=original"
+      }
     ]
   },
   pubg: {
-    title: "PUBG Terms 🪂",
+    title: "PUBG Terms",
+    titleIcon: "https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1fa82.svg", // 🪂
     desc:  "دليلك للنجاة والحصول على عشاء الدجاج!",
     bg:    "https://images.alphacoders.com/901/901375.jpg",
     words: [
-      { text: "Airdrop", meaning: "صندوق إمدادات جوي نادر",  img: "https://static.wikia.nocookie.net/battlegrounds_gamepedia_en/images/1/1a/Icon_item_Air_Drop.png" },
-      { text: "Flank",   meaning: "الالتفاف خلف العدو",       img: "https://cdn-icons-png.flaticon.com/512/3593/3593455.png" },
-      { text: "Loot",    meaning: "جمع الغنائم والأسلحة",     img: "https://cdn-icons-png.flaticon.com/512/1041/1041373.png" },
-      { text: "Snipe",   meaning: "القنص من مسافة بعيدة",     img: "https://cdn-icons-png.flaticon.com/512/2621/2621230.png" },
-      { text: "Revive",  meaning: "إنقاذ زميلك الساقط",       img: "https://cdn-icons-png.flaticon.com/512/2382/2382461.png" }
+      {
+        text: "Airdrop",
+        meaning: "صندوق إمدادات نادر يسقط من طائرة — يحتوي على أسلحة قوية",
+        example: "Rush the airdrop before the enemy gets there!",
+        img: "https://cdn-icons-png.flaticon.com/512/870/870160.png"
+      },
+      {
+        text: "Flank",
+        meaning: "الالتفاف حول العدو من الجانب أو الخلف",
+        example: "Let's flank them from the left side.",
+        img: "https://cdn-icons-png.flaticon.com/512/1046/1046352.png"
+      },
+      {
+        text: "Loot",
+        meaning: "جمع الغنائم والأسلحة والمعدات من الخريطة",
+        example: "Good loot spawns in military compounds.",
+        img: "https://cdn-icons-png.flaticon.com/512/3075/3075977.png"
+      },
+      {
+        text: "Snipe",
+        meaning: "القنص والاستهداف من مسافة بعيدة جداً",
+        example: "He sniped me from 400 meters away.",
+        img: "https://cdn-icons-png.flaticon.com/512/2917/2917995.png"
+      },
+      {
+        text: "Revive",
+        meaning: "إنقاذ زميلك الساقط وإعادته للمعركة",
+        example: "Quick, revive me before they push!",
+        img: "https://cdn-icons-png.flaticon.com/512/2382/2382533.png"
+      },
+      {
+        text: "Zone",
+        meaning: "الدائرة الآمنة — يجب البقاء داخلها أو تضرر من السم",
+        example: "The zone is closing in, move now!",
+        img: "https://cdn-icons-png.flaticon.com/512/1535/1535791.png"
+      },
+      {
+        text: "Prone",
+        meaning: "الاستلقاء على الأرض للاختباء أو تفادي الرصاص",
+        example: "Go prone in the grass to stay hidden.",
+        img: "https://cdn-icons-png.flaticon.com/512/3095/3095574.png"
+      },
+      {
+        text: "Push",
+        meaning: "الهجوم على العدو والتقدم نحوه بقوة",
+        example: "They're reloading — push them now!",
+        img: "https://cdn-icons-png.flaticon.com/512/1046/1046338.png"
+      }
     ]
   }
 };
+
+// ── متغير يحفظ الكلمات المفلترة الحالية للبحث ──
+let currentGameWords = [];
 
 window.loadGameDictionary = function(gameKey) {
   toggleSidebar();
   const game = gameData[gameKey];
   if (!game) return;
+
+  currentView      = gameKey;
+  currentGameWords = [...game.words];
+
+  // تحديث الـ active link
+  setActiveNavLink(gameKey);
 
   // خلفية اللعبة
   document.body.style.backgroundImage    = `url('${game.bg}')`;
@@ -362,83 +483,109 @@ window.loadGameDictionary = function(gameKey) {
   document.body.style.backgroundPosition = 'center';
   document.body.style.backgroundAttachment = 'fixed';
 
-  // إخفاء فورم الإضافة
-  const controls = document.getElementById('personalControls');
-  if (controls) controls.style.display = 'none';
+  // إخفاء عناصر القاموس الشخصي
+  document.getElementById('personalControls').style.display = 'none';
+  document.querySelector('.toolbar').style.display          = 'none';
+  document.getElementById('searchFilter').style.display     = 'none';
+  document.querySelector('.backup-zone').style.display      = 'none';
+  document.getElementById('starredCount').style.display     = 'none';
 
-  // إخفاء أدوات التصفية والترتيب والبحث
-  document.querySelector('.toolbar').style.display      = 'none';
-  document.getElementById('searchInput').style.display  = 'none';
-  document.getElementById('searchFilter').style.display = 'none';
-  document.querySelector('.backup-zone').style.display  = 'none';
+  // إظهار search bar الألعاب
+  const gameSearch = document.getElementById('gameSearchBar');
+  gameSearch.style.display = 'block';
+  gameSearch.querySelector('input').value = '';
 
-  // تحديث العنوان والوصف
-  document.querySelector('.page-header h1').innerText   = game.title;
-  document.getElementById('totalCount').innerText       = game.desc;
-  document.getElementById('starredCount').style.display = 'none';
+  // تحديث العنوان
+  document.querySelector('.page-header h1').innerHTML =
+    `<img src="${game.titleIcon}" width="24" height="24" style="vertical-align:middle;margin-left:6px;" alt=""> ${game.title}`;
+  document.getElementById('totalCount').innerText = game.desc;
 
-  // رندر بطاقات اللعبة
-  document.getElementById('list').innerHTML = game.words.map(w => `
-    <li class="game-card">
-      <div class="game-info">
-        <img src="${w.img}" class="game-icon" alt="${w.text}"
-             onerror="this.src='https://cdn-icons-png.flaticon.com/512/686/686589.png'">
-        <div>
-          <div class="word-text">${w.text}</div>
-          <div class="meaning-text">${w.meaning}</div>
-        </div>
-      </div>
-      <button class="btn-add-mine" onclick="addFromGame('${w.text.replace(/'/g,"\\'")}', '${w.meaning.replace(/'/g,"\\'")}')">أضف لقاموسي ➕</button>
-    </li>
-  `).join('');
+  // عرض الكلمات
+  renderGameWords(currentGameWords);
+};
 
-  // تحديث الـ active link في الـ sidebar
-  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+function renderGameWords(words) {
+  const query = document.getElementById('gameSearchInput')?.value.toLowerCase().trim() || '';
+  const filtered = words.filter(w =>
+    w.text.toLowerCase().includes(query) || w.meaning.includes(query)
+  );
+
+  document.getElementById('list').innerHTML = filtered.length === 0
+    ? `<li style="text-align:center;padding:40px;color:var(--text-gray);">
+         <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+         ما في نتائج للبحث
+       </li>`
+    : filtered.map(w => `
+        <li class="game-card">
+          <div class="game-info">
+            <img src="${w.img}" class="game-icon" alt="${w.text}"
+                 onerror="this.src='https://cdn-icons-png.flaticon.com/512/686/686589.png'">
+            <div>
+              <div class="word-text">${w.text}</div>
+              <div class="meaning-text">${w.meaning}</div>
+              ${w.example ? `<div class="game-example">"${w.example}"</div>` : ''}
+            </div>
+          </div>
+          <button class="btn-add-mine"
+                  onclick="addFromGame('${w.text.replace(/'/g,"\\'")}','${w.meaning.replace(/'/g,"\\'")}','${(w.example||'').replace(/'/g,"\\'")}')">
+            ➕ أضف
+          </button>
+        </li>
+      `).join('');
+}
+
+// البحث داخل قاموس اللعبة
+window.searchGameWords = function() {
+  renderGameWords(currentGameWords);
 };
 
 window.loadPersonalDictionary = function() {
   toggleSidebar();
+  currentView = 'personal';
 
   // إرجاع الخلفية
   document.body.style.backgroundImage = 'none';
 
-  // إظهار كل العناصر المخفية
-  const controls = document.getElementById('personalControls');
-  if (controls) controls.style.display = 'block';
-  document.querySelector('.toolbar').style.display      = '';
-  document.getElementById('searchInput').style.display  = '';
-  document.getElementById('searchFilter').style.display = '';
-  document.querySelector('.backup-zone').style.display  = '';
-  document.getElementById('starredCount').style.display = '';
+  // إظهار عناصر القاموس الشخصي
+  document.getElementById('personalControls').style.display = 'block';
+  document.querySelector('.toolbar').style.display          = '';
+  document.getElementById('searchInput').style.display      = '';
+  document.getElementById('searchFilter').style.display     = '';
+  document.querySelector('.backup-zone').style.display      = '';
+  document.getElementById('starredCount').style.display     = '';
 
-  document.querySelector('.page-header h1').innerText = '⚔️ قاموسك الشخصي';
+  // إخفاء search bar الألعاب
+  document.getElementById('gameSearchBar').style.display = 'none';
+
+  // إرجاع العنوان
+  document.querySelector('.page-header h1').innerHTML = '⚔️ قاموسك الشخصي';
 
   // الـ active link
-  document.querySelectorAll('.nav-link').forEach((l, i) => l.classList.toggle('active', i === 0));
+  setActiveNavLink('personal');
 
   render();
 };
 
-window.addFromGame = async function(text, meaning) {
+window.addFromGame = async function(text, meaning, example) {
   if (window.saveWordToCloud) {
-    const realId = await window.saveWordToCloud(text, 'لعبة', meaning, 'من موسوعة الأساطير');
+    const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example || 'من موسوعة الأساطير');
     if (realId) {
-      showToast("تمت الإضافة لقاموسك! 💎");
+      showToast('تمت الإضافة لقاموسك! 💎');
       updateXP(10);
     } else {
-      showToast("سجل دخول أولاً عشان تحفظ اللوت! ⚠️");
+      showToast('سجل دخول أولاً عشان تحفظ اللوت! ⚠️');
     }
   } else {
-    const newWord = { id: Date.now().toString(), word: text, meaning, category: 'لعبة', starred: false, forgetCount: 0 };
+    const newWord = { id: Date.now().toString(), word: text, meaning, example: example || '', category: 'لعبة', starred: false, forgetCount: 0 };
     window.words.unshift(newWord);
     saveAndRender();
-    showToast("تمت الإضافة للقاموس المحلي! 💎");
+    showToast('تمت الإضافة للقاموس المحلي! 💎');
     updateXP(10);
   }
 };
 
 // ═══════════════════════════════════════════════════════
-// Render
+// Render (القاموس الشخصي)
 // ═══════════════════════════════════════════════════════
 function highlightText(text, query) {
   if (!query || !text) return text || '';
@@ -448,6 +595,9 @@ function highlightText(text, query) {
 }
 
 function render() {
+  // لو مش على القاموس الشخصي ما نرندر
+  if (currentView !== 'personal') return;
+
   const searchEl = document.getElementById('searchInput');
   const filterEl = document.getElementById('searchFilter');
   if (!searchEl) return;
@@ -467,7 +617,6 @@ function render() {
     return matches && (currentFilter === 'all' || w.starred);
   });
 
-  // إحصائيات
   const countEl = document.getElementById('totalCount');
   const starEl  = document.getElementById('starredCount');
   if (countEl) countEl.innerText = `إجمالي الكلمات: ${window.words.length}`;
@@ -478,8 +627,8 @@ function render() {
 
   if (filtered.length === 0) {
     listEl.innerHTML = `
-      <li style="list-style:none; text-align:center; padding:40px 20px; color:var(--text-gray);">
-        <div style="font-size:32px; margin-bottom:10px;">📖</div>
+      <li style="list-style:none;text-align:center;padding:40px 20px;color:var(--text-gray);">
+        <div style="font-size:32px;margin-bottom:10px;">📖</div>
         ${query ? 'ما في نتائج للبحث' : 'قاموسك فاضي، ابدأ بإضافة كلمة!'}
       </li>`;
     return;
@@ -490,21 +639,16 @@ function render() {
     const drag = isReorderMode
       ? `draggable="true" ondragstart="drag(event,${ri})" ondragover="allowDrop(event)" ondrop="drop(event,${ri})"`
       : '';
-    const cls = [
-      'word-card',
-      isReorderMode ? 'reorder-mode-li' : '',
-      selectedIndices.includes(ri) ? 'selected-for-move' : ''
-    ].filter(Boolean).join(' ');
-
-    // تنظيف القيم عشان ما تكسر الـ onclick
+    const cls = ['word-card', isReorderMode ? 'reorder-mode-li' : '', selectedIndices.includes(ri) ? 'selected-for-move' : '']
+      .filter(Boolean).join(' ');
     const safeId = w.id.replace(/'/g, "\\'");
 
     return `
       <li ${drag} class="${cls}" onclick="handleLiClick(${ri}, this)">
-        <div class="word-body" style="flex:1; min-width:0;">
-          <div style="display:flex; align-items:flex-start; gap:8px; margin-bottom:4px;">
+        <div class="word-body" style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
             <button class="star-btn ${w.starred ? 'active' : ''}"
-                    onclick="toggleStar('${safeId}', event)" title="${w.starred ? 'إزالة من الصعبة' : 'علّم كصعبة'}">
+                    onclick="toggleStar('${safeId}',event)">
               <i class="fas fa-star"></i>
             </button>
             <div>
@@ -518,11 +662,11 @@ function render() {
           ${w.example ? `<div class="example-box"><b>Ex:</b> ${highlightText(w.example, query)}</div>` : ''}
         </div>
         ${isReorderMode
-          ? '<span style="font-size:20px; color:#475569; padding:0 8px; flex-shrink:0;">☰</span>'
+          ? '<span style="font-size:20px;color:#475569;padding:0 8px;flex-shrink:0;">☰</span>'
           : `<div class="actions">
-               <button class="icon-circle sound-btn" onclick="playSound('${safeId}', event)" title="استمع"><i class="fas fa-volume-up"></i></button>
-               <button class="icon-circle edit-btn"  onclick="editWord('${safeId}', event)"  title="تعديل"><i class="fas fa-edit"></i></button>
-               <button class="icon-circle del-btn"   onclick="deleteWord('${safeId}', event)" title="حذف"><i class="fas fa-trash-alt"></i></button>
+               <button class="icon-circle sound-btn" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
+               <button class="icon-circle edit-btn"  onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
+               <button class="icon-circle del-btn"   onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
              </div>`
         }
       </li>`;
@@ -550,27 +694,27 @@ function startActualQuiz(mode) {
   let words = [...window.words];
 
   if (mode === 'recent') {
-    words.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    words.sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
     words = words.slice(0, 10);
   } else if (mode === 'old') {
-    words.sort((a, b) => (a.id || 0) - (b.id || 0));
+    words.sort((a, b) => (a.id||0) - (b.id||0));
     words = words.slice(0, 10);
   } else if (mode === 'forgotten') {
-    words = words.filter(w => (w.forgetCount || 0) > 0).sort((a, b) => b.forgetCount - a.forgetCount);
+    words = words.filter(w => (w.forgetCount||0) > 0).sort((a,b) => b.forgetCount - a.forgetCount);
     if (!words.length) {
       alert("ما عندك كلمات بتغلط فيها. رح نختبرك عشوائياً.");
-      words = [...window.words].sort(() => Math.random() - 0.5).slice(0, 10);
+      words = [...window.words].sort(() => Math.random()-0.5).slice(0, 10);
     } else words = words.slice(0, 10);
   } else if (mode === 'starred') {
     words = words.filter(w => w.starred);
     if (!words.length) { alert("ما عندك كلمات صعبة. رح نختبرك بالكل."); words = [...window.words]; }
   } else {
-    words.sort(() => Math.random() - 0.5);
+    words.sort(() => Math.random()-0.5);
   }
 
   currentQuizWords = words;
-  quizIndex        = 0;
-  currentStreak    = 0;
+  quizIndex = 0;
+  currentStreak = 0;
 
   const el = document.getElementById('quizOverlay');
   el.style.display = 'flex';
@@ -601,7 +745,7 @@ function updateCard() {
 
   const pct = (quizIndex / currentQuizWords.length) * 100;
   document.getElementById('quizCardProgress').style.width = pct + '%';
-  document.getElementById('quizCardCounter').innerText    = `${quizIndex + 1} / ${currentQuizWords.length}`;
+  document.getElementById('quizCardCounter').innerText    = `${quizIndex+1} / ${currentQuizWords.length}`;
 }
 
 function flipCard()      { document.getElementById('mainCard').classList.toggle('is-flipped'); }
@@ -621,7 +765,7 @@ function showStreakMsg(streak) {
 function markRemember() {
   const w = currentQuizWords[quizIndex];
   window.words = window.words.map(x =>
-    x.id === w.id ? { ...x, forgetCount: Math.max((x.forgetCount || 0) - 1, 0) } : x
+    x.id === w.id ? { ...x, forgetCount: Math.max((x.forgetCount||0)-1, 0) } : x
   );
   saveAndRender();
   currentStreak++;
@@ -635,10 +779,10 @@ function markForgot() {
   currentStreak = 0;
   const w = currentQuizWords[quizIndex];
   window.words = window.words.map(x =>
-    x.id === w.id ? { ...x, forgetCount: (x.forgetCount || 0) + 1 } : x
+    x.id === w.id ? { ...x, forgetCount: (x.forgetCount||0)+1 } : x
   );
   saveAndRender();
-  currentQuizWords.splice(Math.min(quizIndex + 3, currentQuizWords.length), 0, w);
+  currentQuizWords.splice(Math.min(quizIndex+3, currentQuizWords.length), 0, w);
   quizIndex++;
   updateCard();
 }
@@ -654,6 +798,7 @@ document.addEventListener('keydown', function(e) {
   if (e.key !== 'Enter') return;
   const active = document.activeElement;
   if (active.id === 'wordInput') { e.preventDefault(); window.fetchSuggestions(); }
+  else if (active.id === 'gameSearchInput') { /* لا شيء - oninput يتعامل معه */ }
   else if (!['INPUT','TEXTAREA','BUTTON','SELECT'].includes(active.tagName)) {
     e.preventDefault();
     document.getElementById('addBtn')?.click();
