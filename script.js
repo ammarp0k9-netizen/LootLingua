@@ -353,7 +353,8 @@ const gameData = {
     title: "Minecraft Dictionary",
     titleIcon: "https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/26cf.svg", // ⛏
     desc:  "اجمع الموارد وافهم كل مصطلحات اللعبة!",
-    bg:    "https://images.alphacoders.com/109/1099238.png",
+    // الرابط اللي اخترته (landscape)
+    bg: "https://img.redbull.com/images/c_crop,w_2640,h_1320,x_190,y_0/c_auto,w_1200,h_630/f_auto,q_auto/redbullcom/2025/8/11/dcusojkfgapu4zxe3gtb/minecraft-landscape",
     words: [
       {
         text: "Obsidian",
@@ -466,13 +467,42 @@ const gameData = {
 // ── متغير يحفظ الكلمات المفلترة الحالية للبحث ──
 let currentGameWords = [];
 
+// 2. تحديث دالة فتح القاموس لتفعيل الثيم
 window.loadGameDictionary = function(gameKey) {
   toggleSidebar();
   const game = gameData[gameKey];
-  if (!game) return;
+  
+  // تفعيل وضع "الألعاب" للـ CSS (هذا السطر السحري)
+  document.body.classList.add('game-page-active');
 
-  currentView      = gameKey;
-  currentGameWords = [...game.words];
+  // تعيين الصورة للطبقة الوهمية (وليس للبودي) عن طريق الـ CSS Variables (طريقة احترافية)
+  document.documentElement.style.setProperty('--game-bg-url', `url('${game.bg}')`);
+  
+  // [اختياري]: تغيير خلفية الطبقة الوهمية مباشرة إذا كنت لا تستخدم الـ Variable
+  // document.styleSheets[0].addRule('body::before', `background-image: url('${game.bg}')`);
+  // (الأفضل استخدام الطريقة في الـ CSS أدناه عن طريق استدعاء المتغير)
+
+  // تمييز الرابط النشط في الـ Sidebar
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+    if(link.innerText.includes(gameKey.charAt(0).toUpperCase() + gameKey.slice(1))) {
+      link.classList.add('active');
+    }
+  });
+
+  document.getElementById('personalControls').style.display = 'none';
+  document.querySelector('.page-header h1').innerText = game.title;
+  document.getElementById('totalCount').innerText = game.desc;
+  
+  const starEl = document.getElementById('starredCount');
+  if(starEl) starEl.style.display = 'none';
+  
+  const searchInput = document.getElementById('searchInput');
+  if(searchInput) searchInput.oninput = () => renderGameWords(gameKey, searchInput.value);
+  
+  renderGameWords(gameKey, "");
+  ; currentGameWords = [...game.words];
+};
 
   // تحديث الـ active link
   setActiveNavLink(gameKey);
@@ -539,30 +569,29 @@ window.searchGameWords = function() {
   renderGameWords(currentGameWords);
 };
 
+// 3. تعديل دالة الرجوع للقاموس الشخصي
 window.loadPersonalDictionary = function() {
   toggleSidebar();
-  currentView = 'personal';
+  // إزالة وضع الألعاب (إلغاء التضبضب واللون)
+  document.body.classList.remove('game-page-active');
 
-  // إرجاع الخلفية
-  document.body.style.backgroundImage = 'none';
+  document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+  document.querySelector('.nav-link').classList.add('active');
+  
+  // إخفاء الـ Blur
+  document.documentElement.style.setProperty('--game-bg-url', 'none');
 
-  // إظهار عناصر القاموس الشخصي
   document.getElementById('personalControls').style.display = 'block';
-  document.querySelector('.toolbar').style.display          = '';
-  document.getElementById('searchInput').style.display      = '';
-  document.getElementById('searchFilter').style.display     = '';
-  document.querySelector('.backup-zone').style.display      = '';
-  document.getElementById('starredCount').style.display     = '';
-
-  // إخفاء search bar الألعاب
-  document.getElementById('gameSearchBar').style.display = 'none';
-
-  // إرجاع العنوان
-  document.querySelector('.page-header h1').innerHTML = '⚔️ قاموسك الشخصي';
-
-  // الـ active link
-  setActiveNavLink('personal');
-
+  document.querySelector('.page-header h1').innerText = "قاموسك الشخصي";
+  
+  const starEl = document.getElementById('starredCount');
+  if(starEl) starEl.style.display = 'inline';
+  
+  const searchInput = document.getElementById('searchInput');
+  if(searchInput) {
+      searchInput.oninput = render; // إعادة البحث للوضع الطبيعي
+      searchInput.value = ''; // تنظيف مربع البحث
+  }
   render();
 };
 
