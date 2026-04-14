@@ -365,13 +365,13 @@ const gameData = {
         text: "Creeper",
         meaning: "وحش أخضر صامت يقترب منك وينفجر",
         example: "A Creeper snuck up behind me and exploded!",
-        img: "https://minecraft.wiki/images/Creeper_JE2_BE2.png?format=original"
+        img: "https://minecraft.wiki/images/thumb/Creeper_JE3_BE1.png/293px-Creeper_JE3_BE1.png?dc7b2&20250323051424"
       },
       {
         text: "Nether",
         meaning: "العالم السفلي — بيئة جهنمية تحت عالم العادي",
         example: "Build a portal to travel to the Nether.",
-        img: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Netherrack_JE4_BE2.png/64px-Netherrack_JE4_BE2.png"
+        img: "https://minecraft.wiki/images/Netherrack_JE4_BE2.png?8a940"
       },
       {
         text: "Enchant",
@@ -383,7 +383,7 @@ const gameData = {
         text: "Respawn",
         meaning: "العودة للحياة من جديد بعد الموت",
         example: "Set your respawn point using a bed.",
-        img: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Ender_Dragon_JE4.png/64px-Ender_Dragon_JE4.png"
+        img: "https://minecraft.wiki/images/thumb/Respawn_Anchor_%280%29_JE1.png/150px-Respawn_Anchor_%280%29_JE1.png?23b57"
       },
       {
         text: "Crafting",
@@ -395,13 +395,13 @@ const gameData = {
         text: "Biome",
         meaning: "منطقة جغرافية في العالم لها طبيعة وكائنات خاصة",
         example: "The desert biome is dry and sandy.",
-        img: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Grass_Block_JE7_BE6.png/64px-Grass_Block_JE7_BE6.png"
+        img: "https://minecraft.wiki/images/thumb/Biome_preview.png/350px-Biome_preview.png?4d6f7"
       },
       {
         text: "Mob",
         meaning: "كائن حي متحرك في اللعبة — عدائي أو ودّي",
         example: "Zombies are hostile mobs that spawn at night.",
-        img: "https://minecraft.wiki/images/Zombie_JE3_BE2.png?format=original"
+        img: "https://minecraft.wiki/images/NPCFace.png?2fe0f"
       }
     ]
   },
