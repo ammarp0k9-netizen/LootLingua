@@ -19,10 +19,17 @@
 <div id="sidebar" class="sidebar">
   <div class="sidebar-header"><h2>LootLingua 🎮</h2></div>
   <nav>
-    <a href="#" class="nav-link active" onclick="loadPersonalDictionary()"><i class="fas fa-user-shield"></i> قاموسك الشخصي</a>
+    <!-- data-view يستخدمه setActiveNavLink() -->
+    <a href="#" class="nav-link active" data-view="personal" onclick="loadPersonalDictionary()">
+      <i class="fas fa-user-shield"></i> قاموسك الشخصي
+    </a>
     <div class="sidebar-divider">موسوعة الأساطير</div>
-    <a href="#" class="nav-link" onclick="loadGameDictionary('minecraft')"><i class="fas fa-cube"></i> Minecraft Dict</a>
-    <a href="#" class="nav-link" onclick="loadGameDictionary('pubg')"><i class="fas fa-crosshairs"></i> PUBG Terms</a>
+    <a href="#" class="nav-link" data-view="minecraft" onclick="loadGameDictionary('minecraft')">
+      <i class="fas fa-cube"></i> Minecraft Dict
+    </a>
+    <a href="#" class="nav-link" data-view="pubg" onclick="loadGameDictionary('pubg')">
+      <i class="fas fa-crosshairs"></i> PUBG Terms
+    </a>
     <div class="sidebar-divider">الحساب</div>
     <button id="loginBtn"  class="auth-btn" onclick="login()">تسجيل دخول بـ Google 🚀</button>
     <button id="logoutBtn" class="auth-btn" onclick="showModal('logoutModal')">تسجيل الخروج</button>
@@ -41,22 +48,18 @@
     </div>
   </header>
 
-  <!-- بطاقة الإضافة -->
+  <!-- بطاقة الإضافة (تُخفى عند قواميس الألعاب) -->
   <div class="card-box" id="personalControls">
     <div style="display:flex; gap:8px; margin-bottom:10px;">
       <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai"><i class="fas fa-search"></i></button>
       <input type="text" id="wordInput" placeholder="الكلمة بالإنجليزي (مثال: Sword)" dir="ltr">
     </div>
-
-    <!-- صندوق الاقتراحات -->
     <div id="suggestionsBox">
       <p style="font-size:13px; color:var(--accent); font-weight:bold; margin:0; padding:10px 14px 4px;">اختر المعنى الأنسب:</p>
       <div id="suggestionsList"></div>
     </div>
-
     <input type="text" id="meaningInput" placeholder="المعنى بالعربي" style="margin-bottom:10px;">
     <textarea id="exampleInput" placeholder="جملة مثال (اختياري)" rows="2" style="margin-bottom:10px;"></textarea>
-
     <select id="categoryInput" style="margin-bottom:14px;">
       <option value="عام">عام</option>
       <option value="فعل">فعل</option>
@@ -66,8 +69,18 @@
       <option value="ظرف">ظرف</option>
       <option value="جمل">جمل شائعة</option>
     </select>
+    <button class="btn-main" id="addBtn" onclick="addWord()">إضافة للقاموس</button>
+  </div>
 
-    <button class="btn-main" id="addBtn" onclick="addWord()">إضافة للقاموس 💾</button>
+  <!-- ── مربع بحث قواميس الألعاب (مخفي افتراضياً) ── -->
+  <div id="gameSearchBar" class="game-search-bar" style="display:none;">
+    <div class="game-search-inner">
+      <i class="fas fa-search game-search-icon"></i>
+      <input type="text" id="gameSearchInput"
+             placeholder="ابحث في كلمات اللعبة..."
+             oninput="searchGameWords()"
+             dir="ltr">
+    </div>
   </div>
 
   <!-- شريط الأدوات -->
@@ -96,9 +109,7 @@
   </div>
 </main>
 
-<!-- ══════════════════════════════════════════
-     QUIZ SETUP OVERLAY
-═══════════════════════════════════════════ -->
+<!-- ══ QUIZ SETUP ══ -->
 <div id="quizSetupOverlay" class="quiz-overlay">
   <div class="quiz-setup-box">
     <h3>🧠 إعدادات الاختبار</h3>
@@ -112,19 +123,15 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     QUIZ FLASHCARD OVERLAY
-═══════════════════════════════════════════ -->
+<!-- ══ QUIZ FLASHCARD ══ -->
 <div id="quizOverlay" class="quiz-overlay">
   <div class="quiz-card-meta">
     <span id="quizCardCounter">1 / 10</span>
     <button class="btn-close-quiz" style="margin:0;" onclick="closeQuiz()">إغلاق ✕</button>
   </div>
   <div class="quiz-card-bar"><div id="quizCardProgress"></div></div>
-
   <div class="card-container">
     <div class="card" id="mainCard" onclick="flipCard()">
-      <!-- وجه الكرت (السؤال) -->
       <div class="card-face card-front">
         <button class="quiz-sound-btn" onclick="playQuizSound(event)">
           <i class="fas fa-volume-up"></i>
@@ -133,23 +140,19 @@
         <button class="hint-btn" onclick="showHint(event)">اعرض المثال 💡</button>
         <div class="hint-text" id="quizHintText"></div>
       </div>
-      <!-- ظهر الكرت (الجواب) -->
       <div class="card-face card-back">
         <div class="quiz-meaning" id="cardBackText">المعنى</div>
         <div class="quiz-example" id="cardBackExample"></div>
       </div>
     </div>
   </div>
-
   <div class="quiz-controls">
     <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها 🗑️</button>
     <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها ✅</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     MODAL: تأكيد الحذف
-═══════════════════════════════════════════ -->
+<!-- ══ MODAL: حذف ══ -->
 <div id="deleteModal" class="custom-modal">
   <div class="modal-content">
     <div class="modal-icon">🗑️</div>
@@ -162,9 +165,7 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     MODAL: تأكيد الخروج
-═══════════════════════════════════════════ -->
+<!-- ══ MODAL: خروج ══ -->
 <div id="logoutModal" class="custom-modal">
   <div class="modal-content">
     <div class="modal-icon">❗</div>
@@ -177,9 +178,7 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════
-     FIREBASE
-═══════════════════════════════════════════ -->
+<!-- ══ FIREBASE ══ -->
 <script type="module">
   import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
@@ -205,7 +204,6 @@
   const auth = getAuth(app);
   const db   = getFirestore(app);
 
-  // handle redirect result (for mobile)
   window.addEventListener("load", async () => {
     try { await getRedirectResult(auth); } catch (e) { console.error(e.message); }
   });
@@ -217,7 +215,6 @@
     else { window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || []; render(); }
   });
 
-  // Google Sign-In
   window.login = async function() {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
@@ -225,16 +222,14 @@
       await signInWithPopup(auth, provider);
     } catch (e) {
       console.error(e.code, e.message);
-      if (e.code === 'auth/popup-blocked') alert("الـ popup اتعطل من المتصفح. جرب تفتح من تاب مختلف أو تسمح لـ popups للموقع.");
+      if (e.code === 'auth/popup-blocked') alert("الـ popup اتعطل من المتصفح. جرب تسمح لـ popups للموقع.");
     }
   };
 
-  // Logout
   window.confirmLogout = function() {
     signOut(auth).then(() => hideModal('logoutModal'));
   };
 
-  // Load from Firestore
   function loadWordsFromCloud(user) {
     const q = query(collection(db, "users", user.uid, "words"), orderBy("createdAt", "desc"));
     onSnapshot(q, (snapshot) => {
@@ -254,7 +249,6 @@
     });
   }
 
-  // CRUD
   window.saveWordToCloud = async function(wordText, wordCategory, meaning, example) {
     const user = auth.currentUser;
     if (!user) return null;
