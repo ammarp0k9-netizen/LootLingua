@@ -44,9 +44,7 @@ body {
   border-radius: 10px; transition: 0.25s; font-size: 14px;
 }
 .nav-link i { width: 16px; text-align: center; }
-.nav-link:hover,
-.nav-link.active { background: var(--card-bg); color: var(--text-white); }
-.nav-link.active  { border-right: 3px solid var(--accent); }
+.nav-link:hover { background: var(--card-bg); color: var(--text-white); }
 
 .sidebar-divider {
   color: #475569; font-size: 11px; letter-spacing: .05em;
@@ -437,4 +435,79 @@ ul { list-style: none; padding: 0; margin: 0; }
   .quiz-meaning { font-size: 20px; }
   .game-card { flex-direction: column; align-items: flex-start; gap: 12px; }
   .btn-add-mine { width: 100%; text-align: center; }
+}
+
+/* ══════════════════════════════════════════
+   GAME SEARCH BAR
+   ══════════════════════════════════════════ */
+.game-search-bar {
+  margin-bottom: 16px;
+}
+
+.game-search-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.game-search-icon {
+  position: absolute;
+  right: 14px;
+  color: var(--text-gray);
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.game-search-inner input {
+  width: 100%;
+  padding-right: 40px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  color: white;
+  font-size: 14px;
+  backdrop-filter: blur(4px);
+}
+
+.game-search-inner input:focus {
+  border-color: var(--accent2);
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+
+.game-search-inner input::placeholder {
+  color: var(--text-gray);
+}
+
+/* مثال الجملة داخل game-card */
+.game-example {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-top: 4px;
+  direction: ltr;
+  text-align: left;
+}
+
+/* ── Nav link active: مربع بدون حواف ── */
+.nav-link {
+  position: relative;
+}
+
+/* الـ active indicator — مربع خفيف بدون border واضح */
+.nav-link.active {
+  background: rgba(59,130,246,0.12);
+  color: var(--text-white);
+}
+
+/* خط جانبي أزرق فقط للـ active */
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 3px 0 0 3px;
 }
