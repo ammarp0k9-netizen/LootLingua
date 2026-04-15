@@ -437,7 +437,7 @@ const gameData = {
         text: "AFK (Away From Keyboard)", 
         meaning: "بعيد عن الجهاز: لما تترك اللعبة شغالة وتروح تعمل إشي ثاني.", 
         example: "I’ll be AFK for 10 minutes at the iron farm.", 
-        img: "https://minecraft.wiki/images/EntitySprite_steve.png?856f8" 
+        img: "https://minecraft.wiki/images/Human_face.png?db4dc" 
       },
       { 
         text: "Smelting", 
@@ -455,7 +455,79 @@ const gameData = {
         text: "Pillagers", 
         meaning: "النهّابون: الأعداء اللي بشنوا غارات على القرى.", 
         example: "A group of Pillagers is attacking the village, get your bow!", 
-        img: "https://minecraft.wiki/images/EntitySprite_evoker.png?f236e" 
+        img: "https://minecraft.wiki/images/Pillager_face.png?7f2f5" 
+      },
+      { 
+        text: "Enderman", 
+        meaning: "أندرمان: وحش طويل القامة ينتقل آنياً، ويهاجمك إذا نظرت في عينيه.", 
+        example: "Don't look the Enderman in the eyes, or he will teleport and attack you!", 
+        img: "https://minecraft.wiki/images/Enderman_face.png?8ebeb" 
+      },
+      { 
+        text: "Stronghold", 
+        meaning: "الحصن: بناء تحت الأرض يحتوي على بوابة عالم الإند(The End).", 
+        example: "We used Eyes of Ender to locate the stronghold and find the End Portal.", 
+        img: "https://minecraft.wiki/images/thumb/StrongholdPortalRoom.png/250px-StrongholdPortalRoom.png?ff423" 
+      },
+      { 
+        text: "Beacon", 
+        meaning: "المنارة: بلوكة نادرة تعطي اللاعبين القريبين منها قدرات خارقة (بوفات).", 
+        example: "A beacon provides powerful status effects like Haste and Strength to nearby players.", 
+        img: "https://minecraft.wiki/images/thumb/Beacon_JE6_BE2.png/150px-Beacon_JE6_BE2.png?684bf" 
+      },
+      { 
+        text: "Iron Golem", 
+        meaning: "جولم الحديد: الحارس العملاق اللي بيحمي القرويين من الوحوش.", 
+        example: "The Iron Golem attacked the zombies to protect the village.", 
+        img: "https://minecraft.wiki/images/Iron_Golem_face.png?e15db" 
+      },
+      { 
+        text: "Warden", 
+        meaning: "وحش أعمى قوي جداً يعيش في الـ Ancient City", 
+        example: "Keep quiet! The Warden can hear your footsteps from far away.", 
+        img: "https://minecraft.wiki/images/thumb/Warden_face.png/120px-Warden_face.png?1b626" 
+      },
+      { 
+        text: "Elder Guardian", 
+        meaning: "وحش بحري ضخم يحرس معبد المحيط", 
+        example: "The Elder Guardian gave me a mining fatigue effect in the temple.", 
+        img: "https://minecraft.wiki/images/Guardian_face_1.png?2168d" 
+      },
+      { 
+        text: "Ender Dragon", 
+        meaning: "تنين عالم النهاية وهو زعيم اللعبة", 
+        example: "We need many beds and arrows to defeat the Ender Dragon.", 
+        img: "https://minecraft.wiki/images/Ender_Dragon_face.png?0c1e7" 
+      },
+      { 
+        text: "Ancient City", 
+        meaning: "مدينة قديمة غامضة في أعمق نقطة تحت الأرض", 
+        example: "The Ancient City is full of loot, but beware of the Warden.", 
+        img: "https://minecraft.wiki/images/thumb/Deep_Dark_Light.png/480px-Deep_Dark_Light.png?12f2a" 
+      },
+      { 
+        text: "Copper", 
+        meaning: "معدن النحاس المستخدم في البناء والصواعق", 
+        example: "I used copper blocks to build the roof of my house.", 
+        img: "https://minecraft.wiki/images/Invicon_Block_of_Copper.png?60e78" 
+      },
+      { 
+        text: "Villager", 
+        meaning: "سكان القرى المسالمين الذين يمكنك التجارة معهم", 
+        example: "I traded some paper with the Villager to get emeralds.", 
+        img: "https://minecraft.wiki/images/Villager_face.png?c2d14" 
+      }
+      { 
+        text: "Skeleton", 
+        meaning: "هيكل عظمي: وحش سريع بستخدم القوس والسهم وبحترق تحت الشمس", 
+        example: "The Skeleton shot me with an arrow from behind the tree.", 
+        img: "https://minecraft.wiki/images/Skeleton_face.png?652cd" 
+      },
+      { 
+        text: "Silverfish", 
+        meaning: "سمكة الفضة: حشرات صغيرة ومزعجة بتطلع من البلوكات في الحصون.", 
+        example: "Don't break that block! It might hide a silverfish.", 
+        img: "https://minecraft.wiki/images/Silverfish_face.png?1f7e0" 
       }
     ]
   },
