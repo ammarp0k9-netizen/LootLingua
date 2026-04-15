@@ -528,3 +528,128 @@ ul { list-style: none; padding: 0; margin: 0; }
   background: var(--accent);
   border-radius: 3px 0 0 3px;
 }
+/* ══════════════════════════════════════════
+   GAME BACKGROUND — overlay كحلي مع صورة
+   ══════════════════════════════════════════ */
+
+/* الـ pseudo-element يحمل الصورة خلف المحتوى */
+body.game-bg-active::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  /* overlay: كحلي بشفافية 70% فوق الصورة */
+  background-color: rgba(8, 15, 30, 0.72);
+  background-blend-mode: multiply;
+}
+
+/* Minecraft */
+body[data-game="minecraft"].game-bg-active::before {
+  background-image: url('https://gaming-cdn.com/images/products/442/orig/minecraft-java-and-bedrock-edition-pc-mac-cover.jpg?v=1769503807');
+  filter: blur(1px) brightness(0.55) saturate(0.7);
+}
+
+/* PUBG */
+body[data-game="pubg"].game-bg-active::before {
+  background-image: url('https://images.alphacoders.com/901/901375.jpg');
+  filter: blur(1px) brightness(0.45) saturate(0.65);
+}
+
+/* المحتوى فوق الخلفية */
+body.game-bg-active .main-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* game-card يصبح أكثر شفافية لتبين الخلفية قليلاً */
+body.game-bg-active .game-card {
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(59,130,246,0.35);
+}
+
+body.game-bg-active .page-header h1 {
+  text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+}
+
+/* ══════════════════════════════════════════
+   GAME CARD ACTIONS (صوت + إضافة)
+   ══════════════════════════════════════════ */
+.game-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+/* زر الصوت داخل game-card */
+.game-sound-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+
+/* زر ➕ مضغوط بدون نص */
+.btn-add-mine {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  border-radius: 8px;
+}
+
+/* ══════════════════════════════════════════
+   TOOLTIP
+   ══════════════════════════════════════════ */
+.tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: var(--text-white);
+  font-size: 11px;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 100;
+}
+
+.tooltip-text::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
+}
+
+.tooltip-wrap:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .game-card-actions { flex-direction: row; }
+}
