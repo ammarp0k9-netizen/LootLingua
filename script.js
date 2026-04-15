@@ -516,7 +516,7 @@ const gameData = {
         meaning: "سكان القرى المسالمين الذين يمكنك التجارة معهم", 
         example: "I traded some paper with the Villager to get emeralds.", 
         img: "https://minecraft.wiki/images/Villager_face.png?c2d14" 
-      }
+      },
       { 
         text: "Skeleton", 
         meaning: "هيكل عظمي: وحش سريع بستخدم القوس والسهم وبحترق تحت الشمس", 
