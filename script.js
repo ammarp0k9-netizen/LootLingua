@@ -528,23 +528,21 @@ window.loadGameDictionary = function(gameKey) {
   currentView      = gameKey;
   currentGameWords = [...game.words];
 
-  // تحديث الـ active link
   setActiveNavLink(gameKey);
 
-  // خلفية اللعبة
-  document.body.style.backgroundImage    = `url('${game.bg}')`;
-  document.body.style.backgroundSize     = 'cover';
-  document.body.style.backgroundPosition = 'center';
-  document.body.style.backgroundAttachment = 'fixed';
+  // خلفية اللعبة عبر class + data attribute بدل inline style
+  document.body.classList.add('game-bg-active');
+  document.body.setAttribute('data-game', gameKey);
 
-  // إخفاء عناصر القاموس الشخصي
+  // إخفاء عناصر القاموس الشخصي — بما فيها مربع البحث الشخصي
   document.getElementById('personalControls').style.display = 'none';
   document.querySelector('.toolbar').style.display          = 'none';
+  document.getElementById('searchInput').style.display      = 'none';
   document.getElementById('searchFilter').style.display     = 'none';
   document.querySelector('.backup-zone').style.display      = 'none';
   document.getElementById('starredCount').style.display     = 'none';
 
-  // إظهار search bar الألعاب
+  // إظهار search bar الألعاب وتفريغه
   const gameSearch = document.getElementById('gameSearchBar');
   gameSearch.style.display = 'block';
   gameSearch.querySelector('input').value = '';
@@ -554,39 +552,91 @@ window.loadGameDictionary = function(gameKey) {
     `<img src="${game.titleIcon}" width="24" height="24" style="vertical-align:middle;margin-left:6px;" alt=""> ${game.title}`;
   document.getElementById('totalCount').innerText = game.desc;
 
-  // عرض الكلمات
   renderGameWords(currentGameWords);
 };
 
 function renderGameWords(words) {
-  const query = document.getElementById('gameSearchInput')?.value.toLowerCase().trim() || '';
-  const filtered = words.filter(w =>
+  const query = (document.getElementById('gameSearchInput')?.value || '').toLowerCase().trim();
+
+  let filtered = words.filter(w =>
     w.text.toLowerCase().includes(query) || w.meaning.includes(query)
   );
 
+  // ترتيب ذكي: الكلمات اللي تبدأ بالـ query أول
+  if (query) {
+    filtered.sort((a, b) => {
+      const aStarts = a.text.toLowerCase().startsWith(query);
+      const bStarts = b.text.toLowerCase().startsWith(query);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.text.localeCompare(b.text);
+    });
+  }
+
   document.getElementById('list').innerHTML = filtered.length === 0
-    ? `<li style="text-align:center;padding:40px;color:var(--text-gray);">
+    ? `<li style="text-align:center;padding:40px;color:var(--text-gray);list-style:none;">
          <div style="font-size:32px;margin-bottom:8px;">🔍</div>
          ما في نتائج للبحث
        </li>`
-    : filtered.map(w => `
-        <li class="game-card">
-          <div class="game-info">
-            <img src="${w.img}" class="game-icon" alt="${w.text}"
-                 onerror="this.src='https://cdn-icons-png.flaticon.com/512/686/686589.png'">
-            <div>
-              <div class="word-text">${w.text}</div>
-              <div class="meaning-text">${w.meaning}</div>
-              ${w.example ? `<div class="game-example">"${w.example}"</div>` : ''}
+    : filtered.map(w => {
+        const safeWord = w.text.replace(/'/g,"\\'");
+        const safeMeaning = w.meaning.replace(/'/g,"\\'");
+        const safeExample = (w.example||'').replace(/'/g,"\\'");
+        // highlight النص إذا فيه query
+        const dispText    = query ? hlGame(w.text, query)    : w.text;
+        const dispMeaning = query ? hlGame(w.meaning, query) : w.meaning;
+        return `
+          <li class="game-card">
+            <div class="game-info">
+              <img src="${w.img}" class="game-icon" alt="${w.text}"
+                   onerror="this.src='https://cdn-icons-png.flaticon.com/512/686/686589.png'">
+              <div>
+                <div class="word-text">${dispText}</div>
+                <div class="meaning-text">${dispMeaning}</div>
+                ${w.example ? `<div class="game-example">"${w.example}"</div>` : ''}
+              </div>
             </div>
-          </div>
-          <button class="btn-add-mine"
-                  onclick="addFromGame('${w.text.replace(/'/g,"\\'")}','${w.meaning.replace(/'/g,"\\'")}','${(w.example||'').replace(/'/g,"\\'")}')">
-            ➕ أضف
-          </button>
-        </li>
-      `).join('');
+            <div class="game-card-actions">
+              <div class="tooltip-wrap">
+                <button class="icon-circle sound-btn game-sound-btn"
+                        onclick="playGameSound('${safeWord}',event)">
+                  <i class="fas fa-volume-up"></i>
+                </button>
+                <span class="tooltip-text">استمع</span>
+              </div>
+              <div class="tooltip-wrap">
+                <button class="btn-add-mine"
+                        onclick="addFromGame('${safeWord}','${safeMeaning}','${safeExample}')">
+                  ➕
+                </button>
+                <span class="tooltip-text">أضف للقاموس</span>
+              </div>
+            </div>
+          </li>`;
+      }).join('');
 }
+
+// highlight للألعاب
+function hlGame(text, query) {
+  if (!query || !text) return text || '';
+  try {
+    return text.replace(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'),
+      '<span class="highlight">$1</span>');
+  } catch { return text; }
+}
+
+// صوت مباشر للكلمة (بدون id)
+window.playGameSound = function(word, event) {
+  if (event) event.stopPropagation();
+  if (!word || !('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utt   = new SpeechSynthesisUtterance(word.trim());
+  utt.lang    = 'en-US';
+  utt.rate    = 0.9;
+  const voice = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('en'));
+  if (voice) utt.voice = voice;
+  window.speechSynthesis.speak(utt);
+};
 
 // البحث داخل قاموس اللعبة
 window.searchGameWords = function() {
@@ -597,10 +647,11 @@ window.loadPersonalDictionary = function() {
   toggleSidebar();
   currentView = 'personal';
 
-  // إرجاع الخلفية
-  document.body.style.backgroundImage = 'none';
+  // إزالة خلفية اللعبة
+  document.body.classList.remove('game-bg-active');
+  document.body.removeAttribute('data-game');
 
-  // إظهار عناصر القاموس الشخصي
+  // إظهار كل عناصر القاموس الشخصي
   document.getElementById('personalControls').style.display = 'block';
   document.querySelector('.toolbar').style.display          = '';
   document.getElementById('searchInput').style.display      = '';
@@ -611,12 +662,8 @@ window.loadPersonalDictionary = function() {
   // إخفاء search bar الألعاب
   document.getElementById('gameSearchBar').style.display = 'none';
 
-  // إرجاع العنوان
   document.querySelector('.page-header h1').innerHTML = '⚔️ قاموسك الشخصي';
-
-  // الـ active link
   setActiveNavLink('personal');
-
   render();
 };
 
@@ -670,6 +717,17 @@ function render() {
                   : wm || mm || em;
     return matches && (currentFilter === 'all' || w.starred);
   });
+
+  // ترتيب ذكي: الكلمات اللي تبدأ بالـ query تجي أول
+  if (query) {
+    filtered.sort((a, b) => {
+      const aStarts = a.word.toLowerCase().startsWith(query);
+      const bStarts = b.word.toLowerCase().startsWith(query);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.word.localeCompare(b.word);
+    });
+  }
 
   const countEl = document.getElementById('totalCount');
   const starEl  = document.getElementById('starredCount');
