@@ -57,11 +57,11 @@ function showToast(msg) {
 // ═══════════════════════════════════════════════════════
 
 const XP_RANKS = [
-  { min: 0,    max: 49,       label: 'Noob',   icon: '🐣', color: '#94a3b8', next: 50   },
-  { min: 50,   max: 149,      label: 'Learner', icon: '📚', color: '#60a5fa', next: 150  },
-  { min: 150,  max: 349,      label: 'Pro',     icon: '⚔️',  color: '#34d399', next: 350  },
-  { min: 350,  max: 699,      label: 'Elite',   icon: '🔥', color: '#f59e0b', next: 700  },
-  { min: 700,  max: Infinity, label: 'Legend',  icon: '👑', color: '#a78bfa', next: null },
+  { min: 0,   max: 49,       label: 'Noob',    icon: '🐣', color: '#94a3b8', next: 50   },
+  { min: 50,  max: 149,      label: 'Learner', icon: '📚', color: '#60a5fa', next: 150  },
+  { min: 150, max: 349,      label: 'Pro',     icon: '⚔️',  color: '#34d399', next: 350  },
+  { min: 350, max: 699,      label: 'Elite',   icon: '🔥', color: '#f59e0b', next: 700  },
+  { min: 700, max: Infinity, label: 'Legend',  icon: '👑', color: '#a78bfa', next: null },
 ];
 
 function getRank(xp) {
@@ -69,13 +69,13 @@ function getRank(xp) {
 }
 
 function updateXP(amount) {
-  if (amount <= 0) return;
+  if (amount === 0) return;
   const oldRank = getRank(userXP);
-  userXP += amount;
+  userXP = Math.max(0, userXP + amount);
   localStorage.setItem('userXP', userXP);
   const newRank = getRank(userXP);
   renderXPBar();
-  if (newRank.label !== oldRank.label) {
+  if (amount > 0 && newRank.label !== oldRank.label) {
     setTimeout(() => showRankUp(newRank), 400);
   }
 }
@@ -95,31 +95,36 @@ function renderXPBar() {
 
   fillEl.style.width      = pct + '%';
   fillEl.style.background = `linear-gradient(90deg, ${rank.color}dd, ${rank.color}88)`;
-  lbEl.textContent        = rank.label;
-  lbEl.style.color        = rank.color;
-  icEl.textContent        = rank.icon;
-  valEl.textContent       = userXP + ' XP';
-  nxtEl.textContent       = rank.next ? rank.next + ' XP' : 'MAX 👑';
+  if (lbEl) { lbEl.textContent = rank.label; lbEl.style.color = rank.color; }
+  if (icEl)  icEl.textContent  = rank.icon;
+  if (valEl) valEl.textContent = userXP + ' XP';
+  if (nxtEl) nxtEl.textContent = rank.next ? rank.next + ' XP' : 'MAX 👑';
 }
 
-function showXPBadge(amount, anchorId) {
+// badge يطير فوق الزر — isNegative=true → أحمر وبالسالب
+function showXPBadge(amount, anchorId, isNegative) {
   const badge = document.getElementById('xpBadge');
   if (!badge) return;
-  badge.textContent = '+' + amount + ' XP ⚡';
+  badge.textContent = (isNegative ? '-' : '+') + amount + ' XP';
+  badge.style.background = isNegative ? '#ef4444' : '#f59e0b';
+  badge.style.color      = isNegative ? '#fff'    : '#0f172a';
+
   const anchor = anchorId ? document.getElementById(anchorId) : null;
   if (anchor) {
     const rect = anchor.getBoundingClientRect();
     badge.style.left      = (rect.left + rect.width / 2) + 'px';
     badge.style.bottom    = (window.innerHeight - rect.top + 10) + 'px';
-    badge.style.transform = 'translateX(-50%) translateY(0)';
+    badge.style.transform = 'translateX(-50%)';
   } else {
     badge.style.left      = '50%';
     badge.style.bottom    = '80px';
-    badge.style.transform = 'translateX(-50%) translateY(0)';
+    badge.style.transform = 'translateX(-50%)';
   }
   badge.classList.remove('fly');
   void badge.offsetWidth;
   badge.classList.add('fly');
+
+  // pop الأيقونة في الـ sidebar
   const icon = document.getElementById('xpRankIcon');
   if (icon) {
     icon.classList.add('pop');
@@ -130,13 +135,13 @@ function showXPBadge(amount, anchorId) {
 function showRankUp(rank) {
   const t = document.getElementById('toastMessage');
   if (!t) return;
-  t.innerHTML = `${rank.icon} ترقية! أصبحت <b style="color:#0f172a">${rank.label}</b>`;
+  t.innerHTML    = `${rank.icon} ترقية! أصبحت <b style="color:#0f172a">${rank.label}</b>`;
   t.style.background = rank.color;
-  t.style.color      = '#0f172a';
+  t.style.color  = '#0f172a';
   t.classList.add('show');
   // صوت ترقية
   try {
-    const ctx   = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
     [523, 659, 784].forEach((freq, i) => {
       const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -200,14 +205,15 @@ window.addWord = async function() {
     btn.innerHTML = 'إضافة للقاموس ' + fe('floppy-disk', 18);
     btn.style.background = '';
   } else {
-    const newWord = { id: Date.now().toString(), word: w, meaning: m, example: ex, category: c, starred: false, forgetCount: 0 };
+    const xpGain = 5;
+    const newWord = { id: Date.now().toString(), word: w, meaning: m, example: ex, category: c, starred: false, forgetCount: 0, xpValue: xpGain };
     window.words.unshift(newWord);
     if (window.saveWordToCloud) {
       const realId = await window.saveWordToCloud(w, c, m, ex);
       if (realId) newWord.id = realId;
     }
-    updateXP(5);
-    showXPBadge(5, 'addBtn');
+    updateXP(xpGain);
+    showXPBadge(xpGain, 'addBtn', false);
   }
 
   clearInputs();
@@ -239,13 +245,40 @@ window.editWord = function(id, event) {
 window.deleteWord = function(id, event) {
   if (event) event.stopPropagation();
   pendingDeleteId = id;
+
+  // احسب قيمة الـ XP للكلمة
+  const wordObj  = window.words.find(w => w.id === id);
+  const xpLoss   = wordObj?.xpValue || 0;
+  const xpWarn = xpLoss > 0
+    ? `<div class="xp-delete-warn">⚠️ ستخسر <b>-${xpLoss} XP</b> عند الحذف</div>`
+    : '';
+
+  // حدّث نص المودال بالتحذير
+  const modalP = document.querySelector('#deleteModal .modal-content p');
+  if (modalP) modalP.innerHTML = 'هذا الإجراء لا يمكن التراجع عنه' + xpWarn;
+
   document.getElementById('deleteConfirmBtn').onclick = async function() {
     hideModal('deleteModal');
+    // اطرح الـ XP
+    if (xpLoss > 0) {
+      userXP = Math.max(0, userXP - xpLoss);
+      localStorage.setItem('userXP', userXP);
+      renderXPBar();
+      showXPBadge(xpLoss, null, true); // true = سالب (أحمر)
+    }
     window.words = window.words.filter(w => w.id !== pendingDeleteId);
     if (window.deleteWordFromCloud) await window.deleteWordFromCloud(pendingDeleteId);
     pendingDeleteId = null;
     saveAndRender();
   };
+
+  // أعد النص الأصلي عند إلغاء المودال
+  document.getElementById('deleteCancelBtn').onclick = function() {
+    hideModal('deleteModal');
+    const p = document.querySelector('#deleteModal .modal-content p');
+    if (p) p.innerHTML = 'هذا الإجراء لا يمكن التراجع عنه';
+  };
+
   showModal('deleteModal');
 };
 
@@ -836,23 +869,26 @@ window.loadPersonalDictionary = function() {
   render();
 };
 
-window.addFromGame = async function(text, meaning, example, btnEl) {
+window.addFromGame = async function(text, meaning, example) {
+  const xpGain = 10;
   if (window.saveWordToCloud) {
     const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example || 'من موسوعة الأساطير');
     if (realId) {
+      // أضف الكلمة لـ window.words مع xpValue عشان يُرجع عند الحذف
+      window.words.unshift({ id: realId, word: text, meaning, example: example || '', category: 'لعبة', starred: false, forgetCount: 0, xpValue: xpGain });
       showToast('تمت الإضافة لقاموسك! 💎');
-      updateXP(10);
-      showXPBadge(10, null);
+      updateXP(xpGain);
+      showXPBadge(xpGain, null, false);
     } else {
       showToast('سجل دخول أولاً عشان تحفظ اللوت! ⚠️');
     }
   } else {
-    const newWord = { id: Date.now().toString(), word: text, meaning, example: example || '', category: 'لعبة', starred: false, forgetCount: 0 };
+    const newWord = { id: Date.now().toString(), word: text, meaning, example: example || '', category: 'لعبة', starred: false, forgetCount: 0, xpValue: xpGain };
     window.words.unshift(newWord);
     saveAndRender();
     showToast('تمت الإضافة للقاموس المحلي! 💎');
-    updateXP(10);
-    showXPBadge(10, null);
+    updateXP(xpGain);
+    showXPBadge(xpGain, null, false);
   }
 };
 
@@ -1054,7 +1090,6 @@ function markRemember() {
   currentStreak++;
   showStreakMsg(currentStreak);
   updateXP(2);
-  showXPBadge(2, null);
   if (quizIndex < currentQuizWords.length - 1) { quizIndex++; updateCard(); }
   else { showToast("أبدعت! 👏"); setTimeout(closeQuiz, 600); }
 }
