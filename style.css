@@ -653,3 +653,200 @@ body.game-bg-active .page-header h1 {
 @media (max-width: 480px) {
   .game-card-actions { flex-direction: row; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   LootLingua — XP Bar Styles
+   الصق هذا في آخر style.css
+   ═══════════════════════════════════════════════════════ */
+
+/* ── XP Bar Container ─────────────────────────────────── */
+#xpBarContainer {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 998;
+  background: #080f1e;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 7px 16px 7px;
+  /* دفع كل المحتوى للأسفل */
+}
+
+#xpBarInner {
+  max-width: 620px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Rank Badge ───────────────────────────────────────── */
+#xpRankBadge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+#xpRankIcon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+#xpRankTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: color 0.4s;
+}
+
+/* ── XP Track ─────────────────────────────────────────── */
+#xpTrackWrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#xpTrack {
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+#xpFill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s;
+  min-width: 4px;
+}
+
+#xpNumbers {
+  font-size: 10px;
+  color: #475569;
+  text-align: left;
+  direction: ltr;
+}
+
+/* ── اضبط الـ main-content لتعوض شريط XP ─────────────── */
+/* ارتفاع الشريط ≈ 42px — نزيد padding-top بدل 80px → 122px */
+.main-content {
+  padding-top: 122px !important;
+}
+
+/* ── الهامبورجر: ارفعه تحت شريط XP ──────────────────── */
+.menu-btn {
+  top: 52px !important;
+}
+
+/* ── +XP Popup ────────────────────────────────────────── */
+.xp-popup {
+  position: fixed;
+  font-size: 13px;
+  font-weight: 700;
+  color: #34d399;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: none;
+  text-shadow: 0 0 8px rgba(52,211,153,0.5);
+  direction: ltr;
+}
+
+.xp-popup.xp-popup-fly {
+  opacity: 0;
+  transform: translateY(-32px) scale(0.85);
+  transition: opacity 0.9s ease-out, transform 0.9s ease-out;
+}
+
+/* ── Rank-Up Toast ────────────────────────────────────── */
+#rankUpToast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(30px);
+  opacity: 0;
+  z-index: 9999;
+  transition: opacity 0.35s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events: none;
+}
+
+#rankUpToast.rankup-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.rankup-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0f172a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 14px 22px;
+  min-width: 200px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+.rankup-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 50%, var(--rcolor, #f59e0b) 0%, transparent 70%);
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.rankup-icon {
+  font-size: 28px;
+  line-height: 1;
+  position: relative;
+}
+
+.rankup-text {
+  position: relative;
+}
+
+.rankup-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+.rankup-name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+
+/* ── Responsive: موبايل ───────────────────────────────── */
+@media (max-width: 480px) {
+  #xpBarContainer {
+    padding: 6px 12px;
+  }
+
+  #xpRankTitle {
+    font-size: 11px;
+  }
+
+  #xpNumbers {
+    font-size: 9px;
+  }
+
+  .rankup-inner {
+    padding: 12px 16px;
+    min-width: 160px;
+  }
+
+  .rankup-name {
+    font-size: 17px;
+  }
+}
