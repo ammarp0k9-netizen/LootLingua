@@ -653,3 +653,133 @@ body.game-bg-active .page-header h1 {
 @media (max-width: 480px) {
   .game-card-actions { flex-direction: row; }
 }
+
+/* ══════════════════════════════════════════
+   XP PANEL (inside sidebar)
+   ══════════════════════════════════════════ */
+.xp-panel {
+  margin-top: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.xp-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.xp-icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+  /* حركة pop عند تغيير الأيقونة */
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+.xp-icon.pop { transform: scale(1.4); }
+
+.xp-rank {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: color 0.4s;
+}
+
+.xp-val {
+  font-size: 12px;
+  color: var(--text-gray);
+  white-space: nowrap;
+}
+
+/* شريط التقدم */
+.xp-track {
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.xp-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 99px;
+  transition: width 0.7s cubic-bezier(0.4,0,0.2,1),
+              background 0.5s ease;
+  position: relative;
+}
+
+/* بريق متحرك على الشريط */
+.xp-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.35) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: xpShimmer 2.2s linear infinite;
+}
+
+@keyframes xpShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.xp-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.xp-hint {
+  font-size: 11px;
+  color: var(--text-gray);
+}
+
+.xp-next-val {
+  font-size: 11px;
+  color: var(--text-gray);
+}
+
+/* ── XP float badge (يطلع فوق الزر لما تضيف كلمة) ── */
+.xp-badge {
+  position: fixed;
+  /* سيتحدد موضعه بـ JS */
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  background: var(--star);
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 20px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4000;
+  transition: none;
+  white-space: nowrap;
+}
+.xp-badge.fly {
+  animation: xpFly 1.2s ease forwards;
+}
+
+@keyframes xpFly {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0);    }
+  60%  { opacity: 1; transform: translateX(-50%) translateY(-50px); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-80px); }
+}
+
+/* موبايل: ضيّق الـ panel شوي */
+@media (max-width: 480px) {
+  .xp-panel { padding: 12px 14px; }
+  .xp-rank  { font-size: 14px; }
+}
