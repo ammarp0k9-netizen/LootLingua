@@ -990,6 +990,174 @@ document.addEventListener('keydown', function(e) {
 });
 
 // ═══════════════════════════════════════════════════════
+// LootLingua — XP & Rank System
+// أضف هذا الملف بعد script.js في index.html:
+//   <script src="xp-system.js"></script>
+// ═══════════════════════════════════════════════════════
+
+const XP_RANKS = [
+  { title: 'Noob',      icon: '🐣', minXP: 0,    color: '#94a3b8' },
+  { title: 'Learner',   icon: '📖', minXP: 50,   color: '#34d399' },
+  { title: 'Skilled',   icon: '⚔️',  minXP: 150,  color: '#60a5fa' },
+  { title: 'Pro',       icon: '🔥', minXP: 350,  color: '#f59e0b' },
+  { title: 'Elite',     icon: '💎', minXP: 700,  color: '#a78bfa' },
+  { title: 'Legend',    icon: '👑', minXP: 1200, color: '#f97316' },
+];
+
+function getCurrentRank(xp) {
+  let rank = XP_RANKS[0];
+  for (const r of XP_RANKS) {
+    if (xp >= r.minXP) rank = r;
+  }
+  return rank;
+}
+
+function getNextRank(xp) {
+  for (const r of XP_RANKS) {
+    if (xp < r.minXP) return r;
+  }
+  return null; // max rank
+}
+
+function getXPPercent(xp) {
+  const rank = getCurrentRank(xp);
+  const next = getNextRank(xp);
+  if (!next) return 100;
+  const start = rank.minXP;
+  const end   = next.minXP;
+  return Math.round(((xp - start) / (end - start)) * 100);
+}
+
+// ─── إنشاء شريط XP ────────────────────────────────────
+function injectXPBar() {
+  if (document.getElementById('xpBarContainer')) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'xpBarContainer';
+  bar.innerHTML = `
+    <div id="xpBarInner">
+      <div id="xpRankBadge">
+        <span id="xpRankIcon"></span>
+        <span id="xpRankTitle"></span>
+      </div>
+      <div id="xpTrackWrap">
+        <div id="xpTrack">
+          <div id="xpFill"></div>
+        </div>
+        <div id="xpNumbers"></div>
+      </div>
+    </div>
+  `;
+  document.body.prepend(bar);
+}
+
+// ─── تحديث الواجهة ────────────────────────────────────
+function renderXPBar() {
+  const xp   = window.userXP || 0;
+  const rank = getCurrentRank(xp);
+  const next = getNextRank(xp);
+  const pct  = getXPPercent(xp);
+
+  const iconEl  = document.getElementById('xpRankIcon');
+  const titleEl = document.getElementById('xpRankTitle');
+  const fillEl  = document.getElementById('xpFill');
+  const numEl   = document.getElementById('xpNumbers');
+
+  if (!iconEl) return;
+
+  iconEl.textContent  = rank.icon;
+  titleEl.textContent = rank.title;
+  titleEl.style.color = rank.color;
+
+  fillEl.style.width      = pct + '%';
+  fillEl.style.background = rank.color;
+
+  numEl.textContent = next
+    ? `${xp} / ${next.minXP} XP`
+    : `${xp} XP — Max Rank! 👑`;
+}
+
+// ─── Override updateXP لإضافة أنيميشن ─────────────────
+const _origUpdateXP = window.updateXP;
+window.updateXP = function(amount) {
+  const oldXP   = window.userXP || 0;
+  const oldRank = getCurrentRank(oldXP);
+
+  if (_origUpdateXP) _origUpdateXP(amount);
+  else {
+    window.userXP = (window.userXP || 0) + amount;
+    localStorage.setItem('userXP', window.userXP);
+  }
+
+  const newXP   = window.userXP;
+  const newRank = getCurrentRank(newXP);
+
+  renderXPBar();
+  spawnXPPopup(amount);
+
+  // ترقية رتبة!
+  if (newRank.title !== oldRank.title) {
+    setTimeout(() => showRankUp(newRank), 400);
+  }
+};
+
+// ─── +XP popup طافر ───────────────────────────────────
+function spawnXPPopup(amount) {
+  const popup = document.createElement('div');
+  popup.className = 'xp-popup';
+  popup.textContent = `+${amount} XP`;
+
+  // موضع: قرب شريط XP
+  const bar = document.getElementById('xpBarContainer');
+  if (bar) {
+    const rect = bar.getBoundingClientRect();
+    popup.style.top  = (rect.bottom + 6) + 'px';
+    popup.style.left = (rect.left + 20) + 'px';
+  } else {
+    popup.style.top  = '60px';
+    popup.style.left = '20px';
+  }
+
+  document.body.appendChild(popup);
+  requestAnimationFrame(() => popup.classList.add('xp-popup-fly'));
+  setTimeout(() => popup.remove(), 1200);
+}
+
+// ─── Rank-up notification ──────────────────────────────
+function showRankUp(rank) {
+  const el = document.createElement('div');
+  el.id = 'rankUpToast';
+  el.innerHTML = `
+    <div class="rankup-inner">
+      <div class="rankup-glow" style="--rcolor:${rank.color}"></div>
+      <span class="rankup-icon">${rank.icon}</span>
+      <div class="rankup-text">
+        <div class="rankup-title">RANK UP!</div>
+        <div class="rankup-name" style="color:${rank.color}">${rank.title}</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('rankup-show'));
+  setTimeout(() => {
+    el.classList.remove('rankup-show');
+    setTimeout(() => el.remove(), 500);
+  }, 3000);
+}
+
+// ─── Init ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  injectXPBar();
+  renderXPBar();
+});
+
+// fallback لو DOMContentLoaded مضى
+if (document.readyState !== 'loading') {
+  injectXPBar();
+  renderXPBar();
+}
+
+// ═══════════════════════════════════════════════════════
 // Init
 // ═══════════════════════════════════════════════════════
 window.onload = function() {
