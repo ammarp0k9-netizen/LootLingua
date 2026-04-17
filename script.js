@@ -53,11 +53,107 @@ function showToast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════
-// XP System
+// XP & Gamification System
 // ═══════════════════════════════════════════════════════
+
+const XP_RANKS = [
+  { min: 0,    max: 49,       label: 'Noob',   icon: '🐣', color: '#94a3b8', next: 50   },
+  { min: 50,   max: 149,      label: 'Learner', icon: '📚', color: '#60a5fa', next: 150  },
+  { min: 150,  max: 349,      label: 'Pro',     icon: '⚔️',  color: '#34d399', next: 350  },
+  { min: 350,  max: 699,      label: 'Elite',   icon: '🔥', color: '#f59e0b', next: 700  },
+  { min: 700,  max: Infinity, label: 'Legend',  icon: '👑', color: '#a78bfa', next: null },
+];
+
+function getRank(xp) {
+  return XP_RANKS.find(r => xp >= r.min && xp <= r.max) || XP_RANKS[0];
+}
+
 function updateXP(amount) {
+  if (amount <= 0) return;
+  const oldRank = getRank(userXP);
   userXP += amount;
   localStorage.setItem('userXP', userXP);
+  const newRank = getRank(userXP);
+  renderXPBar();
+  if (newRank.label !== oldRank.label) {
+    setTimeout(() => showRankUp(newRank), 400);
+  }
+}
+
+function renderXPBar() {
+  const rank   = getRank(userXP);
+  const fillEl = document.getElementById('xpFill');
+  const lbEl   = document.getElementById('xpRankLabel');
+  const icEl   = document.getElementById('xpRankIcon');
+  const valEl  = document.getElementById('xpValue');
+  const nxtEl  = document.getElementById('xpNext');
+  if (!fillEl) return;
+
+  const pct = rank.next
+    ? Math.min(((userXP - rank.min) / (rank.next - rank.min)) * 100, 100)
+    : 100;
+
+  fillEl.style.width      = pct + '%';
+  fillEl.style.background = `linear-gradient(90deg, ${rank.color}dd, ${rank.color}88)`;
+  lbEl.textContent        = rank.label;
+  lbEl.style.color        = rank.color;
+  icEl.textContent        = rank.icon;
+  valEl.textContent       = userXP + ' XP';
+  nxtEl.textContent       = rank.next ? rank.next + ' XP' : 'MAX 👑';
+}
+
+function showXPBadge(amount, anchorId) {
+  const badge = document.getElementById('xpBadge');
+  if (!badge) return;
+  badge.textContent = '+' + amount + ' XP ⚡';
+  const anchor = anchorId ? document.getElementById(anchorId) : null;
+  if (anchor) {
+    const rect = anchor.getBoundingClientRect();
+    badge.style.left      = (rect.left + rect.width / 2) + 'px';
+    badge.style.bottom    = (window.innerHeight - rect.top + 10) + 'px';
+    badge.style.transform = 'translateX(-50%) translateY(0)';
+  } else {
+    badge.style.left      = '50%';
+    badge.style.bottom    = '80px';
+    badge.style.transform = 'translateX(-50%) translateY(0)';
+  }
+  badge.classList.remove('fly');
+  void badge.offsetWidth;
+  badge.classList.add('fly');
+  const icon = document.getElementById('xpRankIcon');
+  if (icon) {
+    icon.classList.add('pop');
+    setTimeout(() => icon.classList.remove('pop'), 350);
+  }
+}
+
+function showRankUp(rank) {
+  const t = document.getElementById('toastMessage');
+  if (!t) return;
+  t.innerHTML = `${rank.icon} ترقية! أصبحت <b style="color:#0f172a">${rank.label}</b>`;
+  t.style.background = rank.color;
+  t.style.color      = '#0f172a';
+  t.classList.add('show');
+  // صوت ترقية
+  try {
+    const ctx   = new (window.AudioContext || window.webkitAudioContext)();
+    [523, 659, 784].forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.13);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.13 + 0.35);
+      osc.start(ctx.currentTime + i * 0.13);
+      osc.stop(ctx.currentTime  + i * 0.13 + 0.35);
+    });
+  } catch {}
+  setTimeout(() => {
+    t.classList.remove('show');
+    t.style.background = '';
+    t.style.color      = '';
+  }, 3200);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -111,6 +207,7 @@ window.addWord = async function() {
       if (realId) newWord.id = realId;
     }
     updateXP(5);
+    showXPBadge(5, 'addBtn');
   }
 
   clearInputs();
@@ -739,12 +836,13 @@ window.loadPersonalDictionary = function() {
   render();
 };
 
-window.addFromGame = async function(text, meaning, example) {
+window.addFromGame = async function(text, meaning, example, btnEl) {
   if (window.saveWordToCloud) {
     const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example || 'من موسوعة الأساطير');
     if (realId) {
       showToast('تمت الإضافة لقاموسك! 💎');
       updateXP(10);
+      showXPBadge(10, null);
     } else {
       showToast('سجل دخول أولاً عشان تحفظ اللوت! ⚠️');
     }
@@ -754,6 +852,7 @@ window.addFromGame = async function(text, meaning, example) {
     saveAndRender();
     showToast('تمت الإضافة للقاموس المحلي! 💎');
     updateXP(10);
+    showXPBadge(10, null);
   }
 };
 
@@ -955,6 +1054,7 @@ function markRemember() {
   currentStreak++;
   showStreakMsg(currentStreak);
   updateXP(2);
+  showXPBadge(2, null);
   if (quizIndex < currentQuizWords.length - 1) { quizIndex++; updateCard(); }
   else { showToast("أبدعت! 👏"); setTimeout(closeQuiz, 600); }
 }
@@ -998,5 +1098,6 @@ window.onload = function() {
     if (speechSynthesis.onvoiceschanged !== undefined)
       speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
+  renderXPBar();
   render();
 };
