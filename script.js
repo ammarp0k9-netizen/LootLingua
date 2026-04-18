@@ -60,7 +60,7 @@ const XP_RANKS = [
   { min: 0,   max: 49,       label: 'Noob',    icon: '🐣', color: '#94a3b8', next: 50   },
   { min: 50,  max: 149,      label: 'Learner', icon: '📚', color: '#60a5fa', next: 150  },
   { min: 150, max: 349,      label: 'Pro',     icon: '⚔️',  color: '#34d399', next: 350  },
-  { min: 350, max: 699,      label: 'Elite',   icon: '🔥', color: '#f59e0b', next: 700  },
+  { min: 350, max: 699,      label: 'Elite',   <div class="fluent-icon" title="نار"> <script>document.write(fe('fire', 40))</script></div>, color: '#f59e0b', next: 700  },
   { min: 700, max: Infinity, label: 'Legend',  icon: '👑', color: '#a78bfa', next: null },
 ];
 
@@ -947,7 +947,7 @@ function render() {
   if (filtered.length === 0) {
     listEl.innerHTML = `
       <li style="list-style:none;text-align:center;padding:40px 20px;color:var(--text-gray);">
-        <div style="font-size:32px;margin-bottom:10px;">📖</div>
+        <div style="font-size:32px;margin-bottom:10px;"><script>document.write(fe('fire', 40))</script></div>
         ${query ? 'ما في نتائج للبحث' : 'قاموسك فاضي، ابدأ بإضافة كلمة!'}
       </li>`;
     return;
