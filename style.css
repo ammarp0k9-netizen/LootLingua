@@ -655,7 +655,7 @@ body.game-bg-active .page-header h1 {
 }
 
 /* ══════════════════════════════════════════
-   XP PANEL (inside sidebar)
+   XP PANEL
    ══════════════════════════════════════════ */
 .xp-panel {
   margin-top: 18px;
@@ -664,126 +664,66 @@ body.game-bg-active .page-header h1 {
   border-radius: 14px;
   padding: 14px 16px;
 }
-
 .xp-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
 }
-
 .xp-icon {
-  font-size: 22px;
-  line-height: 1;
-  flex-shrink: 0;
-  display: inline-block;
+  font-size: 22px; line-height: 1; flex-shrink: 0; display: inline-block;
   transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
 }
 .xp-icon.pop { transform: scale(1.5); }
+.xp-rank { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: 0.03em; transition: color 0.4s; }
+.xp-val  { font-size: 12px; color: var(--text-gray); white-space: nowrap; }
 
-.xp-rank {
-  flex: 1;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  transition: color 0.4s;
-}
-
-.xp-val {
-  font-size: 12px;
-  color: var(--text-gray);
-  white-space: nowrap;
-}
-
-/* شريط التقدم */
 .xp-track {
-  height: 8px;
-  background: rgba(255,255,255,0.08);
-  border-radius: 99px;
-  overflow: hidden;
+  height: 8px; background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden;
 }
-
 .xp-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: 99px;
+  height: 100%; width: 0%; border-radius: 99px; position: relative; overflow: hidden;
   transition: width 0.7s cubic-bezier(0.4,0,0.2,1), background 0.5s ease;
-  position: relative;
-  overflow: hidden;
 }
-
-/* بريق متحرك على الشريط */
 .xp-fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255,255,255,0.4) 50%,
-    transparent 100%
-  );
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
   background-size: 200% 100%;
   animation: xpShimmer 2s linear infinite;
 }
-
 @keyframes xpShimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
 }
-
-.xp-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 7px;
-}
-
-.xp-hint, .xp-next-val {
-  font-size: 11px;
-  color: var(--text-gray);
-}
+.xp-bottom { display: flex; justify-content: space-between; margin-top: 7px; }
+.xp-hint, .xp-next-val { font-size: 11px; color: var(--text-gray); }
 
 /* ── XP float badge ── */
 .xp-badge {
   position: fixed;
-  bottom: 80px;
-  left: 50%;
+  bottom: 90px; left: 50%;
   transform: translateX(-50%);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 5px 13px;
-  border-radius: 20px;
-  pointer-events: none;
-  opacity: 0;
-  z-index: 4000;
-  white-space: nowrap;
-  /* لا transition افتراضي — الأنيميشن يتولى كل شيء */
+  font-size: 13px; font-weight: 700;
+  padding: 5px 13px; border-radius: 20px;
+  pointer-events: none; opacity: 0;
+  z-index: 4000; white-space: nowrap;
 }
-
-.xp-badge.fly {
-  animation: xpFly 1.3s ease forwards;
-}
-
+.xp-badge.fly { animation: xpFly 1.3s ease forwards; }
 @keyframes xpFly {
   0%   { opacity: 1; transform: translateX(-50%) translateY(0);     }
-  60%  { opacity: 1; transform: translateX(-50%) translateY(-55px); }
+  65%  { opacity: 1; transform: translateX(-50%) translateY(-55px); }
   100% { opacity: 0; transform: translateX(-50%) translateY(-85px); }
 }
 
-/* ── تحذير XP داخل مودال الحذف ── */
+/* ── تحذير XP في مودال الحذف ── */
 .xp-delete-warn {
-  margin-top: 10px;
-  padding: 8px 12px;
+  margin-top: 10px; padding: 8px 12px;
   background: rgba(239,68,68,0.12);
   border: 1px solid rgba(239,68,68,0.3);
-  border-radius: 8px;
-  font-size: 13px;
-  color: #fca5a5;
-  text-align: center;
+  border-radius: 8px; font-size: 13px; color: #fca5a5; text-align: center;
 }
 
-@media (max-width: 480px) {
-  .xp-panel { padding: 12px 14px; }
-  .xp-rank  { font-size: 14px; }
+/* ── زر "موجودة" في قواميس الألعاب ── */
+.btn-already-added {
+  background: #334155 !important;
+  color: var(--text-gray) !important;
+  cursor: default !important;
+  opacity: 0.7;
 }
