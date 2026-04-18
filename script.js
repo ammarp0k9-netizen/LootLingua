@@ -817,7 +817,7 @@ function renderGameWords(words) {
                         id="gameAddBtn_${w.text.replace(/[^a-zA-Z0-9]/g,'_')}"
                         onclick="addFromGame('${safeWord}','${safeMeaning}','${safeExample}',this)"
                         ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase()) ? 'disabled' : ''}>
-                  ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase()) ? '✓ موجودة' : '➕'}
+                  ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase()) ? '✓' : '➕'}
                 </button>
                 <span class="tooltip-text">${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase()) ? 'موجودة في قاموسك' : 'أضف للقاموس'}</span>
               </div>
@@ -887,7 +887,7 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
   if (alreadyAdded) {
     showToast('هذه الكلمة موجودة بالفعل في قاموسك! 📖');
     // حدّث الزر ليظهر "موجودة"
-    if (btnEl) { btnEl.textContent = '✓ موجودة'; btnEl.disabled = true; btnEl.style.background = '#475569'; }
+    if (btnEl) { btnEl.textContent = '✓'; btnEl.disabled = true; btnEl.style.background = '#475569'; }
     return;
   }
 
@@ -901,7 +901,7 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
       showToast('تمت الإضافة لقاموسك! 💎');
       updateXP(xpGain);
       showXPBadge(xpGain, null, false);
-      if (btnEl) { btnEl.textContent = '✓ تمت'; btnEl.style.background = '#059669'; }
+      if (btnEl) { btnEl.textContent = '✓'; btnEl.style.background = '#059669'; }
     } else {
       showToast('سجل دخول أولاً عشان تحفظ اللوت! ⚠️');
       if (btnEl) { btnEl.textContent = '➕'; btnEl.disabled = false; }
@@ -913,7 +913,7 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
     showToast('تمت الإضافة للقاموس المحلي! 💎');
     updateXP(xpGain);
     showXPBadge(xpGain, null, false);
-    if (btnEl) { btnEl.textContent = '✓ تمت'; btnEl.style.background = '#059669'; }
+    if (btnEl) { btnEl.textContent = '✓'; btnEl.style.background = '#059669'; }
   }
 };
 
