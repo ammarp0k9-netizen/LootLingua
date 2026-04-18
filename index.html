@@ -13,7 +13,7 @@
 <!-- Toast -->
 <div id="toastMessage" class="toast-msg"></div>
 <!-- XP Float Badge -->
-<div id="xpBadge" class="xp-badge">+5 XP</div>
+<div id="xpBadge" class="xp-badge">+3 XP</div>
 
 <!-- ── Hamburger ── -->
 <div class="menu-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
@@ -36,19 +36,16 @@
     <div class="sidebar-divider">الحساب</div>
     <button id="loginBtn"  class="auth-btn" onclick="login()">تسجيل دخول بـ Google 🚀</button>
     <button id="logoutBtn" class="auth-btn" onclick="showModal('logoutModal')">تسجيل الخروج</button>
-    <!-- ── XP Panel ── -->
     <div class="xp-panel">
       <div class="xp-top">
         <span id="xpRankIcon" class="xp-icon">🐣</span>
         <span id="xpRankLabel" class="xp-rank">Noob</span>
         <span id="xpValue" class="xp-val">0 XP</span>
       </div>
-      <div class="xp-track">
-        <div id="xpFill" class="xp-fill"></div>
-      </div>
+      <div class="xp-track"><div id="xpFill" class="xp-fill"></div></div>
       <div class="xp-bottom">
         <span class="xp-hint">التالي:</span>
-        <span id="xpNext" class="xp-next-val">50 XP</span>
+        <span id="xpNext" class="xp-next-val">15 XP</span>
       </div>
     </div>
   </nav>
@@ -121,8 +118,8 @@
 
   <!-- تصدير / استيراد -->
   <div class="backup-zone">
-    <button class="btn-backup" onclick="exportData()">📥 تصدير</button>
-    <button class="btn-backup" onclick="document.getElementById('importFile').click()">📤 استيراد</button>
+    <button class="btn-backup" onclick="exportData()">📥 تصدير JSON</button>
+    <button class="btn-backup" onclick="document.getElementById('importFile').click()">📤 استيراد JSON</button>
     <input type="file" id="importFile" style="display:none;" onchange="importData(event)">
   </div>
 </main>
