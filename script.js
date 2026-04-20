@@ -56,89 +56,88 @@ function showToast(msg) {
 // GAMIFICATION ENGINE
 // ═══════════════════════════════════════════════════════
 
-// ── Persistence helpers ──────────────────────────────
-function loadInt(key, def)  { return parseInt(localStorage.getItem(key)) || def; }
-function saveInt(key, val)  { localStorage.setItem(key, val); }
-function loadJSON(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } }
-function saveJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function todayStr()         { return new Date().toISOString().slice(0, 10); }
+// ── Local persistence helpers ──
+function loadInt(k,d)  { return parseInt(localStorage.getItem(k)) || d; }
+function saveInt(k,v)  { localStorage.setItem(k,v); }
+function loadJSON(k,d) { try{return JSON.parse(localStorage.getItem(k))||d;}catch{return d;} }
+function saveJSON(k,v) { localStorage.setItem(k,JSON.stringify(v)); }
+function todayStr()    { return new Date().toISOString().slice(0,10); }
 
-// ── XP & Ranks ──────────────────────────────────────
+// ── XP Ranks ──
 const XP_RANKS = [
-  { min:0,    max:14,       label:'Noob',     icon:'🐣', color:'#94a3b8' },
-  { min:15,   max:39,       label:'Wanderer', icon:'🗺️', color:'#67e8f9' },
-  { min:40,   max:79,       label:'Learner',  icon:'📚', color:'#60a5fa' },
-  { min:80,   max:149,      label:'Explorer', icon:'🔭', color:'#818cf8' },
-  { min:150,  max:249,      label:'Pro',      icon:'⚔️', color:'#34d399' },
-  { min:250,  max:399,      label:'Veteran',  icon:'🛡️', color:'#4ade80' },
-  { min:400,  max:599,      label:'Elite',    icon:'🔥', color:'#f59e0b' },
-  { min:600,  max:899,      label:'Master',   icon:'🌟', color:'#fbbf24' },
-  { min:900,  max:1299,     label:'Legend',   icon:'👑', color:'#a78bfa' },
-  { min:1300, max:Infinity, label:'Linguaer', icon:'🏆', color:'#f472b6' },
+  {min:0,   max:14,       label:'Noob',     icon:'🐣', color:'#94a3b8'},
+  {min:15,  max:39,       label:'Wanderer', icon:'🗺️', color:'#67e8f9'},
+  {min:40,  max:79,       label:'Learner',  icon:'📚', color:'#60a5fa'},
+  {min:80,  max:149,      label:'Explorer', icon:'🔭', color:'#818cf8'},
+  {min:150, max:249,      label:'Pro',      icon:'⚔️', color:'#34d399'},
+  {min:250, max:399,      label:'Veteran',  icon:'🛡️', color:'#4ade80'},
+  {min:400, max:599,      label:'Elite',    icon:'🔥', color:'#f59e0b'},
+  {min:600, max:899,      label:'Master',   icon:'🌟', color:'#fbbf24'},
+  {min:900, max:1299,     label:'Legend',   icon:'👑', color:'#a78bfa'},
+  {min:1300,max:Infinity, label:'Linguaer', icon:'🏆', color:'#f472b6'},
 ];
-function getRank(xp)     { return [...XP_RANKS].reverse().find(r => xp >= r.min) || XP_RANKS[0]; }
-function getNextRank(xp) { return XP_RANKS.find(r => r.min > xp) || null; }
+function getRank(xp)     { return [...XP_RANKS].reverse().find(r=>xp>=r.min)||XP_RANKS[0]; }
+function getNextRank(xp) { return XP_RANKS.find(r=>r.min>xp)||null; }
 
 function updateXP(amount) {
   if (!amount) return;
   const oldRank = getRank(userXP);
   userXP = Math.max(0, userXP + amount);
   saveInt('userXP', userXP);
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
   renderXPBar();
   if (amount > 0 && getRank(userXP).label !== oldRank.label)
-    setTimeout(() => showRankUp(getRank(userXP)), 400);
+    setTimeout(()=>showRankUp(getRank(userXP)), 400);
 }
 
 function renderXPBar() {
-  const rank = getRank(userXP), next = getNextRank(userXP);
-  const pct  = next ? Math.min(((userXP - rank.min) / (next.min - rank.min)) * 100, 100) : 100;
-  const fill = document.getElementById('xpFill');
-  const lbl  = document.getElementById('xpRankLabel');
-  const ico  = document.getElementById('xpRankIcon');
-  const val  = document.getElementById('xpValue');
-  const nxt  = document.getElementById('xpNext');
-  if (!fill) return;
-  fill.style.width      = pct + '%';
-  fill.style.background = `linear-gradient(90deg,${rank.color}ee,${rank.color}66)`;
-  if (lbl) { lbl.textContent = rank.label; lbl.style.color = rank.color; }
-  if (ico)  ico.textContent  = rank.icon;
-  if (val)  val.textContent  = userXP + ' XP';
-  if (nxt)  nxt.textContent  = next ? next.min + ' XP' : 'MAX 🏆';
+  const rank=getRank(userXP), next=getNextRank(userXP);
+  const pct=next?Math.min(((userXP-rank.min)/(next.min-rank.min))*100,100):100;
+  const fill=document.getElementById('xpFill');
+  const lbl=document.getElementById('xpRankLabel');
+  const ico=document.getElementById('xpRankIcon');
+  const val=document.getElementById('xpValue');
+  const nxt=document.getElementById('xpNext');
+  if(!fill)return;
+  fill.style.width=pct+'%';
+  fill.style.background=`linear-gradient(90deg,${rank.color}ee,${rank.color}66)`;
+  if(lbl){lbl.textContent=rank.label;lbl.style.color=rank.color;}
+  if(ico) ico.textContent=rank.icon;
+  if(val) val.textContent=userXP+' XP';
+  if(nxt) nxt.textContent=next?next.min+' XP':'MAX 🏆';
 }
 
 function showXPBadge(amount, anchorId, isNeg) {
-  const b = document.getElementById('xpBadge');
-  if (!b) return;
-  b.textContent = (isNeg ? '-' : '+') + amount + ' XP' + (isNeg ? '' : ' ⚡');
-  b.style.background = isNeg ? '#ef4444' : '#f59e0b';
-  b.style.color      = isNeg ? '#fff'    : '#0f172a';
-  const a = anchorId ? document.getElementById(anchorId) : null;
-  if (a) { const r = a.getBoundingClientRect(); b.style.left = (r.left+r.width/2)+'px'; b.style.bottom = (window.innerHeight-r.top+12)+'px'; b.style.transform='translateX(-50%)'; }
-  else   { b.style.left='50%'; b.style.bottom='90px'; b.style.transform='translateX(-50%)'; }
-  b.classList.remove('fly'); void b.offsetWidth; b.classList.add('fly');
-  const ic = document.getElementById('xpRankIcon');
-  if (ic) { ic.classList.add('pop'); setTimeout(() => ic.classList.remove('pop'), 350); }
+  const b=document.getElementById('xpBadge'); if(!b)return;
+  b.textContent=(isNeg?'-':'+')+amount+' XP'+(isNeg?'':' ⚡');
+  b.style.background=isNeg?'#ef4444':'#f59e0b';
+  b.style.color=isNeg?'#fff':'#0f172a';
+  const a=anchorId?document.getElementById(anchorId):null;
+  if(a){const r=a.getBoundingClientRect();b.style.left=(r.left+r.width/2)+'px';b.style.bottom=(window.innerHeight-r.top+12)+'px';b.style.transform='translateX(-50%)';}
+  else{b.style.left='50%';b.style.bottom='90px';b.style.transform='translateX(-50%)';}
+  b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
+  const ic=document.getElementById('xpRankIcon');
+  if(ic){ic.classList.add('pop');setTimeout(()=>ic.classList.remove('pop'),350);}
 }
 
 function showRankUp(rank) {
-  const t = document.getElementById('toastMessage');
-  if (!t) return;
-  t.textContent = rank.icon + ' ترقية! أصبحت ' + rank.label;
-  t.style.background = rank.color; t.style.color = '#0f172a'; t.classList.add('show');
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const t=document.getElementById('toastMessage'); if(!t)return;
+  t.textContent=rank.icon+' ترقية! أصبحت '+rank.label;
+  t.style.background=rank.color;t.style.color='#0f172a';t.classList.add('show');
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
     [523,659,784].forEach((f,i)=>{
-      const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination);
-      o.type='sine'; o.frequency.value=f;
+      const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);
+      o.type='sine';o.frequency.value=f;
       g.gain.setValueAtTime(0.15,ctx.currentTime+i*0.13);
       g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.13+0.35);
-      o.start(ctx.currentTime+i*0.13); o.stop(ctx.currentTime+i*0.13+0.35);
+      o.start(ctx.currentTime+i*0.13);o.stop(ctx.currentTime+i*0.13+0.35);
     });
-  } catch(e){}
-  setTimeout(()=>{ t.classList.remove('show'); t.style.background=''; t.style.color=''; }, 3500);
+  }catch(e){}
+  setTimeout(()=>{t.classList.remove('show');t.style.background='';t.style.color='';},3500);
 }
 
-// ── Daily Streak ─────────────────────────────────────
+// ── Daily Streak ──
 let dailyStreak  = loadInt('dailyStreak', 0);
 let lastActivity = localStorage.getItem('lastActivityDate') || '';
 
@@ -148,145 +147,137 @@ function checkAndUpdateStreak() {
   if (lastActivity === today) return;
   if (lastActivity === yesterday) {
     dailyStreak++;
-    setTimeout(() => showToast('🔥 Streak ' + dailyStreak + ' يوم!'), 800);
+    setTimeout(()=>showToast('🔥 Streak '+dailyStreak+' يوم!'), 800);
   } else {
     dailyStreak = 1;
   }
   saveInt('dailyStreak', dailyStreak);
   lastActivity = today;
   localStorage.setItem('lastActivityDate', today);
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
   renderStreak();
 }
 
 function renderStreak() {
-  const el  = document.getElementById('streakCount');
-  const ico = document.getElementById('streakIcon');
-  const wrap= document.getElementById('streakWrap');
-  if (!el) return;
-  el.textContent = dailyStreak + ' يوم';
-  if (dailyStreak >= 30)      { if(ico) ico.textContent='💙'; el.style.color='#60a5fa'; }
-  else if (dailyStreak >= 14) { if(ico) ico.textContent='🔥'; el.style.color='#a78bfa'; }
-  else if (dailyStreak >= 7)  { if(ico) ico.textContent='🔥'; el.style.color='#f59e0b'; }
-  else                        { if(ico) ico.textContent='🔥'; el.style.color='#94a3b8'; }
-  if (wrap) wrap.className = 'streak-wrap' + (dailyStreak >= 7 ? ' streak-hot' : '');
+  const el=document.getElementById('streakCount');
+  const ico=document.getElementById('streakIcon');
+  const wrap=document.getElementById('streakWrap');
+  if(!el)return;
+  el.textContent=dailyStreak+' يوم';
+  if(dailyStreak>=30){if(ico)ico.textContent='💙';el.style.color='#60a5fa';}
+  else if(dailyStreak>=14){if(ico)ico.textContent='🔥';el.style.color='#a78bfa';}
+  else if(dailyStreak>=7){if(ico)ico.textContent='🔥';el.style.color='#f59e0b';}
+  else{if(ico)ico.textContent='🔥';el.style.color='#94a3b8';}
+  if(wrap)wrap.className='streak-wrap'+(dailyStreak>=7?' streak-hot':'');
 }
 
-// ── Daily Goal & Confetti ────────────────────────────
+// ── Daily Goal & Confetti ──
 const DAILY_GOAL = 5;
 
-function getDailyCount() {
-  return (loadJSON('activityMap', {}))[todayStr()] || 0;
-}
+function getDailyCount() { return (loadJSON('activityMap',{}))[todayStr()]||0; }
 
 function incrementDailyCount() {
-  const today = todayStr();
-  const map   = loadJSON('activityMap', {});
-  map[today]  = (map[today] || 0) + 1;
-  saveJSON('activityMap', map);
+  const today=todayStr();
+  const map=loadJSON('activityMap',{});
+  map[today]=(map[today]||0)+1;
+  saveJSON('activityMap',map);
+  if(window.saveProfileToCloud) window.saveProfileToCloud();
   renderDailyGoal();
-  if (map[today] === DAILY_GOAL) setTimeout(launchConfetti, 400);
+  if(map[today]===DAILY_GOAL) setTimeout(launchConfetti,400);
 }
 
 function renderDailyGoal() {
-  const count = getDailyCount();
-  const pct   = Math.min((count / DAILY_GOAL) * 100, 100);
-  const ring  = document.getElementById('goalRing');
-  const txt   = document.getElementById('goalText');
-  if (!ring) return;
-  const circ = 100.53; // 2π×16
-  ring.style.strokeDashoffset = circ - (pct / 100) * circ;
-  ring.style.stroke = pct >= 100 ? '#10b981' : '#3b82f6';
-  if (txt) txt.textContent = count + '/' + DAILY_GOAL;
+  const count=getDailyCount();
+  const pct=Math.min((count/DAILY_GOAL)*100,100);
+  const ring=document.getElementById('goalRing');
+  const txt=document.getElementById('goalText');
+  if(!ring)return;
+  const circ=100.53;
+  ring.style.strokeDashoffset=circ-(pct/100)*circ;
+  ring.style.stroke=pct>=100?'#10b981':'#3b82f6';
+  if(txt)txt.textContent=count+'/'+DAILY_GOAL;
 }
 
 function launchConfetti() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [[392,0],[523,0.1],[659,0.2],[784,0.3],[1047,0.45]].forEach(([f,t])=>{
-      const o=ctx.createOscillator(),g=ctx.createGain(); o.connect(g); g.connect(ctx.destination);
-      o.type='triangle'; o.frequency.value=f;
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    [[392,0],[523,.1],[659,.2],[784,.3],[1047,.45]].forEach(([f,t])=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);
+      o.type='triangle';o.frequency.value=f;
       g.gain.setValueAtTime(0.2,ctx.currentTime+t);
       g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.4);
-      o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.4);
+      o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+0.4);
     });
-  } catch(e){}
-  const container = document.getElementById('confettiContainer');
-  if (!container) return;
-  container.innerHTML = '';
-  const colors = ['#f59e0b','#3b82f6','#10b981','#a78bfa','#f472b6','#34d399'];
-  for (let i = 0; i < 70; i++) {
-    const p = document.createElement('div');
-    p.className = 'confetti-piece';
-    p.style.cssText = `left:${Math.random()*100}%;background:${colors[i%colors.length]};width:${6+Math.random()*6}px;height:${6+Math.random()*6}px;border-radius:${Math.random()>0.5?'50%':'2px'};animation-delay:${Math.random()*0.5}s;animation-duration:${1.2+Math.random()*0.8}s;`;
+  }catch(e){}
+  const container=document.getElementById('confettiContainer');
+  if(!container)return;
+  container.innerHTML='';
+  const colors=['#f59e0b','#3b82f6','#10b981','#a78bfa','#f472b6','#34d399'];
+  for(let i=0;i<70;i++){
+    const p=document.createElement('div');p.className='confetti-piece';
+    p.style.cssText=`left:${Math.random()*100}%;background:${colors[i%colors.length]};width:${6+Math.random()*6}px;height:${6+Math.random()*6}px;border-radius:${Math.random()>.5?'50%':'2px'};animation-delay:${Math.random()*.5}s;animation-duration:${1.2+Math.random()*.8}s;`;
     container.appendChild(p);
   }
-  container.style.display = 'block';
-  const t = document.getElementById('toastMessage');
-  if(t){ t.textContent='🎉 أكملت هدفك اليوم!'; t.classList.add('show'); }
-  setTimeout(()=>{ container.style.display='none'; container.innerHTML=''; if(t) t.classList.remove('show'); }, 3000);
+  container.style.display='block';
+  const t=document.getElementById('toastMessage');
+  if(t){t.textContent='🎉 أكملت هدفك اليوم!';t.classList.add('show');}
+  setTimeout(()=>{container.style.display='none';container.innerHTML='';if(t)t.classList.remove('show');},3000);
 }
 
-// ── Combo System (Double XP) ─────────────────────────
+// ── Combo System ──
 let comboTimestamps = [];
-
 function checkCombo() {
-  const now = Date.now();
+  const now=Date.now();
   comboTimestamps.push(now);
-  if (comboTimestamps.length > 3) comboTimestamps.shift();
-  return comboTimestamps.length === 3 && (comboTimestamps[2] - comboTimestamps[0]) < 60000;
+  if(comboTimestamps.length>3)comboTimestamps.shift();
+  return comboTimestamps.length===3&&(comboTimestamps[2]-comboTimestamps[0])<60000;
 }
 
-// ── Stats & Heatmap ──────────────────────────────────
+// ── Stats & Heatmap ──
 function openStatsPanel() {
-  const p = document.getElementById('statsPanel');
-  if (!p) return;
-  p.style.display = 'flex';
-  setTimeout(() => p.classList.add('show'), 10);
-  renderHeatmap(); renderStatsNumbers();
+  const p=document.getElementById('statsPanel');if(!p)return;
+  p.style.display='flex';setTimeout(()=>p.classList.add('show'),10);
+  renderHeatmap();renderStatsNumbers();
 }
-
 function closeStatsPanel() {
-  const p = document.getElementById('statsPanel');
-  if (!p) return;
-  p.classList.remove('show');
-  setTimeout(() => p.style.display = 'none', 300);
+  const p=document.getElementById('statsPanel');if(!p)return;
+  p.classList.remove('show');setTimeout(()=>p.style.display='none',300);
 }
-
 function renderHeatmap() {
-  const container = document.getElementById('heatmapGrid');
-  if (!container) return;
-  const map   = loadJSON('activityMap', {});
-  const today = new Date();
-  const days  = 365;
-  const start = new Date(today); start.setDate(start.getDate() - days + 1);
-  const vals  = Object.values(map);
-  const maxV  = vals.length ? Math.max(...vals) : 1;
-  container.innerHTML = '';
-  const frag  = document.createDocumentFragment();
-  for (let i = 0; i < days; i++) {
-    const d   = new Date(start); d.setDate(d.getDate() + i);
-    const key = d.toISOString().slice(0,10);
-    const cnt = map[key] || 0;
-    const cell= document.createElement('div');
-    cell.className = 'hm-cell';
-    cell.dataset.level = cnt === 0 ? 0 : Math.ceil((cnt/maxV)*4);
-    cell.title = key + ' — ' + cnt + ' كلمة';
+  const container=document.getElementById('heatmapGrid');if(!container)return;
+  const map=loadJSON('activityMap',{});
+  const today=new Date(),days=365;
+  const start=new Date(today);start.setDate(start.getDate()-days+1);
+  const vals=Object.values(map);
+  const maxV=vals.length?Math.max(...vals):1;
+  container.innerHTML='';
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<days;i++){
+    const d=new Date(start);d.setDate(d.getDate()+i);
+    const key=d.toISOString().slice(0,10);
+    const cnt=map[key]||0;
+    const cell=document.createElement('div');cell.className='hm-cell';
+    cell.dataset.level=cnt===0?0:Math.ceil((cnt/maxV)*4);
+    cell.title=key+' — '+cnt+' كلمة';
     frag.appendChild(cell);
   }
   container.appendChild(frag);
 }
-
 function renderStatsNumbers() {
-  const map  = loadJSON('activityMap', {});
-  const vals = Object.values(map);
-  const s = (id, v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  s('statTotal',   window.words.length);
-  s('statStreak',  dailyStreak + ' يوم');
-  s('statStarred', window.words.filter(w=>w.starred).length);
-  s('statForgot',  window.words.filter(w=>(w.forgetCount||0)>0).length);
-  s('statDays',    vals.filter(v=>v>0).length + ' يوم');
-  s('statBest',    (vals.length ? Math.max(...vals) : 0) + ' كلمات');
+  const map=loadJSON('activityMap',{});
+  const vals=Object.values(map);
+  const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  s('statTotal',window.words.length);
+  s('statStreak',dailyStreak+' يوم');
+  s('statStarred',window.words.filter(w=>w.starred).length);
+  s('statForgot',window.words.filter(w=>(w.forgetCount||0)>0).length);
+  s('statDays',vals.filter(v=>v>0).length+' يوم');
+  s('statBest',(vals.length?Math.max(...vals):0)+' كلمات');
 }
+
+// ── normalizeWord for duplicate check ──
+function normalizeWord(w) { return String(w||'').toLowerCase().trim().replace(/\s+/g,' '); }
+function wordExists(text) { const k=normalizeWord(text); return window.words.some(w=>normalizeWord(w.word)===k); }
 
 // ═══════════════════════════════════════════════════════
 // Save & Render helpers
@@ -332,6 +323,7 @@ window.addWord = async function() {
     btn.innerHTML = 'إضافة للقاموس ' + fe('floppy-disk', 18);
     btn.style.background = '';
   } else {
+    if (wordExists(w)) { alert('هذه الكلمة موجودة بالفعل في قاموسك!'); btn.disabled=false; return; }
     const xpGain  = 3;
     const newWord = { id: Date.now().toString(), word: w, meaning: m, example: ex, category: c, starred: false, forgetCount: 0, xpValue: xpGain };
     window.words.unshift(newWord);
@@ -339,13 +331,11 @@ window.addWord = async function() {
       const realId = await window.saveWordToCloud(w, c, m, ex);
       if (realId) newWord.id = realId;
     }
-    // Combo check
     const isCombo = checkCombo();
     const gained  = isCombo ? xpGain * 2 : xpGain;
-    if (isCombo) { showToast('⚡ COMBO! Double XP! +' + gained + ' XP'); }
+    if (isCombo) setTimeout(()=>showToast('⚡ COMBO! Double XP! +'+gained+' XP'),100);
     updateXP(gained);
     showXPBadge(gained, 'addBtn', false);
-    // Daily streak & goal
     checkAndUpdateStreak();
     incrementDailyCount();
   }
@@ -381,13 +371,12 @@ window.deleteWord = function(id, event) {
   pendingDeleteId = id;
   const wordObj = window.words.find(w => w.id === id);
   const xpLoss  = wordObj?.xpValue || 0;
-
-  // تحذير XP
+  // تحذير XP في المودال
   const modalBody = document.querySelector('#deleteModal .modal-content');
   let warnEl = modalBody?.querySelector('.xp-delete-warn');
   if (xpLoss > 0 && modalBody) {
-    if (!warnEl) { warnEl = document.createElement('div'); warnEl.className='xp-delete-warn'; modalBody.querySelector('p').after(warnEl); }
-    warnEl.textContent = '⚠️ ستخسر -' + xpLoss + ' XP عند الحذف';
+    if (!warnEl) { warnEl=document.createElement('div'); warnEl.className='xp-delete-warn'; modalBody.querySelector('p').after(warnEl); }
+    warnEl.textContent = '⚠️ ستخسر -'+xpLoss+' XP عند الحذف';
   } else if (warnEl) warnEl.remove();
 
   document.getElementById('deleteConfirmBtn').onclick = async function() {
@@ -399,10 +388,8 @@ window.deleteWord = function(id, event) {
     document.querySelector('#deleteModal .xp-delete-warn')?.remove();
     saveAndRender();
   };
-
   const cBtn = document.getElementById('deleteCancelBtn');
-  if (cBtn) cBtn.onclick = () => { hideModal('deleteModal'); document.querySelector('#deleteModal .xp-delete-warn')?.remove(); };
-
+  if (cBtn) cBtn.onclick = ()=>{ hideModal('deleteModal'); document.querySelector('#deleteModal .xp-delete-warn')?.remove(); };
   showModal('deleteModal');
 };
 
@@ -931,11 +918,12 @@ function renderGameWords(words) {
                 <span class="tooltip-text">استمع</span>
               </div>
               <div class="tooltip-wrap">
-                <button class="btn-add-mine"
-                        onclick="addFromGame('${safeWord}','${safeMeaning}','${safeExample}')">
-                  ➕
+                <button class="btn-add-mine ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?' btn-already-added':''}"
+                        onclick="addFromGame('${safeWord}','${safeMeaning}','${safeExample}',this)"
+                        ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?'disabled':''}>
+                  ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?'✓':'➕'}
                 </button>
-                <span class="tooltip-text">أضف للقاموس</span>
+                <span class="tooltip-text">${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?'موجودة في قاموسك':'أضف للقاموس'}</span>
               </div>
             </div>
           </li>`;
@@ -993,21 +981,37 @@ window.loadPersonalDictionary = function() {
   render();
 };
 
-window.addFromGame = async function(text, meaning, example) {
+window.addFromGame = async function(text, meaning, example, btnEl) {
+  const xpGain = 3;
+  if (wordExists(text)) {
+    showToast('هذه الكلمة موجودة بالفعل في قاموسك! 📖');
+    if (btnEl) { btnEl.textContent='✓'; btnEl.disabled=true; btnEl.classList.add('btn-already-added'); }
+    return;
+  }
+  if (btnEl) { btnEl.textContent='...'; btnEl.disabled=true; }
+  // سجّل في addedGameWords السحابي
+  if (window.addGameWordToCloud) await window.addGameWordToCloud(text);
+
   if (window.saveWordToCloud) {
-    const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example || 'من موسوعة الأساطير');
+    const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example || '');
     if (realId) {
+      window.words.unshift({id:realId, word:text, meaning, example:example||'', category:'لعبة', starred:false, forgetCount:0, xpValue:xpGain});
       showToast('تمت الإضافة لقاموسك! 💎');
-      updateXP(10);
+      updateXP(xpGain); showXPBadge(xpGain,null,false);
+      checkAndUpdateStreak(); incrementDailyCount();
+      if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
     } else {
       showToast('سجل دخول أولاً عشان تحفظ اللوت! ⚠️');
+      if (btnEl) { btnEl.textContent='➕'; btnEl.disabled=false; }
     }
   } else {
-    const newWord = { id: Date.now().toString(), word: text, meaning, example: example || '', category: 'لعبة', starred: false, forgetCount: 0 };
-    window.words.unshift(newWord);
+    const nw={id:Date.now().toString(),word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain};
+    window.words.unshift(nw);
     saveAndRender();
     showToast('تمت الإضافة للقاموس المحلي! 💎');
-    updateXP(10);
+    updateXP(xpGain); showXPBadge(xpGain,null,false);
+    checkAndUpdateStreak(); incrementDailyCount();
+    if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
   }
 };
 
@@ -1201,16 +1205,15 @@ function showStreakMsg(streak) {
 }
 
 function markRemember() {
-  const w  = currentQuizWords[quizIndex];
-  const fc = w.forgetCount || 0;
-  // الكلمات الصعبة (forgetCount عالي) = XP أعلى
-  const xpGain = fc >= 3 ? 3 : fc >= 1 ? 2 : 1;
+  const w = currentQuizWords[quizIndex];
   window.words = window.words.map(x =>
-    x.id === w.id ? { ...x, forgetCount: Math.max(fc - 1, 0) } : x
+    x.id === w.id ? { ...x, forgetCount: Math.max((x.forgetCount||0)-1, 0) } : x
   );
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
   currentStreak++;
   showStreakMsg(currentStreak);
+  const fc = w.forgetCount || 0;
+  const xpGain = fc >= 3 ? 3 : fc >= 1 ? 2 : 1;
   updateXP(xpGain);
   showXPBadge(xpGain, null, false);
   if (quizIndex < currentQuizWords.length - 1) { quizIndex++; updateCard(); }
@@ -1219,15 +1222,14 @@ function markRemember() {
 
 function markForgot() {
   currentStreak = 0;
-  const w  = currentQuizWords[quizIndex];
-  const fc = (w.forgetCount || 0) + 1;
+  const w = currentQuizWords[quizIndex];
   window.words = window.words.map(x =>
-    x.id === w.id ? { ...x, forgetCount: fc } : x
+    x.id === w.id ? { ...x, forgetCount: (x.forgetCount||0)+1 } : x
   );
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
-  // كلما زاد forgetCount ترجع الكلمة أسرع
-  const gap = Math.max(2, Math.min(5 - fc, 4));
-  currentQuizWords.splice(Math.min(quizIndex + gap, currentQuizWords.length), 0, { ...w });
+  const fc2  = (w.forgetCount || 0) + 1;
+  const gap  = Math.max(2, Math.min(5 - fc2, 4));
+  currentQuizWords.splice(Math.min(quizIndex + gap, currentQuizWords.length), 0, {...w});
   quizIndex++;
   updateCard();
 }
