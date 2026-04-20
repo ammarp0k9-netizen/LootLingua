@@ -13,7 +13,9 @@
 <!-- Toast -->
 <div id="toastMessage" class="toast-msg"></div>
 <!-- XP Float Badge -->
-<div id="xpBadge" class="xp-badge">+3 XP</div>
+<div id="xpBadge" class="xp-badge">+3 XP ⚡</div>
+<!-- Confetti -->
+<div id="confettiContainer" class="confetti-container" style="display:none;"></div>
 
 <!-- ── Hamburger ── -->
 <div class="menu-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
@@ -36,6 +38,7 @@
     <div class="sidebar-divider">الحساب</div>
     <button id="loginBtn"  class="auth-btn" onclick="login()">تسجيل دخول بـ Google 🚀</button>
     <button id="logoutBtn" class="auth-btn" onclick="showModal('logoutModal')">تسجيل الخروج</button>
+    <!-- XP Panel -->
     <div class="xp-panel">
       <div class="xp-top">
         <span id="xpRankIcon" class="xp-icon">🐣</span>
@@ -48,6 +51,9 @@
         <span id="xpNext" class="xp-next-val">15 XP</span>
       </div>
     </div>
+    <button class="auth-btn stats-btn" onclick="openStatsPanel()" style="margin-top:10px; border-color:#818cf8; color:#818cf8;">
+      📈 إحصائياتي
+    </button>
   </nav>
 </div>
 
@@ -56,7 +62,25 @@
 <!-- ── Main ── -->
 <main class="main-content">
   <header class="page-header">
-    <h1>⚔️ قاموسك الشخصي</h1>
+    <div class="header-top">
+      <h1 id="pageTitle">⚔️ قاموسك الشخصي</h1>
+      <div class="header-widgets">
+        <!-- Streak -->
+        <div id="streakWrap" class="streak-wrap" onclick="openStatsPanel()" title="إحصائياتك">
+          <span id="streakIcon" class="streak-icon">🔥</span>
+          <span id="streakCount" class="streak-count">0 يوم</span>
+        </div>
+        <!-- Daily Goal Ring -->
+        <div class="goal-ring-wrap" onclick="openStatsPanel()" title="هدفك اليومي">
+          <svg viewBox="0 0 36 36" class="goal-svg">
+            <circle cx="18" cy="18" r="16" class="goal-bg"/>
+            <circle id="goalRing" cx="18" cy="18" r="16" class="goal-fill"
+                    style="stroke-dasharray:100.53;stroke-dashoffset:100.53;"/>
+          </svg>
+          <span id="goalText" class="goal-text">0/5</span>
+        </div>
+      </div>
+    </div>
     <div class="stats-bar">
       <span id="totalCount">إجمالي الكلمات: 0</span>
       <span id="starredCount">⭐ الصعبة: 0</span>
@@ -298,6 +322,42 @@
     catch (e) { console.error("خطأ بالحذف:", e); }
   };
 </script>
+
+
+<!-- ══ STATS PANEL ══ -->
+<div id="statsPanel" class="stats-overlay" style="display:none;">
+  <div class="stats-box">
+    <div class="stats-header">
+      <h2>📈 إحصائياتي</h2>
+      <button onclick="closeStatsPanel()" class="stats-close">✕</button>
+    </div>
+
+    <!-- Numbers grid -->
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">كلمة مضافة</div></div>
+      <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">Daily Streak</div></div>
+      <div class="stat-card"><div class="stat-val" id="statStarred">0</div><div class="stat-lbl">كلمة صعبة</div></div>
+      <div class="stat-card"><div class="stat-val" id="statForgot">0</div><div class="stat-lbl">تحتاج مراجعة</div></div>
+      <div class="stat-card"><div class="stat-val" id="statDays">0 يوم</div><div class="stat-lbl">أيام نشاط</div></div>
+      <div class="stat-card"><div class="stat-val" id="statBest">0 كلمات</div><div class="stat-lbl">أفضل يوم</div></div>
+    </div>
+
+    <!-- Heatmap -->
+    <div class="heatmap-section">
+      <div class="heatmap-title">نشاطك خلال السنة</div>
+      <div class="heatmap-legend">
+        <span>أقل</span>
+        <div class="hm-cell" data-level="0"></div>
+        <div class="hm-cell" data-level="1"></div>
+        <div class="hm-cell" data-level="2"></div>
+        <div class="hm-cell" data-level="3"></div>
+        <div class="hm-cell" data-level="4"></div>
+        <span>أكثر</span>
+      </div>
+      <div id="heatmapGrid" class="heatmap-grid"></div>
+    </div>
+  </div>
+</div>
 
 <script src="script.js"></script>
 </body>
