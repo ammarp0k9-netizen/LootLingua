@@ -35,6 +35,10 @@
     <a href="#" class="nav-link" data-view="pubg" onclick="loadGameDictionary('pubg')">
       <i class="fas fa-crosshairs"></i> PUBG Terms
     </a>
+    <div style="border-top:1px solid rgba(255,255,255,0.06); margin:8px 0 4px;"></div>
+    <a href="#" class="nav-link" onclick="openStatsPanel();toggleSidebar();">
+      <i class="fas fa-chart-bar"></i> إحصائياتي
+    </a>
     <div class="sidebar-divider">الحساب</div>
     <button id="loginBtn"  class="auth-btn" onclick="login()">تسجيل دخول بـ Google 🚀</button>
     <button id="logoutBtn" class="auth-btn" onclick="showModal('logoutModal')">تسجيل الخروج</button>
@@ -51,9 +55,6 @@
         <span id="xpNext" class="xp-next-val">15 XP</span>
       </div>
     </div>
-    <button class="auth-btn stats-btn" onclick="openStatsPanel()" style="margin-top:10px; border-color:#818cf8; color:#818cf8;">
-      📈 إحصائياتي
-    </button>
   </nav>
 </div>
 
@@ -65,12 +66,10 @@
     <div class="header-top">
       <h1 id="pageTitle">⚔️ قاموسك الشخصي</h1>
       <div class="header-widgets">
-        <!-- Streak -->
         <div id="streakWrap" class="streak-wrap" onclick="openStatsPanel()" title="إحصائياتك">
           <span id="streakIcon" class="streak-icon">🔥</span>
           <span id="streakCount" class="streak-count">0 يوم</span>
         </div>
-        <!-- Daily Goal Ring -->
         <div class="goal-ring-wrap" onclick="openStatsPanel()" title="هدفك اليومي">
           <svg viewBox="0 0 36 36" class="goal-svg">
             <circle cx="18" cy="18" r="16" class="goal-bg"/>
@@ -250,8 +249,14 @@
   onAuthStateChanged(auth, (user) => {
     document.getElementById('logoutBtn').style.display = user ? 'block' : 'none';
     document.getElementById('loginBtn').style.display  = user ? 'none'  : 'block';
-    if (user) loadWordsFromCloud(user);
-    else { window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || []; render(); }
+    if (user) {
+      loadWordsFromCloud(user);
+      // نحمّل الـ profile بعد تأخير بسيط عشان يتأكد loadJSON متاح
+      setTimeout(() => window.loadProfileFromCloud && window.loadProfileFromCloud(user), 500);
+    } else {
+      window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || [];
+      render();
+    }
   });
 
   window.login = async function() {
@@ -321,18 +326,100 @@
     try { await deleteDoc(doc(db, "users", user.uid, "words", id)); }
     catch (e) { console.error("خطأ بالحذف:", e); }
   };
-</script>
 
+  // ── Profile: XP + Streak + ActivityMap + AddedGameWords ──
+  window.saveProfileToCloud = async function() {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, "users", user.uid, "meta", "profile"), {
+        userXP:           userXP,
+        dailyStreak:      dailyStreak,
+        lastActivityDate: lastActivity,
+        activityMap:      loadJSON('activityMap', {}),
+        addedGameWords:   loadJSON('addedGameWords', []),
+        updatedAt:        new Date()
+      });
+    } catch(e) {
+      // لو المستند مش موجود بعد — نعمله
+      try {
+        const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+        await setDoc(doc(db, "users", user.uid, "meta", "profile"), {
+          userXP, dailyStreak,
+          lastActivityDate: lastActivity,
+          activityMap:   loadJSON('activityMap', {}),
+          addedGameWords:loadJSON('addedGameWords', []),
+          updatedAt:     new Date()
+        });
+      } catch(e2) { console.error("saveProfile:", e2); }
+    }
+  };
+
+  window.loadProfileFromCloud = async function(user) {
+    try {
+      const { getDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      const snap = await getDoc(doc(db, "users", user.uid, "meta", "profile"));
+      if (!snap.exists()) return;
+      const d = snap.data();
+      // XP
+      if (d.userXP !== undefined) {
+        userXP = d.userXP;
+        saveInt('userXP', userXP);
+      }
+      // Streak
+      if (d.dailyStreak !== undefined) {
+        dailyStreak = d.dailyStreak;
+        saveInt('dailyStreak', dailyStreak);
+      }
+      if (d.lastActivityDate) {
+        lastActivity = d.lastActivityDate;
+        localStorage.setItem('lastActivityDate', lastActivity);
+      }
+      // ActivityMap — merge: take max per day
+      if (d.activityMap) {
+        const localMap  = loadJSON('activityMap', {});
+        const merged    = { ...d.activityMap };
+        Object.entries(localMap).forEach(([k,v]) => {
+          merged[k] = Math.max(merged[k]||0, v);
+        });
+        saveJSON('activityMap', merged);
+      }
+      // AddedGameWords
+      if (d.addedGameWords) {
+        const localAdded = loadJSON('addedGameWords', []);
+        const merged     = [...new Set([...d.addedGameWords, ...localAdded])];
+        saveJSON('addedGameWords', merged);
+      }
+      renderXPBar(); renderStreak(); renderDailyGoal();
+    } catch(e) { console.error("loadProfile:", e); }
+  };
+
+  // سجّل كلمة لعبة مضافة
+  window.addGameWordToCloud = async function(text) {
+    const key  = text.toLowerCase().trim();
+    const list = loadJSON('addedGameWords', []);
+    if (!list.includes(key)) {
+      list.push(key);
+      saveJSON('addedGameWords', list);
+      if (window.saveProfileToCloud) window.saveProfileToCloud();
+    }
+  };
+
+  // تحقق محلي إذا كلمة اللعبة مضافة
+  window.isGameWordAdded = function(text) {
+    const key  = text.toLowerCase().trim();
+    const list = loadJSON('addedGameWords', []);
+    return list.includes(key) || window.words.some(w => w.word.toLowerCase().trim() === key);
+  };
+</script>
 
 <!-- ══ STATS PANEL ══ -->
 <div id="statsPanel" class="stats-overlay" style="display:none;">
   <div class="stats-box">
     <div class="stats-header">
-      <h2>📈 إحصائياتي</h2>
+      <h2>إحصائياتي</h2>
       <button onclick="closeStatsPanel()" class="stats-close">✕</button>
     </div>
-
-    <!-- Numbers grid -->
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">كلمة مضافة</div></div>
       <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">Daily Streak</div></div>
@@ -341,8 +428,6 @@
       <div class="stat-card"><div class="stat-val" id="statDays">0 يوم</div><div class="stat-lbl">أيام نشاط</div></div>
       <div class="stat-card"><div class="stat-val" id="statBest">0 كلمات</div><div class="stat-lbl">أفضل يوم</div></div>
     </div>
-
-    <!-- Heatmap -->
     <div class="heatmap-section">
       <div class="heatmap-title">نشاطك خلال السنة</div>
       <div class="heatmap-legend">
