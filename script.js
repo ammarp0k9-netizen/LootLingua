@@ -53,17 +53,51 @@ function showToast(msg) {
 }
 
 // ═══════════════════════════════════════════════════════
-// GAMIFICATION ENGINE
+// PERSISTENCE HELPERS
 // ═══════════════════════════════════════════════════════
-
-// ── Local persistence helpers ──
-function loadInt(k,d)  { return parseInt(localStorage.getItem(k)) || d; }
-function saveInt(k,v)  { localStorage.setItem(k,v); }
-function loadJSON(k,d) { try{return JSON.parse(localStorage.getItem(k))||d;}catch{return d;} }
+function loadInt(k,d)  { const v=parseInt(localStorage.getItem(k)); return isNaN(v)?d:v; }
+function saveInt(k,v)  { localStorage.setItem(k,String(v)); }
+function loadJSON(k,d) { try{const r=JSON.parse(localStorage.getItem(k));return r??d;}catch{return d;} }
 function saveJSON(k,v) { localStorage.setItem(k,JSON.stringify(v)); }
 function todayStr()    { return new Date().toISOString().slice(0,10); }
 
-// ── XP Ranks ──
+// ═══════════════════════════════════════════════════════
+// SPAM PROTECTION
+// ═══════════════════════════════════════════════════════
+const _rateLimits = {};
+
+/**
+ * rate-limit any action
+ * key: unique name, limit: max calls, windowMs: time window in ms
+ * returns true if allowed, false if blocked
+ */
+function rateLimit(key, limit, windowMs) {
+  const now   = Date.now();
+  const state = _rateLimits[key] || { calls: [], blocked: false };
+
+  // امسح المكالمات القديمة خارج النافذة
+  state.calls = state.calls.filter(t => now - t < windowMs);
+
+  if (state.calls.length >= limit) {
+    if (!state.blocked) {
+      state.blocked = true;
+      const secs = Math.ceil(windowMs / 1000);
+      showToast(`⛔ كثير أوي! انتظر ${secs} ث`);
+      setTimeout(() => { state.blocked = false; }, windowMs);
+    }
+    _rateLimits[key] = state;
+    return false;
+  }
+
+  state.calls.push(now);
+  state.blocked = false;
+  _rateLimits[key] = state;
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════
+// XP & GAMIFICATION
+// ═══════════════════════════════════════════════════════
 const XP_RANKS = [
   {min:0,   max:14,       label:'Noob',     icon:'🐣', color:'#94a3b8'},
   {min:15,  max:39,       label:'Wanderer', icon:'🗺️', color:'#67e8f9'},
@@ -76,6 +110,10 @@ const XP_RANKS = [
   {min:900, max:1299,     label:'Legend',   icon:'👑', color:'#a78bfa'},
   {min:1300,max:Infinity, label:'Linguaer', icon:'🏆', color:'#f472b6'},
 ];
+
+// userXP already declared in State section above — just reload from localStorage
+userXP = loadInt('userXP', 0);
+
 function getRank(xp)     { return [...XP_RANKS].reverse().find(r=>xp>=r.min)||XP_RANKS[0]; }
 function getNextRank(xp) { return XP_RANKS.find(r=>r.min>xp)||null; }
 
@@ -93,64 +131,84 @@ function updateXP(amount) {
 function renderXPBar() {
   const rank=getRank(userXP), next=getNextRank(userXP);
   const pct=next?Math.min(((userXP-rank.min)/(next.min-rank.min))*100,100):100;
-  const fill=document.getElementById('xpFill');
-  const lbl=document.getElementById('xpRankLabel');
-  const ico=document.getElementById('xpRankIcon');
-  const val=document.getElementById('xpValue');
-  const nxt=document.getElementById('xpNext');
-  if(!fill)return;
-  fill.style.width=pct+'%';
-  fill.style.background=`linear-gradient(90deg,${rank.color}ee,${rank.color}66)`;
-  if(lbl){lbl.textContent=rank.label;lbl.style.color=rank.color;}
-  if(ico) ico.textContent=rank.icon;
-  if(val) val.textContent=userXP+' XP';
-  if(nxt) nxt.textContent=next?next.min+' XP':'MAX 🏆';
+  const el = {
+    fill: document.getElementById('xpFill'),
+    lbl:  document.getElementById('xpRankLabel'),
+    ico:  document.getElementById('xpRankIcon'),
+    val:  document.getElementById('xpValue'),
+    nxt:  document.getElementById('xpNext'),
+  };
+  if (!el.fill) return;
+  el.fill.style.width      = pct+'%';
+  el.fill.style.background = `linear-gradient(90deg,${rank.color}ee,${rank.color}55)`;
+  if (el.lbl) { el.lbl.textContent=rank.label; el.lbl.style.color=rank.color; }
+  if (el.ico)   el.ico.textContent = rank.icon;
+  if (el.val)   el.val.textContent = userXP+' XP';
+  if (el.nxt)   el.nxt.textContent = next ? next.min+' XP' : 'MAX 🏆';
 }
 
 function showXPBadge(amount, anchorId, isNeg) {
-  const b=document.getElementById('xpBadge'); if(!b)return;
-  b.textContent=(isNeg?'-':'+')+amount+' XP'+(isNeg?'':' ⚡');
-  b.style.background=isNeg?'#ef4444':'#f59e0b';
-  b.style.color=isNeg?'#fff':'#0f172a';
-  const a=anchorId?document.getElementById(anchorId):null;
-  if(a){const r=a.getBoundingClientRect();b.style.left=(r.left+r.width/2)+'px';b.style.bottom=(window.innerHeight-r.top+12)+'px';b.style.transform='translateX(-50%)';}
-  else{b.style.left='50%';b.style.bottom='90px';b.style.transform='translateX(-50%)';}
-  b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
+  const b = document.getElementById('xpBadge');
+  if (!b) return;
+  b.textContent      = (isNeg?'-':'+')+amount+' XP'+(isNeg?'':' ⚡');
+  b.style.background = isNeg ? '#ef4444' : '#f59e0b';
+  b.style.color      = isNeg ? '#fff'    : '#0f172a';
+  const a = anchorId ? document.getElementById(anchorId) : null;
+  if (a) {
+    const r=a.getBoundingClientRect();
+    b.style.left=(r.left+r.width/2)+'px'; b.style.bottom=(window.innerHeight-r.top+12)+'px';
+    b.style.transform='translateX(-50%)';
+  } else { b.style.left='50%'; b.style.bottom='90px'; b.style.transform='translateX(-50%)'; }
+  b.classList.remove('fly'); void b.offsetWidth; b.classList.add('fly');
   const ic=document.getElementById('xpRankIcon');
-  if(ic){ic.classList.add('pop');setTimeout(()=>ic.classList.remove('pop'),350);}
+  if (ic){ic.classList.add('pop');setTimeout(()=>ic.classList.remove('pop'),350);}
 }
 
 function showRankUp(rank) {
   const t=document.getElementById('toastMessage'); if(!t)return;
   t.textContent=rank.icon+' ترقية! أصبحت '+rank.label;
-  t.style.background=rank.color;t.style.color='#0f172a';t.classList.add('show');
-  try{
+  t.style.background=rank.color; t.style.color='#0f172a'; t.classList.add('show');
+  try {
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
     [523,659,784].forEach((f,i)=>{
-      const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);
-      o.type='sine';o.frequency.value=f;
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(ctx.destination);o.type='sine';o.frequency.value=f;
       g.gain.setValueAtTime(0.15,ctx.currentTime+i*0.13);
       g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.13+0.35);
-      o.start(ctx.currentTime+i*0.13);o.stop(ctx.currentTime+i*0.13+0.35);
+      o.start(ctx.currentTime+i*0.13); o.stop(ctx.currentTime+i*0.13+0.35);
     });
-  }catch(e){}
+  } catch(e){}
   setTimeout(()=>{t.classList.remove('show');t.style.background='';t.style.color='';},3500);
 }
 
-// ── Daily Streak ──
+// ── Daily Streak ──────────────────────────────────────
 let dailyStreak  = loadInt('dailyStreak', 0);
 let lastActivity = localStorage.getItem('lastActivityDate') || '';
 
+/**
+ * يُستدعى مرة واحدة عند فتح الصفحة — يسجّل اليوم ويحدث الـ streak
+ */
 function checkAndUpdateStreak() {
-  const today = todayStr();
+  const today     = todayStr();
   const yesterday = new Date(Date.now()-864e5).toISOString().slice(0,10);
-  if (lastActivity === today) return;
+
+  // سجّل اليوم في activityMap (فتح الموقع = نشاط)
+  const map = loadJSON('activityMap', {});
+  if (!map[today]) map[today] = 0; // 0 يعني فتح بدون إضافة — سيُحدَّث لاحقاً
+  saveJSON('activityMap', map);
+
+  if (lastActivity === today) { renderStreak(); return; } // نفس اليوم
+
   if (lastActivity === yesterday) {
     dailyStreak++;
-    setTimeout(()=>showToast('🔥 Streak '+dailyStreak+' يوم!'), 800);
-  } else {
+    setTimeout(()=>showToast('🔥 Streak '+dailyStreak+' يوم!'), 1000);
+  } else if (lastActivity !== '') {
+    // انكسر الـ streak
     dailyStreak = 1;
+  } else {
+    dailyStreak = 1; // أول استخدام
   }
+
   saveInt('dailyStreak', dailyStreak);
   lastActivity = today;
   localStorage.setItem('lastActivityDate', today);
@@ -159,62 +217,65 @@ function checkAndUpdateStreak() {
 }
 
 function renderStreak() {
-  const el=document.getElementById('streakCount');
-  const ico=document.getElementById('streakIcon');
-  const wrap=document.getElementById('streakWrap');
-  if(!el)return;
-  el.textContent=dailyStreak+' يوم';
-  if(dailyStreak>=30){if(ico)ico.textContent='💙';el.style.color='#60a5fa';}
-  else if(dailyStreak>=14){if(ico)ico.textContent='🔥';el.style.color='#a78bfa';}
-  else if(dailyStreak>=7){if(ico)ico.textContent='🔥';el.style.color='#f59e0b';}
-  else{if(ico)ico.textContent='🔥';el.style.color='#94a3b8';}
-  if(wrap)wrap.className='streak-wrap'+(dailyStreak>=7?' streak-hot':'');
+  const el   = document.getElementById('streakCount');
+  const ico  = document.getElementById('streakIcon');
+  const wrap = document.getElementById('streakWrap');
+  if (!el) return;
+  el.textContent = dailyStreak+' يوم';
+  if (dailyStreak>=30)      { if(ico)ico.textContent='💙'; el.style.color='#60a5fa'; }
+  else if (dailyStreak>=14) { if(ico)ico.textContent='🔥'; el.style.color='#a78bfa'; }
+  else if (dailyStreak>=7)  { if(ico)ico.textContent='🔥'; el.style.color='#f59e0b'; }
+  else                      { if(ico)ico.textContent='🔥'; el.style.color='#94a3b8'; }
+  if (wrap) wrap.className='streak-wrap'+(dailyStreak>=7?' streak-hot':'');
 }
 
-// ── Daily Goal & Confetti ──
+// ── Daily Goal & Confetti ──────────────────────────────
 const DAILY_GOAL = 5;
 
-function getDailyCount() { return (loadJSON('activityMap',{}))[todayStr()]||0; }
+function getDailyCount() {
+  const map = loadJSON('activityMap', {});
+  return map[todayStr()] || 0;
+}
 
 function incrementDailyCount() {
-  const today=todayStr();
-  const map=loadJSON('activityMap',{});
-  map[today]=(map[today]||0)+1;
-  saveJSON('activityMap',map);
-  if(window.saveProfileToCloud) window.saveProfileToCloud();
+  const today = todayStr();
+  const map   = loadJSON('activityMap', {});
+  map[today]  = (map[today] || 0) + 1;
+  saveJSON('activityMap', map);
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
   renderDailyGoal();
-  if(map[today]===DAILY_GOAL) setTimeout(launchConfetti,400);
+  if (map[today] === DAILY_GOAL) setTimeout(launchConfetti, 400);
 }
 
 function renderDailyGoal() {
-  const count=getDailyCount();
-  const pct=Math.min((count/DAILY_GOAL)*100,100);
-  const ring=document.getElementById('goalRing');
-  const txt=document.getElementById('goalText');
-  if(!ring)return;
-  const circ=100.53;
-  ring.style.strokeDashoffset=circ-(pct/100)*circ;
-  ring.style.stroke=pct>=100?'#10b981':'#3b82f6';
-  if(txt)txt.textContent=count+'/'+DAILY_GOAL;
+  const count = getDailyCount();
+  const pct   = Math.min((count / DAILY_GOAL) * 100, 100);
+  const ring  = document.getElementById('goalRing');
+  const txt   = document.getElementById('goalText');
+  if (!ring) return;
+  const circ = 100.53;
+  ring.style.strokeDashoffset = circ - (pct / 100) * circ;
+  ring.style.stroke = pct >= 100 ? '#10b981' : '#3b82f6';
+  if (txt) txt.textContent = count+'/'+DAILY_GOAL;
 }
 
 function launchConfetti() {
-  try{
+  try {
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
     [[392,0],[523,.1],[659,.2],[784,.3],[1047,.45]].forEach(([f,t])=>{
       const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);
-      o.type='triangle';o.frequency.value=f;
+      o.type='triangle'; o.frequency.value=f;
       g.gain.setValueAtTime(0.2,ctx.currentTime+t);
       g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+t+0.4);
-      o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+0.4);
+      o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.4);
     });
-  }catch(e){}
+  } catch(e) {}
   const container=document.getElementById('confettiContainer');
-  if(!container)return;
+  if (!container) return;
   container.innerHTML='';
   const colors=['#f59e0b','#3b82f6','#10b981','#a78bfa','#f472b6','#34d399'];
   for(let i=0;i<70;i++){
-    const p=document.createElement('div');p.className='confetti-piece';
+    const p=document.createElement('div'); p.className='confetti-piece';
     p.style.cssText=`left:${Math.random()*100}%;background:${colors[i%colors.length]};width:${6+Math.random()*6}px;height:${6+Math.random()*6}px;border-radius:${Math.random()>.5?'50%':'2px'};animation-delay:${Math.random()*.5}s;animation-duration:${1.2+Math.random()*.8}s;`;
     container.appendChild(p);
   }
@@ -224,60 +285,66 @@ function launchConfetti() {
   setTimeout(()=>{container.style.display='none';container.innerHTML='';if(t)t.classList.remove('show');},3000);
 }
 
-// ── Combo System ──
+// ── Combo System ──────────────────────────────────────
 let comboTimestamps = [];
 function checkCombo() {
-  const now=Date.now();
+  const now = Date.now();
   comboTimestamps.push(now);
-  if(comboTimestamps.length>3)comboTimestamps.shift();
-  return comboTimestamps.length===3&&(comboTimestamps[2]-comboTimestamps[0])<60000;
+  if (comboTimestamps.length > 3) comboTimestamps.shift();
+  return comboTimestamps.length===3 && (comboTimestamps[2]-comboTimestamps[0])<60000;
 }
 
-// ── Stats & Heatmap ──
+// ── Word normalization & duplicate check ──────────────
+function normalizeWord(w) {
+  return String(w||'').toLowerCase().trim().replace(/\s+/g,' ');
+}
+function wordExists(text) {
+  const k=normalizeWord(text);
+  return window.words.some(w=>normalizeWord(w.word)===k);
+}
+
+// ── Stats Panel ───────────────────────────────────────
 function openStatsPanel() {
-  const p=document.getElementById('statsPanel');if(!p)return;
-  p.style.display='flex';setTimeout(()=>p.classList.add('show'),10);
-  renderHeatmap();renderStatsNumbers();
+  const p=document.getElementById('statsPanel'); if(!p)return;
+  p.style.display='flex'; setTimeout(()=>p.classList.add('show'),10);
+  renderHeatmap(); renderStatsNumbers();
 }
 function closeStatsPanel() {
-  const p=document.getElementById('statsPanel');if(!p)return;
-  p.classList.remove('show');setTimeout(()=>p.style.display='none',300);
+  const p=document.getElementById('statsPanel'); if(!p)return;
+  p.classList.remove('show'); setTimeout(()=>p.style.display='none',300);
 }
 function renderHeatmap() {
-  const container=document.getElementById('heatmapGrid');if(!container)return;
-  const map=loadJSON('activityMap',{});
-  const today=new Date(),days=365;
-  const start=new Date(today);start.setDate(start.getDate()-days+1);
-  const vals=Object.values(map);
-  const maxV=vals.length?Math.max(...vals):1;
+  const container=document.getElementById('heatmapGrid'); if(!container)return;
+  const map  =loadJSON('activityMap',{});
+  const today=new Date(); const days=365;
+  const start=new Date(today); start.setDate(start.getDate()-days+1);
+  const vals =Object.values(map).filter(v=>v>0);
+  const maxV =vals.length?Math.max(...vals):1;
   container.innerHTML='';
   const frag=document.createDocumentFragment();
   for(let i=0;i<days;i++){
-    const d=new Date(start);d.setDate(d.getDate()+i);
+    const d=new Date(start); d.setDate(d.getDate()+i);
     const key=d.toISOString().slice(0,10);
     const cnt=map[key]||0;
-    const cell=document.createElement('div');cell.className='hm-cell';
-    cell.dataset.level=cnt===0?0:Math.ceil((cnt/maxV)*4);
+    const cell=document.createElement('div'); cell.className='hm-cell';
+    // level 0 = no activity, 1-4 = intensity
+    cell.dataset.level = cnt===0 ? 0 : Math.ceil((cnt/maxV)*4);
     cell.title=key+' — '+cnt+' كلمة';
     frag.appendChild(cell);
   }
   container.appendChild(frag);
 }
 function renderStatsNumbers() {
-  const map=loadJSON('activityMap',{});
-  const vals=Object.values(map);
+  const map =loadJSON('activityMap',{});
+  const vals=Object.values(map).filter(v=>v>0);
   const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  s('statTotal',window.words.length);
-  s('statStreak',dailyStreak+' يوم');
-  s('statStarred',window.words.filter(w=>w.starred).length);
-  s('statForgot',window.words.filter(w=>(w.forgetCount||0)>0).length);
-  s('statDays',vals.filter(v=>v>0).length+' يوم');
-  s('statBest',(vals.length?Math.max(...vals):0)+' كلمات');
+  s('statTotal',   window.words.length);
+  s('statStreak',  dailyStreak+' يوم');
+  s('statStarred', window.words.filter(w=>w.starred).length);
+  s('statForgot',  window.words.filter(w=>(w.forgetCount||0)>0).length);
+  s('statDays',    Object.keys(map).filter(k=>map[k]>0).length+' يوم');
+  s('statBest',    (vals.length?Math.max(...vals):0)+' كلمات');
 }
-
-// ── normalizeWord for duplicate check ──
-function normalizeWord(w) { return String(w||'').toLowerCase().trim().replace(/\s+/g,' '); }
-function wordExists(text) { const k=normalizeWord(text); return window.words.some(w=>normalizeWord(w.word)===k); }
 
 // ═══════════════════════════════════════════════════════
 // Save & Render helpers
@@ -323,9 +390,11 @@ window.addWord = async function() {
     btn.innerHTML = 'إضافة للقاموس ' + fe('floppy-disk', 18);
     btn.style.background = '';
   } else {
+    // Spam: max 30 words per minute
+    if (!rateLimit('addWord', 30, 60000)) { btn.disabled=false; return; }
     if (wordExists(w)) { alert('هذه الكلمة موجودة بالفعل في قاموسك!'); btn.disabled=false; return; }
     const xpGain  = 3;
-    const newWord = { id: Date.now().toString(), word: w, meaning: m, example: ex, category: c, starred: false, forgetCount: 0, xpValue: xpGain };
+    const newWord = { id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:xpGain };
     window.words.unshift(newWord);
     if (window.saveWordToCloud) {
       const realId = await window.saveWordToCloud(w, c, m, ex);
@@ -389,7 +458,7 @@ window.deleteWord = function(id, event) {
     saveAndRender();
   };
   const cBtn = document.getElementById('deleteCancelBtn');
-  if (cBtn) cBtn.onclick = ()=>{ hideModal('deleteModal'); document.querySelector('#deleteModal .xp-delete-warn')?.remove(); };
+  if (cBtn) cBtn.onclick = () => { hideModal('deleteModal'); document.querySelector('#deleteModal .xp-delete-warn')?.remove(); };
   showModal('deleteModal');
 };
 
@@ -428,6 +497,8 @@ window.playSound = function(identifier, event) {
 window.fetchSuggestions = async function() {
   const word = document.getElementById('wordInput').value.trim();
   if (!word) { alert("اكتب الكلمة أولاً!"); return; }
+  // Spam protection: max 5 requests per 30 seconds
+  if (!rateLimit('fetchSuggestions', 5, 30000)) return;
 
   const btn  = document.getElementById('searchBtn');
   const box  = document.getElementById('suggestionsBox');
@@ -918,12 +989,12 @@ function renderGameWords(words) {
                 <span class="tooltip-text">استمع</span>
               </div>
               <div class="tooltip-wrap">
-                <button class="btn-add-mine ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?' btn-already-added':''}"
+                <button class="btn-add-mine ${wordExists(w.text)?' btn-already-added':''}"
                         onclick="addFromGame('${safeWord}','${safeMeaning}','${safeExample}',this)"
-                        ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?'disabled':''}>
-                  ${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?'✓':'➕'}
+                        ${wordExists(w.text)?'disabled':''}>
+                  ${wordExists(w.text)?'✓':'➕'}
                 </button>
-                <span class="tooltip-text">${window.words.some(x=>x.word.toLowerCase()===w.text.toLowerCase())?'موجودة في قاموسك':'أضف للقاموس'}</span>
+                <span class="tooltip-text">${wordExists(w.text)?'موجودة في قاموسك':'أضف للقاموس'}</span>
               </div>
             </div>
           </li>`;
@@ -983,19 +1054,21 @@ window.loadPersonalDictionary = function() {
 
 window.addFromGame = async function(text, meaning, example, btnEl) {
   const xpGain = 3;
+  // تحقق من التكرار
   if (wordExists(text)) {
     showToast('هذه الكلمة موجودة بالفعل في قاموسك! 📖');
     if (btnEl) { btnEl.textContent='✓'; btnEl.disabled=true; btnEl.classList.add('btn-already-added'); }
     return;
   }
+  // Spam protection
+  if (!rateLimit('addFromGame', 10, 30000)) return;
+
   if (btnEl) { btnEl.textContent='...'; btnEl.disabled=true; }
-  // سجّل في addedGameWords السحابي
-  if (window.addGameWordToCloud) await window.addGameWordToCloud(text);
 
   if (window.saveWordToCloud) {
-    const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example || '');
+    const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example||'');
     if (realId) {
-      window.words.unshift({id:realId, word:text, meaning, example:example||'', category:'لعبة', starred:false, forgetCount:0, xpValue:xpGain});
+      window.words.unshift({id:realId,word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain});
       showToast('تمت الإضافة لقاموسك! 💎');
       updateXP(xpGain); showXPBadge(xpGain,null,false);
       checkAndUpdateStreak(); incrementDailyCount();
@@ -1227,9 +1300,9 @@ function markForgot() {
     x.id === w.id ? { ...x, forgetCount: (x.forgetCount||0)+1 } : x
   );
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
-  const fc2  = (w.forgetCount || 0) + 1;
-  const gap  = Math.max(2, Math.min(5 - fc2, 4));
-  currentQuizWords.splice(Math.min(quizIndex + gap, currentQuizWords.length), 0, {...w});
+  const fc2 = (w.forgetCount||0)+1;
+  const gap = Math.max(2, Math.min(5-fc2, 4));
+  currentQuizWords.splice(Math.min(quizIndex+gap, currentQuizWords.length), 0, {...w});
   quizIndex++;
   updateCard();
 }
@@ -1261,9 +1334,9 @@ window.onload = function() {
     if (speechSynthesis.onvoiceschanged !== undefined)
       speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
+  // Gamification init — مهم: يُستدعى قبل render()
   checkAndUpdateStreak();
   renderXPBar();
-  renderStreak();
   renderDailyGoal();
   render();
 };
