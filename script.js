@@ -441,11 +441,18 @@ window.deleteWord = function(id, event) {
   const wordObj = window.words.find(w => w.id === id);
   const xpLoss  = wordObj?.xpValue || 0;
   // تحذير XP في المودال
+ // ── تحذير خسارة XP ──
+  const wordObj = window.words.find(w => w.id === id);
+  const xpLoss  = wordObj?.xpValue || 0;
   const modalBody = document.querySelector('#deleteModal .modal-content');
   let warnEl = modalBody?.querySelector('.xp-delete-warn');
   if (xpLoss > 0 && modalBody) {
-    if (!warnEl) { warnEl=document.createElement('div'); warnEl.className='xp-delete-warn'; modalBody.querySelector('p').after(warnEl); }
-    warnEl.textContent = '⚠️ ستخسر -'+xpLoss+' XP عند الحذف';
+    if (!warnEl) {
+      warnEl = document.createElement('div');
+      warnEl.className = 'xp-delete-warn';
+      modalBody.querySelector('p').after(warnEl);
+    }
+    warnEl.textContent = '⚠️ ستخسر -' + xpLoss + ' XP عند الحذف';
   } else if (warnEl) warnEl.remove();
 
   document.getElementById('deleteConfirmBtn').onclick = async function() {
