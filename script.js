@@ -438,9 +438,6 @@ window.editWord = function(id, event) {
 window.deleteWord = function(id, event) {
   if (event) event.stopPropagation();
   pendingDeleteId = id;
-  const wordObj = window.words.find(w => w.id === id);
-  const xpLoss  = wordObj?.xpValue || 0;
-  // تحذير XP في المودال
  // ── تحذير خسارة XP ──
   const wordObj = window.words.find(w => w.id === id);
   const xpLoss  = wordObj?.xpValue || 0;
