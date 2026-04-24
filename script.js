@@ -71,6 +71,64 @@ function loadJSON(k,d) { try{const r=JSON.parse(localStorage.getItem(k));return 
 function saveJSON(k,v) { localStorage.setItem(k,JSON.stringify(v)); }
 function todayStr()    { return new Date().toISOString().slice(0,10); }
 
+// بيانات الملف الشخصي للسحابة (وحدات ES تتصل بهذا بدل `let` من السكربت العادي)
+window.getLootlinguaProfilePayload = function() {
+  return {
+    userXP,
+    dailyStreak,
+    lastActivityDate: lastActivity,
+    activityMap:      loadJSON('activityMap', {}),
+    addedGameWords:   loadJSON('addedGameWords', []),
+  };
+};
+
+window.mergeLootlinguaProfileFromCloud = function(d) {
+  if (!d) return;
+  if (d.userXP !== undefined && d.userXP !== null) {
+    const cloud = Number(d.userXP) || 0;
+    if (cloud !== userXP) {
+      userXP = Math.max(cloud, userXP);
+      saveInt('userXP', userXP);
+    }
+  }
+  if (d.dailyStreak !== undefined) {
+    dailyStreak = d.dailyStreak;
+    saveInt('dailyStreak', dailyStreak);
+  }
+  if (d.lastActivityDate) {
+    lastActivity = d.lastActivityDate;
+    localStorage.setItem('lastActivityDate', lastActivity);
+  }
+  if (d.activityMap) {
+    const localMap = loadJSON('activityMap', {});
+    const merged   = { ...d.activityMap };
+    Object.entries(localMap).forEach(([k, v]) => { merged[k] = Math.max(merged[k] || 0, v); });
+    saveJSON('activityMap', merged);
+  }
+  if (d.addedGameWords && Array.isArray(d.addedGameWords)) {
+    const local  = loadJSON('addedGameWords', []);
+    const merged = [...new Set([...d.addedGameWords, ...local])];
+    saveJSON('addedGameWords', merged);
+  }
+  renderStreak();
+  renderDailyGoal();
+  renderXPBar();
+  if (typeof renderStatsNumbers === 'function' &&
+      document.getElementById('statsPanel')?.style.display !== 'none') {
+    renderStatsNumbers();
+    renderHeatmap();
+  }
+};
+
+function beginViewSwitch() {
+  document.body.classList.add('view-transitioning');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => document.body.classList.remove('view-transitioning'), 50);
+    });
+  });
+}
+
 // ═══════════════════════════════════════════════════════
 // SPAM PROTECTION
 // ═══════════════════════════════════════════════════════
@@ -948,6 +1006,7 @@ function restoreViewScroll(viewKey) {
 }
 
 window.loadGameDictionary = function(gameKey) {
+  beginViewSwitch();
   saveCurrentViewScroll();
   closeSidebarIfOpen();
   const game = gameData[gameKey];
@@ -1075,6 +1134,7 @@ window.searchGameWords = function() {
 };
 
 window.loadPersonalDictionary = function() {
+  beginViewSwitch();
   saveCurrentViewScroll();
   closeSidebarIfOpen();
   currentView = 'personal';
