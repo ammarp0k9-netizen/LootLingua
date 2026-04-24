@@ -429,13 +429,23 @@ window.loadProfileFromCloud = async function(user) {
     renderStreak();
     renderDailyGoal();
     renderXPBar();
+    // بعد تحميل البروفايل، حدّث الـ heatmap بالقيم الجديدة
+    if (typeof renderStatsNumbers === 'function' &&
+        document.getElementById('statsPanel')?.style.display !== 'none') {
+      renderStatsNumbers();
+      renderHeatmap();
+    }
   } catch(e) { console.warn("loadProfile:", e.message); }
 };
 
 // ── شوف إذا المستخدم مسجل دخول وحمّل الـ profile ──
 onAuthStateChanged(auth, (user) => {
   if (user && window.loadProfileFromCloud) {
-    setTimeout(() => window.loadProfileFromCloud(user), 800);
+    window.loadProfileFromCloud(user).then(() => {
+      window._profileLoaded = true;
+      // شغّل checkAndUpdateStreak بعد ما نحمّل البيانات من السحاب
+      if (window.checkAndUpdateStreak) window.checkAndUpdateStreak();
+    });
   }
 });
 </script>
