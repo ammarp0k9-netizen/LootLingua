@@ -31,6 +31,8 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+html { overflow-x: clip; }
+
 body {
   margin: 0;
   font-family: 'Segoe UI', Tahoma, sans-serif;
@@ -39,7 +41,7 @@ body {
   background-position: center;
   background-attachment: scroll;
   color: var(--text-white);
-  overflow-x: hidden;
+  overflow-x: clip;
   transition: background-image 0.5s ease-in-out;
 }
 
@@ -54,13 +56,25 @@ body {
   width: var(--sidebar-rail); height: 100vh;
   background: linear-gradient(180deg, #081022 0%, #070d1a 100%);
   box-shadow: -5px 0 24px rgba(0,0,0,0.55);
-  transition: width 0.3s cubic-bezier(0.4,0,0.2,1), box-shadow 0.3s ease;
-  padding: 18px 10px; z-index: 1000; overflow-y: auto;
+  transition: width 0.32s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.28s ease, right 0.32s cubic-bezier(0.25, 0.8, 0.25, 1);
+  padding: 18px 10px; z-index: 1000;
+  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   border-left: 1px solid rgba(148,163,184,0.16);
+  -webkit-overflow-scrolling: touch;
 }
+.sidebar::-webkit-scrollbar { width: 0; height: 0; }
+.sidebar { scrollbar-width: none; -ms-overflow-style: none; }
 .sidebar.open {
   width: var(--sidebar-open);
   box-shadow: -10px 0 34px rgba(0,0,0,0.72);
+}
+body.view-transitioning .sidebar,
+body.view-transitioning .main-content,
+body.view-transitioning .sidebar.open {
+  transition: none !important;
 }
 .sidebar-header h2 {
   color: var(--accent);
@@ -72,18 +86,28 @@ body {
 }
 .sidebar-header { cursor: pointer; }
 .side-label {
+  display: inline-block;
   opacity: 0;
+  visibility: hidden;
   max-width: 0;
   overflow: hidden;
   white-space: nowrap;
   pointer-events: none;
-  /* transition سلس بدون display:none/inline اللي بيسبب العجقة */
-  transition: opacity 0.22s ease, max-width 0.25s cubic-bezier(0.4,0,0.2,1);
+  flex: 0 0 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  transition: opacity 0.18s ease, visibility 0s linear 0.18s, max-width 0s linear 0.18s;
 }
 .sidebar.open .side-label {
+  flex: 0 1 auto;
   opacity: 1;
+  visibility: visible;
   max-width: 200px;
+  margin: initial;
+  padding: initial;
   pointer-events: auto;
+  transition: opacity 0.2s ease 0.04s, visibility 0s, max-width 0.22s cubic-bezier(0.25, 0.8, 0.25, 1) 0.04s;
 }
 
 .nav-link {
@@ -138,7 +162,7 @@ body {
   padding-right: calc(var(--sidebar-rail) + 24px);
   max-width: calc(620px + var(--sidebar-rail));
   margin: 0 auto;
-  transition: padding 0.3s cubic-bezier(0.4,0,0.2,1);
+  transition: padding 0.28s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* لما السايدبار مفتوح: زد الـ padding */
@@ -172,6 +196,23 @@ body {
   .sidebar-open .main-content {
     padding-right: 16px !important;
   }
+  .main-content { transition: none; }
+  .sidebar { transition: right 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.25s ease; }
+  .game-card, .word-card { animation: none; }
+  body.game-bg-active::before {
+    background-attachment: scroll !important;
+    filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  body.game-bg-active .game-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .streak-wrap.streak-hot { animation: none; }
+  .xp-fill::after { animation: none; display: none; }
+}
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .game-card, .streak-wrap, .nav-link, .sidebar, .word-card, .side-label { transition: none !important; }
 }
 
 .page-header h1 {
@@ -842,24 +883,32 @@ body.game-bg-active .page-header h1 {
 @media (min-width: 769px) {
   .sidebar:not(.open) .xp-panel {
     margin-top: 12px;
-    padding: 8px 6px;
+    padding: 10px 8px 8px;
     border-radius: 12px;
   }
   .sidebar:not(.open) .xp-top {
+    flex-direction: column;
     justify-content: center;
+    align-items: center;
+    gap: 3px;
     margin-bottom: 6px;
   }
   .sidebar:not(.open) .xp-rank,
-  .sidebar:not(.open) .xp-val,
   .sidebar:not(.open) .xp-bottom {
     display: none;
   }
-  .sidebar:not(.open) .xp-track {
-    height: 6px;
-    margin-top: 4px;
+  .sidebar:not(.open) .xp-val {
+    display: block;
+    text-align: center;
+    width: 100%;
+    font-size: 10px;
+    line-height: 1.2;
   }
   .sidebar:not(.open) .xp-icon {
     font-size: 18px;
+  }
+  .sidebar:not(.open) .xp-track {
+    height: 6px;
   }
 }
 
