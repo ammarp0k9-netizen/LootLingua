@@ -25,6 +25,8 @@
   --success:    #10b981;
   --star:       #f59e0b;
   --border:     #334155;
+  --sidebar-rail: 74px;
+  --sidebar-open: 276px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -49,7 +51,7 @@ body {
 /* ── Sidebar ──────────────────────────────── */
 .sidebar {
   position: fixed; top: 0; right: 0;
-  width: 74px; height: 100vh;
+  width: var(--sidebar-rail); height: 100vh;
   background: linear-gradient(180deg, #081022 0%, #070d1a 100%);
   box-shadow: -5px 0 24px rgba(0,0,0,0.55);
   transition: width 0.3s cubic-bezier(0.4,0,0.2,1), box-shadow 0.3s ease;
@@ -57,7 +59,7 @@ body {
   border-left: 1px solid rgba(148,163,184,0.16);
 }
 .sidebar.open {
-  width: 276px;
+  width: var(--sidebar-open);
   box-shadow: -10px 0 34px rgba(0,0,0,0.72);
 }
 .sidebar-header h2 {
@@ -75,7 +77,11 @@ body {
   white-space: nowrap;
   transition: opacity .2s ease, transform .2s ease;
 }
+.sidebar:not(.open) .side-label {
+  display: none;
+}
 .sidebar.open .side-label {
+  display: inline;
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
@@ -114,7 +120,7 @@ body {
 
 /* ── Hamburger ────────────────────────────── */
 .menu-btn {
-  position: fixed; top: 14px; right: 18px;
+  position: fixed; top: 12px; right: 12px;
   background: var(--card-bg); padding: 10px 14px;
   border-radius: 10px; cursor: pointer; z-index: 999;
   border: 1px solid var(--border); font-size: 18px; transition: background 0.2s;
@@ -126,16 +132,18 @@ body {
   padding: 80px 20px 40px;
   max-width: 620px;
   margin: 0 auto;
-  margin-right: 86px;
+  margin-right: calc(var(--sidebar-rail) + 12px);
   transition: margin-right .3s cubic-bezier(0.4,0,0.2,1);
 }
-body.sidebar-open .main-content { margin-right: 288px; }
+body.sidebar-open .main-content { margin-right: calc(var(--sidebar-rail) + 12px); }
 
 @media (max-width: 768px) {
-  .sidebar { width: 68px; }
-  .sidebar.open { width: 252px; }
-  .main-content { margin-right: 78px; }
-  body.sidebar-open .main-content { margin-right: 78px; }
+  :root {
+    --sidebar-rail: 68px;
+    --sidebar-open: 252px;
+  }
+  .main-content { margin-right: calc(var(--sidebar-rail) + 10px); }
+  body.sidebar-open .main-content { margin-right: calc(var(--sidebar-rail) + 10px); }
 }
 
 .page-header h1 {
