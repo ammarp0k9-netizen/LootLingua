@@ -47,7 +47,7 @@ function hideModal(id) { document.getElementById(id).style.display = 'none'; }
 function showToast(msg) {
   const t = document.getElementById('toastMessage');
   if (!t) return;
-  t.innerHTML = msg;
+  t.textContent = String(msg ?? '');
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
@@ -303,6 +303,19 @@ function wordExists(text) {
   return window.words.some(w=>normalizeWord(w.word)===k);
 }
 
+function escapeHtml(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeClassToken(v) {
+  return String(v ?? 'عام').replace(/[^\w\u0600-\u06FF-]/g, '_');
+}
+
 // ── Stats Panel ───────────────────────────────────────
 function openStatsPanel() {
   const p=document.getElementById('statsPanel'); if(!p)return;
@@ -528,15 +541,19 @@ window.fetchSuggestions = async function() {
       const safeAr  = (s.ar  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safeEx  = (s.ex  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safePos = (s.pos || 'عام').replace(/'/g,"\\'");
+      const arEsc   = escapeHtml(s.ar || '');
+      const posEsc  = escapeHtml(s.pos || 'عام');
+      const stars   = Math.max(1, Math.min(5, Number(s.stars) || 1));
+      const exEsc   = escapeHtml(s.ex || '');
       html += `
         <div class="sug-item ${i >= 4 ? 'extra-meaning' : ''}" ${i >= 4 ? 'style="display:none"' : ''}
              onclick="selectSuggestion('${safeAr}','${safePos}','${safeEx}')">
           <div class="sug-main">
-            <span class="sug-ar">${s.ar}</span>
-            <span class="sug-pos">${s.pos || 'عام'}</span>
+            <span class="sug-ar">${arEsc}</span>
+            <span class="sug-pos">${posEsc}</span>
           </div>
-          <div class="sug-stars">${'★'.repeat(s.stars||1)}${'☆'.repeat(5-(s.stars||1))}</div>
-          ${s.ex ? `<div class="sug-ex">"${s.ex}"</div>` : ''}
+          <div class="sug-stars">${'★'.repeat(stars)}${'☆'.repeat(5-stars)}</div>
+          ${s.ex ? `<div class="sug-ex">"${exEsc}"</div>` : ''}
         </div>`;
     });
     if (suggestions.length > 4) {
@@ -971,17 +988,18 @@ function renderGameWords(words) {
         const safeMeaning = w.meaning.replace(/'/g,"\\'");
         const safeExample = (w.example||'').replace(/'/g,"\\'");
         // highlight النص إذا فيه query
-        const dispText    = query ? hlGame(w.text, query)    : w.text;
-        const dispMeaning = query ? hlGame(w.meaning, query) : w.meaning;
+        const dispText    = query ? hlGame(w.text, query)    : escapeHtml(w.text);
+        const dispMeaning = query ? hlGame(w.meaning, query) : escapeHtml(w.meaning);
+        const exEsc = escapeHtml(w.example || '');
         return `
           <li class="game-card">
             <div class="game-info">
-              <img src="${w.img}" class="game-icon" alt="${w.text}"
+              <img src="${escapeHtml(w.img)}" class="game-icon" alt="${escapeHtml(w.text)}"
                    onerror="this.src='https://cdn-icons-png.flaticon.com/512/686/686589.png'">
               <div>
                 <div class="word-text">${dispText}</div>
                 <div class="meaning-text">${dispMeaning}</div>
-                ${w.example ? `<div class="game-example">"${w.example}"</div>` : ''}
+                ${w.example ? `<div class="game-example">"${exEsc}"</div>` : ''}
               </div>
             </div>
             <div class="game-card-actions">
@@ -1173,7 +1191,7 @@ function render() {
             <div>
               <div class="word-text">
                 ${highlightText(w.word, query)}
-                <span class="cat-tag tag-${w.category}">${w.category}</span>
+                <span class="cat-tag tag-${safeClassToken(w.category)}">${escapeHtml(w.category)}</span>
               </div>
               <div class="meaning-text">${highlightText(w.meaning, query)}</div>
             </div>
@@ -1283,13 +1301,17 @@ function showStreakMsg(streak) {
 
 function markRemember() {
   const w = currentQuizWords[quizIndex];
+  if (!w) return;
+  const prevForget = w.forgetCount || 0;
+  const nextForget = Math.max(prevForget - 1, 0);
   window.words = window.words.map(x =>
-    x.id === w.id ? { ...x, forgetCount: Math.max((x.forgetCount||0)-1, 0) } : x
+    x.id === w.id ? { ...x, forgetCount: nextForget } : x
   );
+  currentQuizWords[quizIndex] = { ...w, forgetCount: nextForget };
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
   currentStreak++;
   showStreakMsg(currentStreak);
-  const fc = w.forgetCount || 0;
+  const fc = prevForget;
   const xpGain = fc >= 3 ? 3 : fc >= 1 ? 2 : 1;
   updateXP(xpGain);
   showXPBadge(xpGain, null, false);
@@ -1300,13 +1322,17 @@ function markRemember() {
 function markForgot() {
   currentStreak = 0;
   const w = currentQuizWords[quizIndex];
+  if (!w) return;
+  const prevForget = w.forgetCount || 0;
+  const nextForget = prevForget + 1;
   window.words = window.words.map(x =>
-    x.id === w.id ? { ...x, forgetCount: (x.forgetCount||0)+1 } : x
+    x.id === w.id ? { ...x, forgetCount: nextForget } : x
   );
+  const updatedWord = { ...w, forgetCount: nextForget };
+  currentQuizWords[quizIndex] = updatedWord;
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
-  const fc2 = (w.forgetCount||0)+1;
-  const gap = Math.max(2, Math.min(5-fc2, 4));
-  currentQuizWords.splice(Math.min(quizIndex+gap, currentQuizWords.length), 0, {...w});
+  const gap = Math.max(2, Math.min(5-nextForget, 4));
+  currentQuizWords.splice(Math.min(quizIndex+gap, currentQuizWords.length), 0, {...updatedWord});
   quizIndex++;
   updateCard();
 }
