@@ -924,8 +924,21 @@ const gameData = {
 
 // ── متغير يحفظ الكلمات المفلترة الحالية للبحث ──
 let currentGameWords = [];
+const viewScrollY = { personal: 0, minecraft: 0, pubg: 0 };
+
+function saveCurrentViewScroll() {
+  viewScrollY[currentView] = window.scrollY || window.pageYOffset || 0;
+}
+
+function restoreViewScroll(viewKey) {
+  const targetY = viewScrollY[viewKey] || 0;
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: targetY, behavior: 'auto' });
+  });
+}
 
 window.loadGameDictionary = function(gameKey) {
+  saveCurrentViewScroll();
   toggleSidebar();
   const game = gameData[gameKey];
   if (!game) return;
@@ -958,6 +971,7 @@ window.loadGameDictionary = function(gameKey) {
   document.getElementById('totalCount').innerText = game.desc;
 
   renderGameWords(currentGameWords);
+  restoreViewScroll(gameKey);
 };
 
 function renderGameWords(words) {
@@ -1051,6 +1065,7 @@ window.searchGameWords = function() {
 };
 
 window.loadPersonalDictionary = function() {
+  saveCurrentViewScroll();
   toggleSidebar();
   currentView = 'personal';
 
@@ -1072,6 +1087,7 @@ window.loadPersonalDictionary = function() {
   document.querySelector('.page-header h1').innerHTML = '⚔️ قاموسك الشخصي';
   setActiveNavLink('personal');
   render();
+  restoreViewScroll('personal');
 };
 
 window.addFromGame = async function(text, meaning, example, btnEl) {
