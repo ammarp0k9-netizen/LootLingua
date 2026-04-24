@@ -1335,6 +1335,8 @@ function markRemember() {
   );
   currentQuizWords[quizIndex] = { ...w, forgetCount: nextForget };
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  // ← حفظ forgetCount في Firestore
+  if (window.updateWordInCloud) window.updateWordInCloud(w.id, { forgetCount: nextForget });
   currentStreak++;
   showStreakMsg(currentStreak);
   const fc = prevForget;
@@ -1357,6 +1359,8 @@ function markForgot() {
   const updatedWord = { ...w, forgetCount: nextForget };
   currentQuizWords[quizIndex] = updatedWord;
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  // ← حفظ forgetCount في Firestore
+  if (window.updateWordInCloud) window.updateWordInCloud(w.id, { forgetCount: nextForget });
   const gap = Math.max(2, Math.min(5-nextForget, 4));
   currentQuizWords.splice(Math.min(quizIndex+gap, currentQuizWords.length), 0, {...updatedWord});
   quizIndex++;
@@ -1390,9 +1394,16 @@ window.onload = function() {
     if (speechSynthesis.onvoiceschanged !== undefined)
       speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
-  // Gamification init — مهم: يُستدعى قبل render()
-  checkAndUpdateStreak();
+  // Gamification init
+  // checkAndUpdateStreak يشتغل هنا فقط لو مش مسجل دخول
+  // لو مسجل دخول، يشتغل بعد loadProfileFromCloud (في index.html)
   renderXPBar();
   renderDailyGoal();
+  renderStreak();
   render();
+  // استدعيها بعد تأخير 0 عشان تعطي Firebase فرصة
+  // لو المستخدم مش مسجل دخول، ستشتغل مباشرة
+  setTimeout(() => {
+    if (!window._profileLoaded) checkAndUpdateStreak();
+  }, 1200);
 };
