@@ -25,18 +25,18 @@
   <div class="sidebar-header"><h2>LootLingua 🎮</h2></div>
   <nav>
     <!-- data-view يستخدمه setActiveNavLink() -->
-    <a href="#" class="nav-link active" data-view="personal" onclick="loadPersonalDictionary()">
+    <a href="#" class="nav-link active" data-view="personal" onclick="loadPersonalDictionary(); return false;">
       <i class="fas fa-user-shield"></i> قاموسك الشخصي
     </a>
     <div class="sidebar-divider">موسوعة الأساطير</div>
-    <a href="#" class="nav-link" data-view="minecraft" onclick="loadGameDictionary('minecraft')">
+    <a href="#" class="nav-link" data-view="minecraft" onclick="loadGameDictionary('minecraft'); return false;">
       <i class="fas fa-cube"></i> Minecraft Dict
     </a>
-    <a href="#" class="nav-link" data-view="pubg" onclick="loadGameDictionary('pubg')">
+    <a href="#" class="nav-link" data-view="pubg" onclick="loadGameDictionary('pubg'); return false;">
       <i class="fas fa-crosshairs"></i> PUBG Terms
     </a>
     <div class="nav-thin-divider"></div>
-    <a href="#" class="nav-link" onclick="openStatsPanel();if(document.getElementById('sidebar').classList.contains('open'))toggleSidebar();">
+    <a href="#" class="nav-link" onclick="openStatsPanel();if(document.getElementById('sidebar').classList.contains('open'))toggleSidebar(); return false;">
       <i class="fas fa-chart-bar"></i> إحصائياتي
     </a>
     <div class="sidebar-divider">الحساب</div>
@@ -277,12 +277,12 @@
         example:     d.data().example     || '',
         category:    d.data().category    || 'عام',
         starred:     d.data().starred     || false,
-        forgetCount: d.data().forgetCount || 0
+        forgetCount: d.data().forgetCount || 0,
+        xpValue:     d.data().xpValue ?? 3,
+        createdAt:   d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null)
       }));
-      if (cloudWords.length > 0) {
-        window.words = cloudWords;
-        saveAndRender();
-      }
+      window.words = cloudWords;
+      saveAndRender();
     });
   }
 
@@ -293,6 +293,7 @@
       const ref = await addDoc(collection(db, "users", user.uid, "words"), {
         text: wordText, category: wordCategory,
         meaning, example, starred: false, forgetCount: 0,
+        xpValue: 3,
         createdAt: new Date()
       });
       return ref.id;
@@ -309,6 +310,7 @@
     if ('category'    in data) update.category    = data.category;
     if ('starred'     in data) update.starred     = data.starred;
     if ('forgetCount' in data) update.forgetCount = data.forgetCount;
+    if ('xpValue'     in data) update.xpValue     = data.xpValue;
     try { await updateDoc(doc(db, "users", user.uid, "words", docId), update); }
     catch (e) { console.error("خطأ في التحديث:", e); }
   };
