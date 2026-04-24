@@ -13,7 +13,7 @@
 <!-- Toast -->
 <div id="toastMessage" class="toast-msg"></div>
 <!-- XP Float Badge -->
-<div id="xpBadge" class="xp-badge">+3 XP ⚡</div>
+<div id="xpBadge" class="xp-badge">+3 XP</div>
 <!-- Confetti -->
 <div id="confettiContainer" class="confetti-container" style="display:none;"></div>
 
@@ -40,11 +40,11 @@
       <i class="fas fa-chart-bar"></i> إحصائياتي
     </a>
     <div class="sidebar-divider">الحساب</div>
-    <button id="loginBtn"  class="auth-btn" onclick="login()">تسجيل دخول بـ Google 🚀</button>
+    <button id="loginBtn"  class="auth-btn" onclick="login()"><i class="fa-brands fa-google" aria-hidden="true"></i> تسجيل دخول بـ Google</button>
     <button id="logoutBtn" class="auth-btn" onclick="showModal('logoutModal')">تسجيل الخروج</button>
     <div class="xp-panel">
       <div class="xp-top">
-        <span id="xpRankIcon" class="xp-icon">🐣</span>
+        <span id="xpRankIcon" class="xp-icon"><i class="fa-solid fa-seedling" aria-hidden="true"></i></span>
         <span id="xpRankLabel" class="xp-rank">Noob</span>
         <span id="xpValue" class="xp-val">0 XP</span>
       </div>
@@ -63,10 +63,10 @@
 <main class="main-content">
   <header class="page-header">
     <div class="header-top">
-      <h1 id="pageTitle">⚔️ قاموسك الشخصي</h1>
+      <h1 id="pageTitle"><i class="fa-solid fa-sword" aria-hidden="true"></i> قاموسك الشخصي</h1>
       <div class="header-widgets">
         <div id="streakWrap" class="streak-wrap" onclick="openStatsPanel()" title="إحصائياتك">
-          <span id="streakIcon" class="streak-icon">🔥</span>
+          <span id="streakIcon" class="streak-icon"><i class="fa-solid fa-fire" aria-hidden="true"></i></span>
           <span id="streakCount" class="streak-count">0 يوم</span>
         </div>
         <div class="goal-ring-wrap" onclick="openStatsPanel()" title="هدفك اليومي">
@@ -81,7 +81,7 @@
     </div>
     <div class="stats-bar">
       <span id="totalCount">إجمالي الكلمات: 0</span>
-      <span id="starredCount">⭐ الصعبة: 0</span>
+      <span id="starredCount">الصعبة: 0</span>
     </div>
   </header>
 
@@ -128,7 +128,7 @@
     <button class="btn-tool" onclick="openQuizSetup()"><i class="fas fa-gamepad"></i> كويز</button>
   </div>
 
-  <input type="text" id="searchInput" placeholder="🔎 ابحث في قاموسك..." oninput="render()" style="margin-bottom:8px;">
+  <input type="text" id="searchInput" placeholder="ابحث في قاموسك..." oninput="render()" style="margin-bottom:8px;">
   <select id="searchFilter" onchange="render()" style="margin-bottom:16px;">
     <option value="all">بحث في الكل</option>
     <option value="word">الكلمة فقط</option>
@@ -140,8 +140,8 @@
 
   <!-- تصدير / استيراد -->
   <div class="backup-zone">
-    <button class="btn-backup" onclick="exportData()">📥 تصدير JSON</button>
-    <button class="btn-backup" onclick="document.getElementById('importFile').click()">📤 استيراد JSON</button>
+    <button class="btn-backup" onclick="exportData()"><i class="fa-solid fa-file-export" aria-hidden="true"></i> تصدير JSON</button>
+    <button class="btn-backup" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-file-import" aria-hidden="true"></i> استيراد JSON</button>
     <input type="file" id="importFile" style="display:none;" onchange="importData(event)">
   </div>
 </main>
@@ -149,13 +149,13 @@
 <!-- ══ QUIZ SETUP ══ -->
 <div id="quizSetupOverlay" class="quiz-overlay">
   <div class="quiz-setup-box">
-    <h3>🧠 إعدادات الاختبار</h3>
+    <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> إعدادات الاختبار</h3>
     <p>حدد الكلمات اللي حاب تختبرها:</p>
-    <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')">🆕 كلمات جديدة (آخر 10)</button>
-    <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')">🗑️ تحدي النسيان (الأكثر خطأ)</button>
-    <button class="setup-btn btn-old"     onclick="startActualQuiz('old')">🕰️ مراجعة الذكريات (أقدم 10)</button>
-    <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')">⭐ الكلمات الصعبة</button>
-    <button class="setup-btn btn-all"     onclick="startActualQuiz('all')">🌍 كل الكلمات (عشوائي)</button>
+    <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> كلمات جديدة (آخر 10)</button>
+    <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')"><i class="fa-solid fa-trash" aria-hidden="true"></i> تحدي النسيان (الأكثر خطأ)</button>
+    <button class="setup-btn btn-old"     onclick="startActualQuiz('old')"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> مراجعة الذكريات (أقدم 10)</button>
+    <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')"><i class="fa-solid fa-star" aria-hidden="true"></i> الكلمات الصعبة</button>
+    <button class="setup-btn btn-all"     onclick="startActualQuiz('all')"><i class="fa-solid fa-globe" aria-hidden="true"></i> كل الكلمات (عشوائي)</button>
     <button class="btn-close-quiz" onclick="closeQuizSetup()">إلغاء</button>
   </div>
 </div>
@@ -174,7 +174,7 @@
           <i class="fas fa-volume-up"></i>
         </button>
         <div class="quiz-word" id="cardFrontText">الكلمة</div>
-        <button class="hint-btn" onclick="showHint(event)">اعرض المثال 💡</button>
+        <button class="hint-btn" onclick="showHint(event)">اعرض المثال <i class="fa-regular fa-lightbulb" aria-hidden="true"></i></button>
         <div class="hint-text" id="quizHintText"></div>
       </div>
       <div class="card-face card-back">
@@ -184,15 +184,15 @@
     </div>
   </div>
   <div class="quiz-controls">
-    <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها 🗑️</button>
-    <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها ✅</button>
+    <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها <i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+    <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها <i class="fa-solid fa-check" aria-hidden="true"></i></button>
   </div>
 </div>
 
 <!-- ══ MODAL: حذف ══ -->
 <div id="deleteModal" class="custom-modal">
   <div class="modal-content">
-    <div class="modal-icon">🗑️</div>
+    <div class="modal-icon"><i class="fa-solid fa-trash" aria-hidden="true"></i></div>
     <h2>حذف الكلمة؟</h2>
     <p>هذا الإجراء لا يمكن التراجع عنه</p>
     <div class="modal-buttons">
@@ -205,7 +205,7 @@
 <!-- ══ MODAL: خروج ══ -->
 <div id="logoutModal" class="custom-modal">
   <div class="modal-content">
-    <div class="modal-icon">❗</div>
+    <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
     <h2>متأكد أنك تريد تسجيل الخروج؟</h2>
     <p>لن تذهب الكلمات، لكن لن تستطيع تخزين كلماتك سحابياً</p>
     <div class="modal-buttons">
@@ -327,13 +327,13 @@
 <div id="statsPanel" class="stats-overlay" style="display:none;">
   <div class="stats-box">
     <div class="stats-header">
-      <h2>📈 إحصائياتي</h2>
+      <h2><i class="fa-solid fa-chart-line" aria-hidden="true"></i> إحصائياتي</h2>
       <button onclick="closeStatsPanel()" class="stats-close">✕</button>
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">كلمة مضافة</div></div>
       <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">Daily Streak</div></div>
-      <div class="stat-card"><div class="stat-val" id="statStarred">0</div><div class="stat-lbl">كلمة صعبة ⭐</div></div>
+      <div class="stat-card"><div class="stat-val" id="statStarred">0</div><div class="stat-lbl">كلمة صعبة</div></div>
       <div class="stat-card"><div class="stat-val" id="statForgot">0</div><div class="stat-lbl">تحتاج مراجعة 🔁</div></div>
       <div class="stat-card"><div class="stat-val" id="statDays">0 يوم</div><div class="stat-lbl">أيام نشاط</div></div>
       <div class="stat-card"><div class="stat-val" id="statBest">0 كلمات</div><div class="stat-lbl">أفضل يوم 🏅</div></div>
