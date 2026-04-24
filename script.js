@@ -27,8 +27,18 @@ function fe(name, size = 20) {
 // Sidebar
 // ═══════════════════════════════════════════════════════
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('overlay').classList.toggle('show');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('overlay');
+  if (!sidebar || !overlay) return;
+  sidebar.classList.toggle('open');
+  const isOpen = sidebar.classList.contains('open');
+  overlay.classList.toggle('show', isOpen);
+  document.body.classList.toggle('sidebar-open', isOpen);
+}
+
+function closeSidebarIfOpen() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar?.classList.contains('open')) toggleSidebar();
 }
 
 function setActiveNavLink(key) {
@@ -939,7 +949,7 @@ function restoreViewScroll(viewKey) {
 
 window.loadGameDictionary = function(gameKey) {
   saveCurrentViewScroll();
-  toggleSidebar();
+  closeSidebarIfOpen();
   const game = gameData[gameKey];
   if (!game) return;
 
@@ -1066,7 +1076,7 @@ window.searchGameWords = function() {
 
 window.loadPersonalDictionary = function() {
   saveCurrentViewScroll();
-  toggleSidebar();
+  closeSidebarIfOpen();
   currentView = 'personal';
 
   // إزالة خلفية اللعبة
