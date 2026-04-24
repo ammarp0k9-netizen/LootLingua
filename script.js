@@ -82,7 +82,7 @@ function rateLimit(key, limit, windowMs) {
     if (!state.blocked) {
       state.blocked = true;
       const secs = Math.ceil(windowMs / 1000);
-      showToast(`⛔ كثير أوي! انتظر ${secs} ث`);
+      showToast(`تم تجاوز الحد. انتظر ${secs} ث`);
       setTimeout(() => { state.blocked = false; }, windowMs);
     }
     _rateLimits[key] = state;
@@ -99,16 +99,16 @@ function rateLimit(key, limit, windowMs) {
 // XP & GAMIFICATION
 // ═══════════════════════════════════════════════════════
 const XP_RANKS = [
-  {min:0,   max:14,       label:'Noob',     icon:'🐣', color:'#94a3b8'},
-  {min:15,  max:39,       label:'Wanderer', icon:'🗺️', color:'#67e8f9'},
-  {min:40,  max:79,       label:'Learner',  icon:'📚', color:'#60a5fa'},
-  {min:80,  max:149,      label:'Explorer', icon:'🔭', color:'#818cf8'},
-  {min:150, max:249,      label:'Pro',      icon:'⚔️', color:'#34d399'},
-  {min:250, max:399,      label:'Veteran',  icon:'🛡️', color:'#4ade80'},
-  {min:400, max:599,      label:'Elite',    icon:'🔥', color:'#f59e0b'},
-  {min:600, max:899,      label:'Master',   icon:'🌟', color:'#fbbf24'},
-  {min:900, max:1299,     label:'Legend',   icon:'👑', color:'#a78bfa'},
-  {min:1300,max:Infinity, label:'Linguaer', icon:'🏆', color:'#f472b6'},
+  {min:0,   max:14,       label:'Noob',     iconClass:'fa-solid fa-seedling', color:'#94a3b8'},
+  {min:15,  max:39,       label:'Wanderer', iconClass:'fa-solid fa-compass', color:'#67e8f9'},
+  {min:40,  max:79,       label:'Learner',  iconClass:'fa-solid fa-book-open', color:'#60a5fa'},
+  {min:80,  max:149,      label:'Explorer', iconClass:'fa-solid fa-binoculars', color:'#818cf8'},
+  {min:150, max:249,      label:'Pro',      iconClass:'fa-solid fa-sword', color:'#34d399'},
+  {min:250, max:399,      label:'Veteran',  iconClass:'fa-solid fa-shield-halved', color:'#4ade80'},
+  {min:400, max:599,      label:'Elite',    iconClass:'fa-solid fa-fire', color:'#f59e0b'},
+  {min:600, max:899,      label:'Master',   iconClass:'fa-solid fa-star', color:'#fbbf24'},
+  {min:900, max:1299,     label:'Legend',   iconClass:'fa-solid fa-crown', color:'#a78bfa'},
+  {min:1300,max:Infinity, label:'Linguaer', iconClass:'fa-solid fa-trophy', color:'#f472b6'},
 ];
 
 // userXP already declared in State section above — just reload from localStorage
@@ -142,15 +142,15 @@ function renderXPBar() {
   el.fill.style.width      = pct+'%';
   el.fill.style.background = `linear-gradient(90deg,${rank.color}ee,${rank.color}55)`;
   if (el.lbl) { el.lbl.textContent=rank.label; el.lbl.style.color=rank.color; }
-  if (el.ico)   el.ico.textContent = rank.icon;
+  if (el.ico)   el.ico.innerHTML = `<i class="${rank.iconClass}" aria-hidden="true"></i>`;
   if (el.val)   el.val.textContent = userXP+' XP';
-  if (el.nxt)   el.nxt.textContent = next ? next.min+' XP' : 'MAX 🏆';
+  if (el.nxt)   el.nxt.innerHTML = next ? `${next.min} XP` : `MAX <i class="fa-solid fa-trophy" aria-hidden="true"></i>`;
 }
 
 function showXPBadge(amount, anchorId, isNeg) {
   const b = document.getElementById('xpBadge');
   if (!b) return;
-  b.textContent      = (isNeg?'-':'+')+amount+' XP'+(isNeg?'':' ⚡');
+  b.textContent      = (isNeg?'-':'+')+amount+' XP';
   b.style.background = isNeg ? '#ef4444' : '#f59e0b';
   b.style.color      = isNeg ? '#fff'    : '#0f172a';
   const a = anchorId ? document.getElementById(anchorId) : null;
@@ -166,7 +166,7 @@ function showXPBadge(amount, anchorId, isNeg) {
 
 function showRankUp(rank) {
   const t=document.getElementById('toastMessage'); if(!t)return;
-  t.textContent=rank.icon+' ترقية! أصبحت '+rank.label;
+  t.textContent='ترقية! أصبحت '+rank.label;
   t.style.background=rank.color; t.style.color='#0f172a'; t.classList.add('show');
   try {
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
@@ -201,7 +201,7 @@ function checkAndUpdateStreak() {
 
   if (lastActivity === yesterday) {
     dailyStreak++;
-    setTimeout(()=>showToast('🔥 Streak '+dailyStreak+' يوم!'), 1000);
+    setTimeout(()=>showToast('Streak '+dailyStreak+' يوم!'), 1000);
   } else if (lastActivity !== '') {
     // انكسر الـ streak
     dailyStreak = 1;
@@ -222,10 +222,10 @@ function renderStreak() {
   const wrap = document.getElementById('streakWrap');
   if (!el) return;
   el.textContent = dailyStreak+' يوم';
-  if (dailyStreak>=30)      { if(ico)ico.textContent='💙'; el.style.color='#60a5fa'; }
-  else if (dailyStreak>=14) { if(ico)ico.textContent='🔥'; el.style.color='#a78bfa'; }
-  else if (dailyStreak>=7)  { if(ico)ico.textContent='🔥'; el.style.color='#f59e0b'; }
-  else                      { if(ico)ico.textContent='🔥'; el.style.color='#94a3b8'; }
+  if (dailyStreak>=30)      { if(ico)ico.innerHTML='<i class="fa-solid fa-bolt"></i>'; el.style.color='#60a5fa'; }
+  else if (dailyStreak>=14) { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='#a78bfa'; }
+  else if (dailyStreak>=7)  { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='#f59e0b'; }
+  else                      { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='#94a3b8'; }
   if (wrap) wrap.className='streak-wrap'+(dailyStreak>=7?' streak-hot':'');
 }
 
@@ -281,7 +281,7 @@ function launchConfetti() {
   }
   container.style.display='block';
   const t=document.getElementById('toastMessage');
-  if(t){t.textContent='🎉 أكملت هدفك اليوم!';t.classList.add('show');}
+  if(t){t.textContent='أكملت هدفك اليوم!';t.classList.add('show');}
   setTimeout(()=>{container.style.display='none';container.innerHTML='';if(t)t.classList.remove('show');},3000);
 }
 
@@ -415,7 +415,7 @@ window.addWord = async function() {
     }
     const isCombo = checkCombo();
     const gained  = isCombo ? xpGain * 2 : xpGain;
-    if (isCombo) setTimeout(()=>showToast('⚡ COMBO! Double XP! +'+gained+' XP'),100);
+    if (isCombo) setTimeout(()=>showToast('COMBO! Double XP! +'+gained+' XP'),100);
     updateXP(gained);
     showXPBadge(gained, 'addBtn', false);
     checkAndUpdateStreak();
@@ -664,9 +664,9 @@ window.importData = async function(event) {
       if (window.saveWordToCloud) {
         for (const item of imported)
           await window.saveWordToCloud(item.word || item.text, item.category, item.meaning, item.example);
-        showToast("تم الاستيراد والرفع للسحابة ✅");
+        showToast("تم الاستيراد والرفع للسحابة");
       } else {
-        showToast("تم الاستيراد ✅");
+        showToast("تم الاستيراد");
       }
     } catch { alert("خطأ في الملف، تأكد إنه JSON صحيح."); }
   };
@@ -1084,7 +1084,7 @@ window.loadPersonalDictionary = function() {
   // إخفاء search bar الألعاب
   document.getElementById('gameSearchBar').style.display = 'none';
 
-  document.querySelector('.page-header h1').innerHTML = '⚔️ قاموسك الشخصي';
+  document.querySelector('.page-header h1').innerHTML = '<i class="fa-solid fa-sword" aria-hidden="true"></i> قاموسك الشخصي';
   setActiveNavLink('personal');
   render();
   restoreViewScroll('personal');
@@ -1094,7 +1094,7 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
   const xpGain = 3;
   // تحقق من التكرار
   if (wordExists(text)) {
-    showToast('هذه الكلمة موجودة بالفعل في قاموسك! 📖');
+    showToast('هذه الكلمة موجودة بالفعل في قاموسك');
     if (btnEl) { btnEl.textContent='✓'; btnEl.disabled=true; btnEl.classList.add('btn-already-added'); }
     return;
   }
@@ -1107,19 +1107,19 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
     const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example||'');
     if (realId) {
       window.words.unshift({id:realId,word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain});
-      showToast('تمت الإضافة لقاموسك! 💎');
+      showToast('تمت الإضافة لقاموسك');
       updateXP(xpGain); showXPBadge(xpGain,null,false);
       checkAndUpdateStreak(); incrementDailyCount();
       if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
     } else {
-      showToast('سجل دخول أولاً عشان تحفظ اللوت! ⚠️');
+      showToast('سجل دخول أولاً عشان تحفظ اللوت');
       if (btnEl) { btnEl.textContent='➕'; btnEl.disabled=false; }
     }
   } else {
     const nw={id:Date.now().toString(),word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain};
     window.words.unshift(nw);
     saveAndRender();
-    showToast('تمت الإضافة للقاموس المحلي! 💎');
+    showToast('تمت الإضافة للقاموس المحلي');
     updateXP(xpGain); showXPBadge(xpGain,null,false);
     checkAndUpdateStreak(); incrementDailyCount();
     if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
@@ -1173,7 +1173,7 @@ function render() {
   const countEl = document.getElementById('totalCount');
   const starEl  = document.getElementById('starredCount');
   if (countEl) countEl.innerText = `إجمالي الكلمات: ${window.words.length}`;
-  if (starEl)  starEl.innerText  = `⭐ الصعبة: ${window.words.filter(w => w.starred).length}`;
+  if (starEl)  starEl.innerText  = `الصعبة: ${window.words.filter(w => w.starred).length}`;
 
   const listEl = document.getElementById('list');
   if (!listEl) return;
@@ -1181,7 +1181,7 @@ function render() {
   if (filtered.length === 0) {
     listEl.innerHTML = `
       <li style="list-style:none;text-align:center;padding:40px 20px;color:var(--text-gray);">
-        <div style="font-size:32px;margin-bottom:10px;">📖</div>
+        <div style="font-size:32px;margin-bottom:10px;"><i class="fa-solid fa-book-open" aria-hidden="true"></i></div>
         ${query ? 'ما في نتائج للبحث' : 'قاموسك فاضي، ابدأ بإضافة كلمة!'}
       </li>`;
     return;
@@ -1311,7 +1311,7 @@ function closeQuiz() {
 }
 
 function showStreakMsg(streak) {
-  const msgs = { 3: "🔥 3 صح ورا بعض!", 5: "💪 5 صح! أسطورة!", 7: "🚀 7 ورا بعض!", 10: "👑 10! أنت الأفضل!" };
+  const msgs = { 3: "3 صح ورا بعض!", 5: "5 صح! أسطورة!", 7: "7 ورا بعض!", 10: "10! أنت الأفضل!" };
   if (msgs[streak]) showToast(msgs[streak]);
 }
 
