@@ -358,7 +358,7 @@
 <script type="module">
 // نستورد setDoc و getDoc بشكل منفصل عشان ما يكسر الـ module الأول
 import { initializeApp, getApps }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc }
+import { getFirestore, doc, setDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -368,74 +368,43 @@ const app  = getApps()[0];
 const db   = getFirestore(app);
 const auth = getAuth(app);
 
-// ── saveProfileToCloud ──────────────────────────────
-window.saveProfileToCloud = async function() {
+let _saveProfileDebounce = null;
+async function performProfileSave() {
   const user = auth.currentUser;
   if (!user) return;
-  const data = {
-    userXP,
-    dailyStreak,
-    lastActivityDate: lastActivity,
-    activityMap:      loadJSON('activityMap', {}),
-    addedGameWords:   loadJSON('addedGameWords', []),
-    updatedAt:        new Date()
-  };
+  const get = window.getLootlinguaProfilePayload;
+  if (typeof get !== "function") return;
+  const base = get();
+  const data = { ...base, updatedAt: new Date() };
   try {
     await setDoc(doc(db, "users", user.uid, "meta", "profile"), data, { merge: true });
-  } catch(e) { console.warn("saveProfile:", e.message); }
+  } catch (e) { console.warn("saveProfile:", e.message); }
+}
+
+// حفظ مؤجل — يتجنب استدعاءات كثيرة ويأخذ القيم من script.js
+window.saveProfileToCloud = function() {
+  clearTimeout(_saveProfileDebounce);
+  _saveProfileDebounce = setTimeout(performProfileSave, 450);
+};
+
+window._saveProfileToCloudNow = function() {
+  clearTimeout(_saveProfileDebounce);
+  return performProfileSave();
 };
 
 // ── loadProfileFromCloud ────────────────────────────
 window.loadProfileFromCloud = async function(user) {
   try {
+    for (let w = 0; w < 30 && typeof window.getLootlinguaProfilePayload !== "function"; w++)
+      await new Promise((r) => setTimeout(r, 40));
     const snap = await getDoc(doc(db, "users", user.uid, "meta", "profile"));
     if (!snap.exists()) return;
     const d = snap.data();
-
-    // XP — أخذ الأكبر بين السحاب والمحلي (لا نخسر progress)
-    if (d.userXP !== undefined && d.userXP > userXP) {
-      userXP = d.userXP;
-      saveInt('userXP', userXP);
-      renderXPBar();
-    }
-
-    // Streak — أخذ السحاب لأنه أموثوق
-    if (d.dailyStreak !== undefined) {
-      dailyStreak = d.dailyStreak;
-      saveInt('dailyStreak', dailyStreak);
-    }
-    if (d.lastActivityDate) {
-      lastActivity = d.lastActivityDate;
-      localStorage.setItem('lastActivityDate', lastActivity);
-    }
-
-    // ActivityMap — merge: لكل يوم خذ الأكبر
-    if (d.activityMap) {
-      const localMap = loadJSON('activityMap', {});
-      const merged   = { ...d.activityMap };
-      Object.entries(localMap).forEach(([k,v]) => {
-        merged[k] = Math.max(merged[k]||0, v);
-      });
-      saveJSON('activityMap', merged);
-    }
-
-    // AddedGameWords — union
-    if (d.addedGameWords) {
-      const local  = loadJSON('addedGameWords', []);
-      const merged = [...new Set([...d.addedGameWords, ...local])];
-      saveJSON('addedGameWords', merged);
-    }
-
-    renderStreak();
-    renderDailyGoal();
-    renderXPBar();
-    // بعد تحميل البروفايل، حدّث الـ heatmap بالقيم الجديدة
-    if (typeof renderStatsNumbers === 'function' &&
-        document.getElementById('statsPanel')?.style.display !== 'none') {
-      renderStatsNumbers();
-      renderHeatmap();
-    }
-  } catch(e) { console.warn("loadProfile:", e.message); }
+    if (typeof window.mergeLootlinguaProfileFromCloud === "function")
+      window.mergeLootlinguaProfileFromCloud(d);
+    if (window._saveProfileToCloudNow)
+      await window._saveProfileToCloudNow();
+  } catch (e) { console.warn("loadProfile:", e.message); }
 };
 
 // ── شوف إذا المستخدم مسجل دخول وحمّل الـ profile ──
@@ -443,7 +412,6 @@ onAuthStateChanged(auth, (user) => {
   if (user && window.loadProfileFromCloud) {
     window.loadProfileFromCloud(user).then(() => {
       window._profileLoaded = true;
-      // شغّل checkAndUpdateStreak بعد ما نحمّل البيانات من السحاب
       if (window.checkAndUpdateStreak) window.checkAndUpdateStreak();
     });
   }
