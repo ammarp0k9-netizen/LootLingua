@@ -145,14 +145,24 @@ body.view-transitioning .sidebar.open {
 .menu-btn {
   position: fixed; top: 12px; right: 12px;
   background: var(--card-bg); padding: 10px 14px;
-  border-radius: 10px; cursor: pointer; z-index: 1001; /* فوق السايدبار */
-  border: 1px solid var(--border); font-size: 18px; transition: background 0.2s, opacity 0.2s;
+  border-radius: 10px; cursor: pointer; z-index: 1001;
+  border: 1px solid var(--border); font-size: 18px;
+  transition: background 0.2s, opacity 0.22s ease, transform 0.22s ease;
 }
 .menu-btn:hover { background: #273449; }
 
-/* على كمبيوتر: اخفي الـ hamburger لأن السايدبار دايماً ظاهر */
+/* على كمبيوتر: اخفي الـ hamburger */
 @media (min-width: 769px) {
   .menu-btn { display: none; }
+}
+
+/* على موبايل: اخفي الـ hamburger لما يكون السايدبار مفتوح */
+@media (max-width: 768px) {
+  .sidebar-open .menu-btn {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+  }
 }
 
 /* ── Main ─────────────────────────────────── */
@@ -851,6 +861,11 @@ body.game-bg-active .page-header h1 {
 .nav-thin-divider {
   border-top: 1px solid rgba(255,255,255,0.06);
   margin: 6px 0 4px;
+}
+/* نفس قوة خط sidebar-divider لكن بدون نص */
+.nav-divider-strong {
+  border-top: 1px solid var(--border);
+  margin: 8px 0 6px;
 }
 
 /* ══════════════════════════════════════════
