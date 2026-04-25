@@ -430,7 +430,7 @@ ul { list-style: none; padding: 0; margin: 0; }
 /* Toast */
 .toast-msg {
   position: fixed; top: -80px; left: 50%; transform: translateX(-50%);
-  background: var(--star); color: #1a1a1a;
+  background: var(--danger); color: white;
   padding: 12px 24px; border-radius: 20px;
   font-weight: bold; font-size: 15px;
   transition: 0.4s cubic-bezier(0.68,-0.55,0.265,1.55);
