@@ -600,23 +600,31 @@ window.fetchSuggestions = async function() {
 
   try {
     const res = await fetch("https://dictionary7-ayes.onrender.com/api/dictionary", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", 
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ word })
     });
+
     if (!res.ok) throw new Error("server error");
-    const data = await res.json();
-    const raw  = data.choices[0].message.content;
-    const suggestions = JSON.parse(raw.substring(raw.indexOf('['), raw.lastIndexOf(']') + 1));
+
+    // السيرفر الجديد بيبعث المصفوفة فوراً، ما في داعي لـ data.choices[0]
+    const suggestions = await res.json(); 
 
     let html = '';
     suggestions.forEach((s, i) => {
+      // حماية النصوص من المشاكل
       const safeAr  = (s.ar  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safeEx  = (s.ex  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safePos = (s.pos || 'عام').replace(/'/g,"\\'");
+      
       const arEsc   = escapeHtml(s.ar || '');
       const posEsc  = escapeHtml(s.pos || 'عام');
-      const stars   = Math.max(1, Math.min(5, Number(s.stars) || 1));
       const exEsc   = escapeHtml(s.ex || '');
+
+      // النجوم (بناءً على طلبك 3 نجوم للشيوع)
+      const starsNum = Math.max(1, Math.min(3, Number(s.stars) || 1));
+      const starsHtml = '★'.repeat(starsNum) + '☆'.repeat(3 - starsNum);
+
       html += `
         <div class="sug-item ${i >= 4 ? 'extra-meaning' : ''}" ${i >= 4 ? 'style="display:none"' : ''}
              onclick="selectSuggestion('${safeAr}','${safePos}','${safeEx}')">
@@ -624,10 +632,11 @@ window.fetchSuggestions = async function() {
             <span class="sug-ar">${arEsc}</span>
             <span class="sug-pos">${posEsc}</span>
           </div>
-          <div class="sug-stars">${'★'.repeat(stars)}${'☆'.repeat(5-stars)}</div>
+          <div class="sug-stars" style="color: #f1c40f;">${starsHtml}</div>
           ${s.ex ? `<div class="sug-ex">"${exEsc}"</div>` : ''}
         </div>`;
     });
+
     if (suggestions.length > 4) {
       html += `<div class="sug-toggle" id="toggleMeaningsBtn"
                     onclick="const e=document.querySelectorAll('.extra-meaning'),h=e[0].style.display==='none';e.forEach(x=>x.style.display=h?'block':'none');this.innerHTML=h?'عرض أقل ▲':'عرض المزيد (${suggestions.length-4}) ▼'">
@@ -635,13 +644,13 @@ window.fetchSuggestions = async function() {
     }
     list.innerHTML = html;
 
-  } catch {
-    list.innerHTML = "<p style='color:var(--danger);text-align:center;font-size:12px;padding:10px;'>⚠️ تأكد إن السيرفر شغال</p>";
+  } catch (error) {
+    console.error("Frontend Error:", error); // عشان تشوف الخطأ الحقيقي بالكونسول
+    list.innerHTML = "<p style='color:var(--danger);text-align:center;font-size:12px;padding:10px;'>⚠️ فشل في جلب البيانات من السيرفر</p>";
   } finally {
     btn.innerHTML = "<i class='fas fa-search'></i>";
     btn.disabled  = false;
   }
-};
 
 function selectSuggestion(ar, pos, ex) {
   document.getElementById('meaningInput').value  = ar;
