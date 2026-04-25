@@ -338,6 +338,8 @@ select option { background: #1e293b; }
   cursor: pointer; font-size: 16px; transition: 0.2s;
 }
 .btn-icon-tip:hover { border-color: #475569; color: var(--text-white); }
+.btn-ai.btn-icon-tip { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-ai.btn-icon-tip:hover { background: #2563eb; border-color: #2563eb; }
 .btn-icon-tip::after {
   content: attr(data-tip);
   position: absolute; bottom: calc(100% + 8px); left: 50%;
@@ -367,7 +369,7 @@ select option { background: #1e293b; }
   transition: opacity 0.18s, transform 0.18s;
   z-index: 1050;
 }
-.sidebar:not(.open) .nav-link[data-tip]:hover::after {
+.nav-link[data-tip]:hover::after {
   opacity: 1; transform: translateY(-50%) scale(1);
 }
 .nav-link { position: relative; }
