@@ -654,6 +654,9 @@ function setFilter(f) {
   currentFilter = f;
   document.getElementById('toolAll').classList.toggle('active-tool',     f === 'all');
   document.getElementById('toolStarred').classList.toggle('active-tool', f === 'starred');
+  // مزامنة زر السايدبار
+  const navStar = document.getElementById('navStarred');
+  if (navStar) navStar.classList.toggle('active', f === 'starred');
   render();
 }
 
@@ -1138,6 +1141,16 @@ window.loadPersonalDictionary = function() {
   saveCurrentViewScroll();
   closeSidebarIfOpen();
   currentView = 'personal';
+  // لو كان فلتر الصعبة مفعّل — يرجع للكل
+  if (currentFilter !== 'all') {
+    currentFilter = 'all';
+    const toolAll = document.getElementById('toolAll');
+    const toolStar = document.getElementById('toolStarred');
+    if (toolAll)  toolAll.classList.add('active-tool');
+    if (toolStar) toolStar.classList.remove('active-tool');
+    const navStar = document.getElementById('navStarred');
+    if (navStar)  navStar.classList.remove('active');
+  }
 
   // إزالة خلفية اللعبة
   document.body.classList.remove('game-bg-active');
