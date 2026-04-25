@@ -656,7 +656,6 @@ function selectSuggestion(ar, pos, ex) {
 // ═══════════════════════════════════════════════════════
 function setFilter(f) {
   currentFilter = f;
-  document.getElementById('toolAll').classList.toggle('active-tool', f === 'all');
   render();
 }
 
@@ -1026,9 +1025,7 @@ window.loadGameDictionary = function(gameKey) {
 
   // إخفاء عناصر القاموس الشخصي — بما فيها مربع البحث الشخصي
   document.getElementById('personalControls').style.display = 'none';
-  document.querySelector('.toolbar').style.display          = 'none';
-  document.getElementById('searchInput').style.display      = 'none';
-  document.getElementById('searchFilter').style.display     = 'none';
+  document.querySelector('.search-bar-row').style.display   = 'none';
   document.querySelector('.backup-zone').style.display      = 'none';
   document.getElementById('starredCount').style.display     = 'none';
   document.getElementById('starredSearchBar').style.display = 'none';
@@ -1142,9 +1139,7 @@ window.searchGameWords = function() {
 // ── Hide all non-personal view elements ──
 function hideAllViewElements() {
   document.getElementById('personalControls').style.display = 'none';
-  document.querySelector('.toolbar').style.display          = 'none';
-  document.getElementById('searchInput').style.display      = 'none';
-  document.getElementById('searchFilter').style.display     = 'none';
+  document.querySelector('.search-bar-row').style.display   = 'none';
   document.querySelector('.backup-zone').style.display      = 'none';
   document.getElementById('starredCount').style.display     = 'none';
   document.getElementById('gameSearchBar').style.display    = 'none';
@@ -1277,8 +1272,6 @@ window.loadPersonalDictionary = function() {
   // لو كان فلتر الصعبة مفعّل — يرجع للكل
   if (currentFilter !== 'all') {
     currentFilter = 'all';
-    const toolAll = document.getElementById('toolAll');
-    if (toolAll)  toolAll.classList.add('active-tool');
   }
 
   // إزالة خلفية اللعبة
@@ -1287,9 +1280,7 @@ window.loadPersonalDictionary = function() {
 
   // إظهار كل عناصر القاموس الشخصي
   document.getElementById('personalControls').style.display = 'block';
-  document.querySelector('.toolbar').style.display          = '';
-  document.getElementById('searchInput').style.display      = '';
-  document.getElementById('searchFilter').style.display     = '';
+  document.querySelector('.search-bar-row').style.display   = '';
   document.querySelector('.backup-zone').style.display      = '';
   document.getElementById('starredCount').style.display     = '';
   document.getElementById('list').style.display             = '';
