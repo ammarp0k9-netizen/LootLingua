@@ -317,16 +317,60 @@ select option { background: #1e293b; }
   }
 }
 
-/* ── Toolbar ──────────────────────────────── */
-.toolbar { display: flex; gap: 8px; margin-bottom: 14px; }
-.btn-tool {
-  flex: 1; background: var(--card-bg); color: var(--text-gray);
-  border: 1px solid var(--border); padding: 10px;
-  border-radius: 10px; cursor: pointer; font-family: inherit;
-  font-size: 13px; transition: 0.2s; white-space: nowrap;
+/* ── Search Bar Row ──────────────────────── */
+.search-bar-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 16px;
 }
-.btn-tool:hover { border-color: #475569; color: var(--text-white); }
-.btn-tool.active-tool { background: var(--accent); color: white; border-color: var(--accent); }
+.search-bar-row input { flex: 1; min-width: 0; }
+.search-bar-row select { width: auto; min-width: 110px; padding: 10px 8px; font-size: 12px; }
+.search-bar-divider {
+  width: 1px; height: 28px; background: var(--border); flex-shrink: 0;
+}
+
+/* ── Icon Button with Tooltip ─────────────── */
+.btn-icon-tip {
+  position: relative;
+  background: var(--card-bg); color: var(--text-gray);
+  border: 1px solid var(--border); border-radius: 10px;
+  width: 42px; height: 42px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px; transition: 0.2s;
+}
+.btn-icon-tip:hover { border-color: #475569; color: var(--text-white); }
+.btn-icon-tip::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  background: var(--card-bg); color: var(--text-white);
+  border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; font-family: inherit; white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 50;
+}
+.btn-icon-tip:hover::after {
+  opacity: 1; transform: translateX(-50%) scale(1);
+}
+
+/* ── Sidebar Nav Tooltip (when collapsed) ─── */
+.nav-link[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 10px); top: 50%;
+  transform: translateY(-50%) scale(0.8);
+  background: var(--card-bg); color: var(--text-white);
+  border: 1px solid var(--border);
+  padding: 5px 12px; border-radius: 20px;
+  font-size: 11px; font-family: inherit; white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  z-index: 1050;
+}
+.sidebar:not(.open) .nav-link[data-tip]:hover::after {
+  opacity: 1; transform: translateY(-50%) scale(1);
+}
+.nav-link { position: relative; }
 
 /* ── Word List ────────────────────────────── */
 ul { list-style: none; padding: 0; margin: 0; }
@@ -457,10 +501,6 @@ ul { list-style: none; padding: 0; margin: 0; }
   transition: 0.2s; z-index: 10;
 }
 .quiz-exit-btn:hover { background: var(--danger); color: white; border-color: var(--danger); }
-
-.quiz-exit-inline {
-  position: static; width: 32px; height: 32px; font-size: 14px;
-}
 
 .quiz-view-setup {
   background: var(--card-bg); border: 1px solid var(--border);
