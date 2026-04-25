@@ -11,7 +11,7 @@ let quizIndex        = 0;
 let currentStreak    = 0;
 let pendingDeleteId  = null;
 let userXP           = parseInt(localStorage.getItem('userXP')) || 0;
-let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg'
+let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg' | 'starred' | 'quiz'
 
 // ── Fluent Emoji helper (Microsoft CDN) ──────────────────
 // https://github.com/microsoft/fluentui-emoji
@@ -502,6 +502,8 @@ window.editWord = function(id, event) {
   if (event) event.stopPropagation();
   const item = window.words.find(w => w.id === id);
   if (!item) return;
+  // Switch to personal dictionary view if not already there (inputs are there)
+  if (currentView !== 'personal') loadPersonalDictionary();
   document.getElementById('wordInput').value     = item.word;
   document.getElementById('meaningInput').value  = item.meaning;
   document.getElementById('exampleInput').value  = item.example || '';
@@ -541,6 +543,7 @@ window.deleteWord = function(id, event) {
     pendingDeleteId = null;
     document.querySelector('#deleteModal .xp-delete-warn')?.remove();
     saveAndRender();
+    if (currentView === 'starred') renderStarredWords();
   };
   const cBtn = document.getElementById('deleteCancelBtn');
   if (cBtn) cBtn.onclick = () => { hideModal('deleteModal'); document.querySelector('#deleteModal .xp-delete-warn')?.remove(); };
@@ -557,6 +560,7 @@ window.toggleStar = function(id, event) {
   word.starred = !word.starred;
   if (window.updateWordInCloud) window.updateWordInCloud(id, { starred: word.starred });
   saveAndRender();
+  if (currentView === 'starred') renderStarredWords();
 };
 
 // ═══════════════════════════════════════════════════════
@@ -652,11 +656,7 @@ function selectSuggestion(ar, pos, ex) {
 // ═══════════════════════════════════════════════════════
 function setFilter(f) {
   currentFilter = f;
-  document.getElementById('toolAll').classList.toggle('active-tool',     f === 'all');
-  document.getElementById('toolStarred').classList.toggle('active-tool', f === 'starred');
-  // مزامنة زر السايدبار
-  const navStar = document.getElementById('navStarred');
-  if (navStar) navStar.classList.toggle('active', f === 'starred');
+  document.getElementById('toolAll').classList.toggle('active-tool', f === 'all');
   render();
 }
 
@@ -995,7 +995,7 @@ const gameData = {
 
 // ── متغير يحفظ الكلمات المفلترة الحالية للبحث ──
 let currentGameWords = [];
-const viewScrollY = { personal: 0, minecraft: 0, pubg: 0 };
+const viewScrollY = { personal: 0, minecraft: 0, pubg: 0, starred: 0, quiz: 0 };
 
 function saveCurrentViewScroll() {
   viewScrollY[currentView] = window.scrollY || window.pageYOffset || 0;
@@ -1031,6 +1031,9 @@ window.loadGameDictionary = function(gameKey) {
   document.getElementById('searchFilter').style.display     = 'none';
   document.querySelector('.backup-zone').style.display      = 'none';
   document.getElementById('starredCount').style.display     = 'none';
+  document.getElementById('starredSearchBar').style.display = 'none';
+  document.getElementById('quizView').style.display         = 'none';
+  document.getElementById('list').style.display             = '';
 
   // إظهار search bar الألعاب وتفريغه
   const gameSearch = document.getElementById('gameSearchBar');
@@ -1136,6 +1139,136 @@ window.searchGameWords = function() {
   renderGameWords(currentGameWords);
 };
 
+// ── Hide all non-personal view elements ──
+function hideAllViewElements() {
+  document.getElementById('personalControls').style.display = 'none';
+  document.querySelector('.toolbar').style.display          = 'none';
+  document.getElementById('searchInput').style.display      = 'none';
+  document.getElementById('searchFilter').style.display     = 'none';
+  document.querySelector('.backup-zone').style.display      = 'none';
+  document.getElementById('starredCount').style.display     = 'none';
+  document.getElementById('gameSearchBar').style.display    = 'none';
+  document.getElementById('starredSearchBar').style.display = 'none';
+  document.getElementById('quizView').style.display         = 'none';
+  document.getElementById('list').style.display             = 'none';
+}
+
+// ── Starred Words View ──
+window.loadStarredView = function() {
+  beginViewSwitch();
+  saveCurrentViewScroll();
+  closeSidebarIfOpen();
+  currentView = 'starred';
+
+  setActiveNavLink('starred');
+
+  // Remove game background
+  document.body.classList.remove('game-bg-active');
+  document.body.removeAttribute('data-game');
+
+  // Hide personal controls, show only starred-relevant elements
+  hideAllViewElements();
+  document.getElementById('starredSearchBar').style.display = 'block';
+  document.getElementById('starredSearchInput').value = '';
+  document.getElementById('list').style.display = '';
+
+  // Update header
+  document.querySelector('.page-header h1').innerHTML = '<i class="fas fa-star" aria-hidden="true"></i> الكلمات الصعبة';
+  const starredWords = window.words.filter(w => w.starred);
+  document.getElementById('totalCount').innerText = `${starredWords.length} كلمة صعبة`;
+
+  renderStarredWords();
+  restoreViewScroll('starred');
+};
+
+function renderStarredWords() {
+  const query = (document.getElementById('starredSearchInput')?.value || '').toLowerCase().trim();
+  let starred = window.words.filter(w => w.starred);
+
+  if (query) {
+    starred = starred.filter(w =>
+      w.word.toLowerCase().includes(query) ||
+      (w.meaning || '').toLowerCase().includes(query)
+    );
+    starred.sort((a, b) => {
+      const aStarts = a.word.toLowerCase().startsWith(query);
+      const bStarts = b.word.toLowerCase().startsWith(query);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return a.word.localeCompare(b.word);
+    });
+  }
+
+  const listEl = document.getElementById('list');
+  if (!listEl) return;
+
+  if (starred.length === 0) {
+    listEl.innerHTML = `
+      <li style="list-style:none;text-align:center;padding:40px 20px;color:var(--text-gray);">
+        <div style="font-size:32px;margin-bottom:10px;"><i class="fas fa-star" aria-hidden="true"></i></div>
+        ${query ? 'ما في نتائج للبحث' : 'ما عندك كلمات صعبة بعد!'}
+      </li>`;
+    return;
+  }
+
+  listEl.innerHTML = starred.map(w => {
+    const safeId = w.id.replace(/'/g, "\\'");
+    const dispWord   = query ? highlightText(w.word, query) : escapeHtml(w.word);
+    const dispMeaning = query ? highlightText(w.meaning, query) : escapeHtml(w.meaning);
+    return `
+      <li class="word-card" onclick="this.classList.toggle('show-example')">
+        <div class="word-body" style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
+            <button class="star-btn active" onclick="toggleStar('${safeId}',event)">
+              <i class="fas fa-star"></i>
+            </button>
+            <div>
+              <div class="word-text">
+                ${dispWord}
+                <span class="cat-tag tag-${safeClassToken(w.category)}">${escapeHtml(w.category)}</span>
+              </div>
+              <div class="meaning-text">${dispMeaning}</div>
+            </div>
+          </div>
+          ${w.example ? `<div class="example-box"><b>Ex:</b> ${highlightText(w.example, query)}</div>` : ''}
+        </div>
+        <div class="actions">
+          <button class="icon-circle sound-btn" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
+          <button class="icon-circle edit-btn"  onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
+          <button class="icon-circle del-btn"   onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
+        </div>
+      </li>`;
+  }).join('');
+}
+
+// ── Quiz Full-Page View ──
+window.loadQuizView = function() {
+  beginViewSwitch();
+  saveCurrentViewScroll();
+  closeSidebarIfOpen();
+  currentView = 'quiz';
+
+  setActiveNavLink('quiz');
+
+  // Remove game background
+  document.body.classList.remove('game-bg-active');
+  document.body.removeAttribute('data-game');
+
+  // Hide personal controls, show only quiz view
+  hideAllViewElements();
+  document.getElementById('quizView').style.display = 'block';
+  document.getElementById('quizViewSetup').style.display = 'block';
+  document.getElementById('quizViewCard').style.display = 'none';
+
+  // Update header
+  document.querySelector('.page-header h1').innerHTML = '<i class="fas fa-gamepad" aria-hidden="true"></i> الاختبار';
+  document.getElementById('totalCount').innerText = window.words.length > 0
+    ? `${window.words.length} كلمة متاحة`
+    : 'القاموس فاضي!';
+
+  restoreViewScroll('quiz');
+};
+
 window.loadPersonalDictionary = function() {
   beginViewSwitch();
   saveCurrentViewScroll();
@@ -1145,11 +1278,7 @@ window.loadPersonalDictionary = function() {
   if (currentFilter !== 'all') {
     currentFilter = 'all';
     const toolAll = document.getElementById('toolAll');
-    const toolStar = document.getElementById('toolStarred');
     if (toolAll)  toolAll.classList.add('active-tool');
-    if (toolStar) toolStar.classList.remove('active-tool');
-    const navStar = document.getElementById('navStarred');
-    if (navStar)  navStar.classList.remove('active');
   }
 
   // إزالة خلفية اللعبة
@@ -1163,9 +1292,12 @@ window.loadPersonalDictionary = function() {
   document.getElementById('searchFilter').style.display     = '';
   document.querySelector('.backup-zone').style.display      = '';
   document.getElementById('starredCount').style.display     = '';
+  document.getElementById('list').style.display             = '';
 
-  // إخفاء search bar الألعاب
-  document.getElementById('gameSearchBar').style.display = 'none';
+  // إخفاء search bar الألعاب والكلمات الصعبة والكويز
+  document.getElementById('gameSearchBar').style.display    = 'none';
+  document.getElementById('starredSearchBar').style.display = 'none';
+  document.getElementById('quizView').style.display         = 'none';
 
   document.querySelector('.page-header h1').innerHTML = '<i class="fa-solid fa-sword" aria-hidden="true"></i> قاموسك الشخصي';
   setActiveNavLink('personal');
@@ -1314,19 +1446,16 @@ function render() {
 // ═══════════════════════════════════════════════════════
 function openQuizSetup() {
   if (!window.words.length) { alert("القاموس فاضي!"); return; }
-  const el = document.getElementById('quizSetupOverlay');
-  el.style.display = 'flex';
-  setTimeout(() => el.classList.add('show'), 10);
+  loadQuizView();
 }
 
 function closeQuizSetup() {
-  const el = document.getElementById('quizSetupOverlay');
-  el.classList.remove('show');
-  setTimeout(() => el.style.display = 'none', 300);
+  // Return to quiz view setup screen
+  document.getElementById('quizViewSetup').style.display = 'block';
+  document.getElementById('quizViewCard').style.display = 'none';
 }
 
 function startActualQuiz(mode) {
-  closeQuizSetup();
   let words = [...window.words];
 
   if (mode === 'recent') {
@@ -1352,9 +1481,9 @@ function startActualQuiz(mode) {
   quizIndex = 0;
   currentStreak = 0;
 
-  const el = document.getElementById('quizOverlay');
-  el.style.display = 'flex';
-  setTimeout(() => el.classList.add('show'), 10);
+  // Show quiz card, hide setup
+  document.getElementById('quizViewSetup').style.display = 'none';
+  document.getElementById('quizViewCard').style.display = 'block';
   updateCard();
 }
 
@@ -1388,9 +1517,9 @@ function flipCard()      { document.getElementById('mainCard').classList.toggle(
 function showHint(event) { event.stopPropagation(); document.getElementById('quizHintText').classList.add('show'); }
 
 function closeQuiz() {
-  const el = document.getElementById('quizOverlay');
-  el.classList.remove('show');
-  setTimeout(() => el.style.display = 'none', 300);
+  // Return to quiz setup screen
+  document.getElementById('quizViewSetup').style.display = 'block';
+  document.getElementById('quizViewCard').style.display = 'none';
 }
 
 function showStreakMsg(streak) {
