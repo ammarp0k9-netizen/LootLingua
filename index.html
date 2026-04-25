@@ -18,15 +18,20 @@
 <div id="confettiContainer" class="confetti-container" style="display:none;"></div>
 
 <!-- ── Hamburger ── -->
-<div class="menu-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
+<div class="menu-btn" id="menuBtn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
 
 <!-- ── Sidebar ── -->
 <div id="sidebar" class="sidebar">
   <div class="sidebar-header" onclick="toggleSidebar()" title="فتح/إغلاق القائمة"><h2><i class="fa-solid fa-book-open"></i> <span class="side-label">LootLingua</span></h2></div>
   <nav>
-    <!-- data-view يستخدمه setActiveNavLink() -->
+    <!-- قاموسك الشخصي -->
     <a href="#" class="nav-link active" data-view="personal" onclick="loadPersonalDictionary(); return false;">
       <i class="fas fa-user-shield"></i> <span class="side-label">قاموسك الشخصي</span>
+    </a>
+    <!-- الكلمات الصعبة — تحت قاموسك الشخصي -->
+    <div class="nav-thin-divider nav-divider-strong"></div>
+    <a href="#" class="nav-link" id="navStarred" onclick="setFilter('starred'); closeSidebarIfOpen(); return false;">
+      <i class="fas fa-star"></i> <span class="side-label">الكلمات الصعبة</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">موسوعة الأساطير</span></div>
     <a href="#" class="nav-link" data-view="minecraft" onclick="loadGameDictionary('minecraft'); return false;">
@@ -35,9 +40,13 @@
     <a href="#" class="nav-link" data-view="pubg" onclick="loadGameDictionary('pubg'); return false;">
       <i class="fas fa-crosshairs"></i> <span class="side-label">PUBG Terms</span>
     </a>
-    <div class="nav-thin-divider"></div>
-    <a href="#" class="nav-link" onclick="openStatsPanel();if(document.getElementById('sidebar').classList.contains('open'))toggleSidebar(); return false;">
+    <!-- إحصائيات + كويز — بعد قواميس الألعاب بنفس فاصل sidebar-divider -->
+    <div class="sidebar-divider"><span class="side-label">الأدوات</span></div>
+    <a href="#" class="nav-link" onclick="openStatsPanel(); closeSidebarIfOpen(); return false;">
       <i class="fas fa-chart-bar"></i> <span class="side-label">إحصائياتي</span>
+    </a>
+    <a href="#" class="nav-link" id="navQuiz" onclick="openQuizSetup(); closeSidebarIfOpen(); return false;">
+      <i class="fas fa-gamepad"></i> <span class="side-label">الاختبار</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">الحساب</span></div>
     <button id="loginBtn"  class="auth-btn" onclick="login()"><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="side-label">تسجيل دخول بـ Google</span></button>
