@@ -25,27 +25,27 @@
   <div class="sidebar-header" onclick="toggleSidebar()" title="فتح/إغلاق القائمة"><h2><i class="fa-solid fa-book-open"></i> <span class="side-label">LootLingua</span></h2></div>
   <nav>
     <!-- قاموسك الشخصي -->
-    <a href="#" class="nav-link active" data-view="personal" onclick="loadPersonalDictionary(); return false;">
+    <a href="#" class="nav-link active" data-view="personal" data-tip="قاموسك الشخصي" onclick="loadPersonalDictionary(); return false;">
       <i class="fas fa-user-shield"></i> <span class="side-label">قاموسك الشخصي</span>
     </a>
     <!-- الكلمات الصعبة — تحت قاموسك الشخصي -->
     <div class="nav-thin-divider nav-divider-strong"></div>
-    <a href="#" class="nav-link" id="navStarred" data-view="starred" onclick="loadStarredView(); return false;">
+    <a href="#" class="nav-link" id="navStarred" data-view="starred" data-tip="الكلمات الصعبة" onclick="loadStarredView(); return false;">
       <i class="fas fa-star"></i> <span class="side-label">الكلمات الصعبة</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">موسوعة الأساطير</span></div>
-    <a href="#" class="nav-link" data-view="minecraft" onclick="loadGameDictionary('minecraft'); return false;">
+    <a href="#" class="nav-link" data-view="minecraft" data-tip="Minecraft Dict" onclick="loadGameDictionary('minecraft'); return false;">
       <i class="fas fa-cube"></i> <span class="side-label">Minecraft Dict</span>
     </a>
-    <a href="#" class="nav-link" data-view="pubg" onclick="loadGameDictionary('pubg'); return false;">
+    <a href="#" class="nav-link" data-view="pubg" data-tip="PUBG Terms" onclick="loadGameDictionary('pubg'); return false;">
       <i class="fas fa-crosshairs"></i> <span class="side-label">PUBG Terms</span>
     </a>
     <!-- إحصائيات + كويز — بعد قواميس الألعاب بنفس فاصل sidebar-divider -->
     <div class="sidebar-divider"><span class="side-label">الأدوات</span></div>
-    <a href="#" class="nav-link" onclick="openStatsPanel(); closeSidebarIfOpen(); return false;">
+    <a href="#" class="nav-link" data-tip="إحصائياتي" onclick="openStatsPanel(); closeSidebarIfOpen(); return false;">
       <i class="fas fa-chart-bar"></i> <span class="side-label">إحصائياتي</span>
     </a>
-    <a href="#" class="nav-link" id="navQuiz" data-view="quiz" onclick="loadQuizView(); return false;">
+    <a href="#" class="nav-link" id="navQuiz" data-view="quiz" data-tip="الاختبار" onclick="loadQuizView(); return false;">
       <i class="fas fa-gamepad"></i> <span class="side-label">الاختبار</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">الحساب</span></div>
@@ -97,7 +97,7 @@
   <!-- بطاقة الإضافة (تُخفى عند قواميس الألعاب) -->
   <div class="card-box" id="personalControls">
     <div style="display:flex; gap:8px; margin-bottom:10px;">
-      <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai"><i class="fas fa-search"></i></button>
+      <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai btn-icon-tip" data-tip="بحث ذكي"><i class="fas fa-search"></i></button>
       <input type="text" id="wordInput" placeholder="الكلمة بالإنجليزي (مثال: Sword)" dir="ltr">
     </div>
     <div id="suggestionsBox">
@@ -140,25 +140,24 @@
     </div>
   </div>
 
-  <!-- شريط الأدوات -->
-  <div class="toolbar">
-    <button id="toolAll"     class="btn-tool active-tool" onclick="setFilter('all')">الكل</button>
-    <button id="reorderBtn"  class="btn-tool" onclick="toggleReorderMode()"><i class="fas fa-sort-amount-down"></i></button>
+  <!-- شريط البحث والترتيب -->
+  <div class="search-bar-row">
+    <input type="text" id="searchInput" placeholder="ابحث في قاموسك..." oninput="render()">
+    <select id="searchFilter" onchange="render()">
+      <option value="all">بحث في الكل</option>
+      <option value="word">الكلمة فقط</option>
+      <option value="meaning">المعنى فقط</option>
+      <option value="example">الجملة فقط</option>
+    </select>
+    <div class="search-bar-divider"></div>
+    <button id="reorderBtn" class="btn-icon-tip" onclick="toggleReorderMode()" data-tip="ترتيب"><i class="fas fa-sort-amount-down"></i></button>
   </div>
-
-  <input type="text" id="searchInput" placeholder="ابحث في قاموسك..." oninput="render()" style="margin-bottom:8px;">
-  <select id="searchFilter" onchange="render()" style="margin-bottom:16px;">
-    <option value="all">بحث في الكل</option>
-    <option value="word">الكلمة فقط</option>
-    <option value="meaning">المعنى فقط</option>
-    <option value="example">الجملة فقط</option>
-  </select>
 
   <ul id="list"></ul>
 
   <!-- ══ QUIZ FULL-PAGE VIEW (مخفي افتراضياً) ══ -->
   <div id="quizView" class="quiz-view" style="display:none;">
-    <button class="quiz-exit-btn" onclick="loadPersonalDictionary()"><i class="fas fa-arrow-right"></i></button>
+    <button class="quiz-exit-btn btn-icon-tip" data-tip="خروج" onclick="loadPersonalDictionary()"><i class="fas fa-arrow-right"></i></button>
     <!-- Quiz Setup -->
     <div id="quizViewSetup" class="quiz-view-setup">
       <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> إعدادات الاختبار</h3>
@@ -173,13 +172,12 @@
     <div id="quizViewCard" style="display:none;">
       <div class="quiz-card-meta">
         <span id="quizCardCounter">1 / 10</span>
-        <button class="quiz-exit-btn quiz-exit-inline" onclick="loadPersonalDictionary()"><i class="fas fa-times"></i></button>
       </div>
       <div class="quiz-card-bar"><div id="quizCardProgress"></div></div>
       <div class="card-container">
         <div class="card" id="mainCard" onclick="flipCard()">
           <div class="card-face card-front">
-            <button class="quiz-sound-btn" onclick="playQuizSound(event)">
+            <button class="quiz-sound-btn btn-icon-tip" data-tip="نطق" onclick="playQuizSound(event)">
               <i class="fas fa-volume-up"></i>
             </button>
             <div class="quiz-word" id="cardFrontText">الكلمة</div>
