@@ -1214,7 +1214,7 @@ function renderStarredWords() {
       <li class="word-card" onclick="this.classList.toggle('show-example')">
         <div class="word-body" style="flex:1;min-width:0;">
           <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
-            <button class="star-btn active" onclick="toggleStar('${safeId}',event)">
+            <button class="star-btn active" data-tip="صعبة" onclick="toggleStar('${safeId}',event)">
               <i class="fas fa-star"></i>
             </button>
             <div>
@@ -1228,9 +1228,9 @@ function renderStarredWords() {
           ${w.example ? `<div class="example-box"><b>Ex:</b> ${highlightText(w.example, query)}</div>` : ''}
         </div>
         <div class="actions">
-          <button class="icon-circle sound-btn" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
-          <button class="icon-circle edit-btn"  onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
-          <button class="icon-circle del-btn"   onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
+          <button class="icon-circle sound-btn" data-tip="نطق" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
+          <button class="icon-circle edit-btn"  data-tip="تعديل" onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
+          <button class="icon-circle del-btn"   data-tip="حذف" onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
         </div>
       </li>`;
   }).join('');
@@ -1406,7 +1406,7 @@ function render() {
       <li ${drag} class="${cls}" onclick="handleLiClick(${ri}, this)">
         <div class="word-body" style="flex:1;min-width:0;">
           <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
-            <button class="star-btn ${w.starred ? 'active' : ''}"
+            <button class="star-btn ${w.starred ? 'active' : ''}" data-tip="صعبة"
                     onclick="toggleStar('${safeId}',event)">
               <i class="fas fa-star"></i>
             </button>
@@ -1423,9 +1423,9 @@ function render() {
         ${isReorderMode
           ? '<span style="font-size:20px;color:#475569;padding:0 8px;flex-shrink:0;">☰</span>'
           : `<div class="actions">
-               <button class="icon-circle sound-btn" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
-               <button class="icon-circle edit-btn"  onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
-               <button class="icon-circle del-btn"   onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
+               <button class="icon-circle sound-btn" data-tip="نطق" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
+               <button class="icon-circle edit-btn"  data-tip="تعديل" onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
+               <button class="icon-circle del-btn"   data-tip="حذف" onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
              </div>`
         }
       </li>`;
