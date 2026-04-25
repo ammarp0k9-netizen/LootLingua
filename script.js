@@ -651,6 +651,7 @@ window.fetchSuggestions = async function() {
     btn.innerHTML = "<i class='fas fa-search'></i>";
     btn.disabled  = false;
   }
+}
 
 function selectSuggestion(ar, pos, ex) {
   document.getElementById('meaningInput').value  = ar;
