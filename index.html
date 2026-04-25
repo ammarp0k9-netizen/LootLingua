@@ -30,7 +30,7 @@
     </a>
     <!-- الكلمات الصعبة — تحت قاموسك الشخصي -->
     <div class="nav-thin-divider nav-divider-strong"></div>
-    <a href="#" class="nav-link" id="navStarred" onclick="setFilter('starred'); closeSidebarIfOpen(); return false;">
+    <a href="#" class="nav-link" id="navStarred" data-view="starred" onclick="loadStarredView(); return false;">
       <i class="fas fa-star"></i> <span class="side-label">الكلمات الصعبة</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">موسوعة الأساطير</span></div>
@@ -45,7 +45,7 @@
     <a href="#" class="nav-link" onclick="openStatsPanel(); closeSidebarIfOpen(); return false;">
       <i class="fas fa-chart-bar"></i> <span class="side-label">إحصائياتي</span>
     </a>
-    <a href="#" class="nav-link" id="navQuiz" onclick="openQuizSetup(); closeSidebarIfOpen(); return false;">
+    <a href="#" class="nav-link" id="navQuiz" data-view="quiz" onclick="loadQuizView(); return false;">
       <i class="fas fa-gamepad"></i> <span class="side-label">الاختبار</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">الحساب</span></div>
@@ -129,12 +129,21 @@
     </div>
   </div>
 
+  <!-- ── مربع بحث الكلمات الصعبة (مخفي افتراضياً) ── -->
+  <div id="starredSearchBar" class="game-search-bar" style="display:none;">
+    <div class="game-search-inner">
+      <i class="fas fa-search game-search-icon"></i>
+      <input type="text" id="starredSearchInput"
+             placeholder="ابحث في الكلمات الصعبة..."
+             oninput="renderStarredWords()"
+             dir="ltr">
+    </div>
+  </div>
+
   <!-- شريط الأدوات -->
   <div class="toolbar">
     <button id="toolAll"     class="btn-tool active-tool" onclick="setFilter('all')">الكل</button>
-    <button id="toolStarred" class="btn-tool" onclick="setFilter('starred')"><i class="fas fa-star"></i> الصعبة</button>
     <button id="reorderBtn"  class="btn-tool" onclick="toggleReorderMode()"><i class="fas fa-sort-amount-down"></i></button>
-    <button class="btn-tool" onclick="openQuizSetup()"><i class="fas fa-gamepad"></i> كويز</button>
   </div>
 
   <input type="text" id="searchInput" placeholder="ابحث في قاموسك..." oninput="render()" style="margin-bottom:8px;">
@@ -147,6 +156,47 @@
 
   <ul id="list"></ul>
 
+  <!-- ══ QUIZ FULL-PAGE VIEW (مخفي افتراضياً) ══ -->
+  <div id="quizView" class="quiz-view" style="display:none;">
+    <!-- Quiz Setup -->
+    <div id="quizViewSetup" class="quiz-view-setup">
+      <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> إعدادات الاختبار</h3>
+      <p>حدد الكلمات اللي حاب تختبرها:</p>
+      <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> كلمات جديدة (آخر 10)</button>
+      <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')"><i class="fa-solid fa-trash" aria-hidden="true"></i> تحدي النسيان (الأكثر خطأ)</button>
+      <button class="setup-btn btn-old"     onclick="startActualQuiz('old')"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> مراجعة الذكريات (أقدم 10)</button>
+      <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')"><i class="fa-solid fa-star" aria-hidden="true"></i> الكلمات الصعبة</button>
+      <button class="setup-btn btn-all"     onclick="startActualQuiz('all')"><i class="fa-solid fa-globe" aria-hidden="true"></i> كل الكلمات (عشوائي)</button>
+    </div>
+    <!-- Quiz Flashcard -->
+    <div id="quizViewCard" style="display:none;">
+      <div class="quiz-card-meta">
+        <span id="quizCardCounter">1 / 10</span>
+      </div>
+      <div class="quiz-card-bar"><div id="quizCardProgress"></div></div>
+      <div class="card-container">
+        <div class="card" id="mainCard" onclick="flipCard()">
+          <div class="card-face card-front">
+            <button class="quiz-sound-btn" onclick="playQuizSound(event)">
+              <i class="fas fa-volume-up"></i>
+            </button>
+            <div class="quiz-word" id="cardFrontText">الكلمة</div>
+            <button class="hint-btn" onclick="showHint(event)">اعرض المثال <i class="fa-regular fa-lightbulb" aria-hidden="true"></i></button>
+            <div class="hint-text" id="quizHintText"></div>
+          </div>
+          <div class="card-face card-back">
+            <div class="quiz-meaning" id="cardBackText">المعنى</div>
+            <div class="quiz-example" id="cardBackExample"></div>
+          </div>
+        </div>
+      </div>
+      <div class="quiz-controls">
+        <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها <i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+        <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها <i class="fa-solid fa-check" aria-hidden="true"></i></button>
+      </div>
+    </div>
+  </div>
+
   <!-- تصدير / استيراد -->
   <div class="backup-zone">
     <button class="btn-backup" onclick="exportData()"><i class="fa-solid fa-file-export" aria-hidden="true"></i> تصدير JSON</button>
@@ -155,48 +205,7 @@
   </div>
 </main>
 
-<!-- ══ QUIZ SETUP ══ -->
-<div id="quizSetupOverlay" class="quiz-overlay">
-  <div class="quiz-setup-box">
-    <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> إعدادات الاختبار</h3>
-    <p>حدد الكلمات اللي حاب تختبرها:</p>
-    <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> كلمات جديدة (آخر 10)</button>
-    <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')"><i class="fa-solid fa-trash" aria-hidden="true"></i> تحدي النسيان (الأكثر خطأ)</button>
-    <button class="setup-btn btn-old"     onclick="startActualQuiz('old')"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> مراجعة الذكريات (أقدم 10)</button>
-    <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')"><i class="fa-solid fa-star" aria-hidden="true"></i> الكلمات الصعبة</button>
-    <button class="setup-btn btn-all"     onclick="startActualQuiz('all')"><i class="fa-solid fa-globe" aria-hidden="true"></i> كل الكلمات (عشوائي)</button>
-    <button class="btn-close-quiz" onclick="closeQuizSetup()">إلغاء</button>
-  </div>
-</div>
 
-<!-- ══ QUIZ FLASHCARD ══ -->
-<div id="quizOverlay" class="quiz-overlay">
-  <div class="quiz-card-meta">
-    <span id="quizCardCounter">1 / 10</span>
-    <button class="btn-close-quiz" style="margin:0;" onclick="closeQuiz()">إغلاق ✕</button>
-  </div>
-  <div class="quiz-card-bar"><div id="quizCardProgress"></div></div>
-  <div class="card-container">
-    <div class="card" id="mainCard" onclick="flipCard()">
-      <div class="card-face card-front">
-        <button class="quiz-sound-btn" onclick="playQuizSound(event)">
-          <i class="fas fa-volume-up"></i>
-        </button>
-        <div class="quiz-word" id="cardFrontText">الكلمة</div>
-        <button class="hint-btn" onclick="showHint(event)">اعرض المثال <i class="fa-regular fa-lightbulb" aria-hidden="true"></i></button>
-        <div class="hint-text" id="quizHintText"></div>
-      </div>
-      <div class="card-face card-back">
-        <div class="quiz-meaning" id="cardBackText">المعنى</div>
-        <div class="quiz-example" id="cardBackExample"></div>
-      </div>
-    </div>
-  </div>
-  <div class="quiz-controls">
-    <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها <i class="fa-solid fa-trash" aria-hidden="true"></i></button>
-    <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها <i class="fa-solid fa-check" aria-hidden="true"></i></button>
-  </div>
-</div>
 
 <!-- ══ MODAL: حذف ══ -->
 <div id="deleteModal" class="custom-modal">
