@@ -22,7 +22,7 @@
 
 <!-- ── Sidebar ── -->
 <div id="sidebar" class="sidebar">
-  <div class="sidebar-header" onclick="toggleSidebar()" title="فتح/إغلاق القائمة"><h2><i class="fa-solid fa-book-open"></i> <span class="side-label">LootLingua</span></h2></div>
+  <div class="sidebar-header" data-tip="فتح الشريط الجانبي" onclick="toggleSidebar()"><h2><i class="fa-solid fa-book-open"></i> <span class="side-label">LootLingua</span></h2></div>
   <nav>
     <!-- قاموسك الشخصي -->
     <a href="#" class="nav-link active" data-view="personal" data-tip="قاموسك الشخصي" onclick="loadPersonalDictionary(); return false;">
@@ -87,10 +87,6 @@
           <span id="goalText" class="goal-text">0/5</span>
         </div>
       </div>
-    </div>
-    <div class="stats-bar">
-      <span id="totalCount">إجمالي الكلمات: 0</span>
-      <span id="starredCount">الصعبة: 0</span>
     </div>
   </header>
 
@@ -161,6 +157,7 @@
     <!-- Quiz Setup -->
     <div id="quizViewSetup" class="quiz-view-setup">
       <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> إعدادات الاختبار</h3>
+      <p class="quiz-available-count" id="quizAvailableCount">الكلمات المتاحة: 0</p>
       <p>حدد الكلمات اللي حاب تختبرها:</p>
       <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> كلمات جديدة (آخر 10)</button>
       <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')"><i class="fa-solid fa-trash" aria-hidden="true"></i> تحدي النسيان (الأكثر خطأ)</button>
