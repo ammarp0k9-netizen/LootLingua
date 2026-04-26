@@ -359,9 +359,10 @@ select option { background: #1e293b; }
 }
 
 /* ── Sidebar Nav Tooltip (when collapsed) ─── */
+.nav-link { position: relative; }
 .nav-link[data-tip]::after {
   content: attr(data-tip);
-  position: absolute; left: calc(100% + 10px); top: 50%;
+  position: absolute; right: calc(100% + 10px); top: 50%;
   transform: translateY(-50%) scale(0.8);
   background: var(--card-bg); color: var(--text-white);
   border: 1px solid var(--border);
@@ -371,10 +372,9 @@ select option { background: #1e293b; }
   transition: opacity 0.18s, transform 0.18s;
   z-index: 1050;
 }
-.nav-link[data-tip]:hover::after {
+.sidebar:not(.open) .nav-link[data-tip]:hover::after {
   opacity: 1; transform: translateY(-50%) scale(1);
 }
-.nav-link { position: relative; }
 
 /* ── Word List ────────────────────────────── */
 ul { list-style: none; padding: 0; margin: 0; }
