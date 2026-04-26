@@ -1610,3 +1610,61 @@ window.onload = function() {
     if (!window._profileLoaded) checkAndUpdateStreak();
   }, 1200);
 };
+
+// ═══════════════════════════════════════════════════════
+// Sidebar Tooltip (JS — bypasses overflow clipping)
+// ═══════════════════════════════════════════════════════
+(function(){
+  const tip = document.createElement('div');
+  tip.className = 'sidebar-tip';
+  document.body.appendChild(tip);
+
+  function showTip(e) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar || sidebar.classList.contains('open')) return;
+    const el = e.currentTarget;
+    if (!el.dataset.tip) return;
+    const rect = el.getBoundingClientRect();
+    tip.textContent = el.dataset.tip;
+    tip.style.top = (rect.top + rect.height / 2) + 'px';
+    tip.style.right = (window.innerWidth - rect.left + 10) + 'px';
+    tip.style.left = '';
+    tip.style.transform = 'translateY(-50%)';
+    tip.classList.add('show');
+  }
+  function hideTip() { tip.classList.remove('show'); }
+
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    if (el.closest('.sidebar')) {
+      el.addEventListener('mouseenter', showTip);
+      el.addEventListener('mouseleave', hideTip);
+    }
+  });
+})();
+
+// ═══════════════════════════════════════════════════════
+// Sidebar Book Icon → Open Icon on Hover
+// ═══════════════════════════════════════════════════════
+(function(){
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  const headerIcon = () => sidebar.querySelector('.sidebar-header i');
+  const origClass = 'fa-solid fa-book-open';
+  const hoverClass = 'fa-solid fa-angles-left';
+
+  sidebar.addEventListener('mouseenter', () => {
+    const icon = headerIcon();
+    if (icon && !sidebar.classList.contains('open')) icon.className = hoverClass;
+  });
+  sidebar.addEventListener('mouseleave', () => {
+    const icon = headerIcon();
+    if (icon) icon.className = origClass;
+  });
+  // رجّع الأيقون لما يفتح السايدبار
+  const origToggle = window.toggleSidebar;
+  window.toggleSidebar = function() {
+    origToggle();
+    const icon = headerIcon();
+    if (icon) icon.className = sidebar.classList.contains('open') ? origClass : origClass;
+  };
+})();
