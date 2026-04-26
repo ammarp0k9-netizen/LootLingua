@@ -596,7 +596,9 @@ window.fetchSuggestions = async function() {
   btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i>";
   btn.disabled  = true;
   if (box) box.style.display = 'block';
-  list.innerHTML = "<p style='text-align:center;font-size:12px;color:var(--text-gray);padding:10px;'>جاري البحث...</p>";
+  
+  // رسالة ذكية في حال كان السيرفر نايم
+  list.innerHTML = "<p style='text-align:center;font-size:12px;color:var(--text-gray);padding:10px;'>جاري البحث... (قد يستغرق بضع ثوانٍ)</p>";
 
   try {
     const res = await fetch("https://dictionary7-ayes.onrender.com/api/dictionary", {
@@ -605,14 +607,18 @@ window.fetchSuggestions = async function() {
       body: JSON.stringify({ word })
     });
 
-    if (!res.ok) throw new Error("server error");
+    // إضافة كود للتعرف على حالة "السيرفر النايم" (502 أو 504 أو 503)
+    if (!res.ok) {
+        if (res.status === 502 || res.status === 503 || res.status === 504) {
+            throw new Error("sleeping");
+        }
+        throw new Error("server error");
+    }
 
-    // السيرفر الجديد بيبعث المصفوفة فوراً، ما في داعي لـ data.choices[0]
     const suggestions = await res.json(); 
 
     let html = '';
     suggestions.forEach((s, i) => {
-      // حماية النصوص من المشاكل
       const safeAr  = (s.ar  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safeEx  = (s.ex  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       const safePos = (s.pos || 'عام').replace(/'/g,"\\'");
@@ -622,7 +628,6 @@ window.fetchSuggestions = async function() {
       const exEsc   = escapeHtml(s.ex || '');
       const exArEsc = escapeHtml(s.ex_ar || '');
 
-      // النجوم (بناءً على طلبك 3 نجوم للشيوع)
       const starsNum = Math.max(1, Math.min(3, Number(s.stars) || 1));
       const starsHtml = '★'.repeat(starsNum) + '☆'.repeat(3 - starsNum);
 
@@ -651,8 +656,14 @@ window.fetchSuggestions = async function() {
     list.innerHTML = html;
 
   } catch (error) {
-    console.error("Frontend Error:", error); // عشان تشوف الخطأ الحقيقي بالكونسول
-    list.innerHTML = "<p style='color:var(--danger);text-align:center;font-size:12px;padding:10px;'>⚠️ فشل في جلب البيانات من السيرفر</p>";
+    console.error("Frontend Error:", error);
+    
+    // التعامل مع الأخطاء بطريقة مريحة للمستخدم
+    if (error.message === "sleeping" || error.message.includes("fetch")) {
+         list.innerHTML = "<p style='color:var(--warning);text-align:center;font-size:12px;padding:10px;'>السيرفر كان في وضع السكون ويستيقظ الآن.. جرب الضغط على بحث مرة أخرى بعد ثوانٍ</p>";
+    } else {
+         list.innerHTML = "<p style='color:var(--danger);text-align:center;font-size:12px;padding:10px;'>فشل في جلب البيانات من السيرفر</p>";
+    }
   } finally {
     btn.innerHTML = "<i class='fas fa-search'></i>";
     btn.disabled  = false;
