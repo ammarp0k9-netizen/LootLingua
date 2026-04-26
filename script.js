@@ -315,6 +315,17 @@ function incrementDailyCount() {
   if (map[today] === DAILY_GOAL) setTimeout(launchConfetti, 400);
 }
 
+function decrementDailyCount() {
+  const today = todayStr();
+  const map   = loadJSON('activityMap', {});
+  if (map[today] && map[today] > 0) {
+    map[today]--;
+    saveJSON('activityMap', map);
+    if (window.saveProfileToCloud) window.saveProfileToCloud();
+    renderDailyGoal();
+  }
+}
+
 function renderDailyGoal() {
   const count = getDailyCount();
   const pct   = Math.min((count / DAILY_GOAL) * 100, 100);
@@ -538,6 +549,7 @@ window.deleteWord = function(id, event) {
   document.getElementById('deleteConfirmBtn').onclick = async function() {
     hideModal('deleteModal');
     if (xpLoss > 0) { updateXP(-xpLoss); showXPBadge(xpLoss, null, true); }
+    decrementDailyCount();
     window.words = window.words.filter(w => w.id !== pendingDeleteId);
     if (window.deleteWordFromCloud) await window.deleteWordFromCloud(pendingDeleteId);
     pendingDeleteId = null;
@@ -1164,6 +1176,8 @@ window.searchGameWords = function() {
 // ── Hide all non-personal view elements ──
 function hideAllViewElements() {
   document.getElementById('personalControls').style.display = 'none';
+  document.querySelector('.search-bar-row').style.display   = 'none';
+  document.querySelector('.backup-zone').style.display      = 'none';
   document.getElementById('gameSearchBar').style.display    = 'none';
   document.getElementById('starredSearchBar').style.display = 'none';
   document.getElementById('quizView').style.display         = 'none';
