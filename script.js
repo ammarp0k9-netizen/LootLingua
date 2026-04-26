@@ -1054,7 +1054,6 @@ window.loadGameDictionary = function(gameKey) {
   document.getElementById('personalControls').style.display = 'none';
   document.querySelector('.search-bar-row').style.display   = 'none';
   document.querySelector('.backup-zone').style.display      = 'none';
-  document.getElementById('starredCount').style.display     = 'none';
   document.getElementById('starredSearchBar').style.display = 'none';
   document.getElementById('quizView').style.display         = 'none';
   document.getElementById('list').style.display             = '';
@@ -1067,7 +1066,6 @@ window.loadGameDictionary = function(gameKey) {
   // تحديث العنوان
   document.querySelector('.page-header h1').innerHTML =
     `<img src="${game.titleIcon}" width="24" height="24" style="vertical-align:middle;margin-left:6px;" alt=""> ${game.title}`;
-  document.getElementById('totalCount').innerText = game.desc;
 
   renderGameWords(currentGameWords);
   restoreViewScroll(gameKey);
@@ -1166,9 +1164,6 @@ window.searchGameWords = function() {
 // ── Hide all non-personal view elements ──
 function hideAllViewElements() {
   document.getElementById('personalControls').style.display = 'none';
-  document.querySelector('.search-bar-row').style.display   = 'none';
-  document.querySelector('.backup-zone').style.display      = 'none';
-  document.getElementById('starredCount').style.display     = 'none';
   document.getElementById('gameSearchBar').style.display    = 'none';
   document.getElementById('starredSearchBar').style.display = 'none';
   document.getElementById('quizView').style.display         = 'none';
@@ -1196,8 +1191,6 @@ window.loadStarredView = function() {
 
   // Update header
   document.querySelector('.page-header h1').innerHTML = '<i class="fas fa-star" aria-hidden="true"></i> الكلمات الصعبة';
-  const starredWords = window.words.filter(w => w.starred);
-  document.getElementById('totalCount').innerText = `${starredWords.length} كلمة صعبة`;
 
   renderStarredWords();
   restoreViewScroll('starred');
@@ -1284,8 +1277,11 @@ window.loadQuizView = function() {
 
   // Update header
   document.querySelector('.page-header h1').innerHTML = '<i class="fas fa-gamepad" aria-hidden="true"></i> الاختبار';
-  document.getElementById('totalCount').innerText = window.words.length > 0
-    ? `${window.words.length} كلمة متاحة`
+
+  // Update available words count
+  const quizCountEl = document.getElementById('quizAvailableCount');
+  if (quizCountEl) quizCountEl.textContent = window.words.length > 0
+    ? `الكلمات المتاحة: ${window.words.length}`
     : 'القاموس فاضي!';
 
   restoreViewScroll('quiz');
@@ -1309,7 +1305,6 @@ window.loadPersonalDictionary = function() {
   document.getElementById('personalControls').style.display = 'block';
   document.querySelector('.search-bar-row').style.display   = '';
   document.querySelector('.backup-zone').style.display      = '';
-  document.getElementById('starredCount').style.display     = '';
   document.getElementById('list').style.display             = '';
 
   // إخفاء search bar الألعاب والكلمات الصعبة والكويز
@@ -1402,11 +1397,6 @@ function render() {
       return a.word.localeCompare(b.word);
     });
   }
-
-  const countEl = document.getElementById('totalCount');
-  const starEl  = document.getElementById('starredCount');
-  if (countEl) countEl.innerText = `إجمالي الكلمات: ${window.words.length}`;
-  if (starEl)  starEl.innerText  = `الصعبة: ${window.words.filter(w => w.starred).length}`;
 
   const listEl = document.getElementById('list');
   if (!listEl) return;
