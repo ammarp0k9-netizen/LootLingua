@@ -32,22 +32,18 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 /* ── Custom Scrollbar ──────────────────────── */
-::-webkit-scrollbar { width: 7px; }
+::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  background: rgba(59,130,246,0.18);
   border-radius: 10px;
-  border: 1.5px solid transparent;
-  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #60a5fa, #818cf8);
-  border: none;
-  background-clip: padding-box;
+  background: rgba(59,130,246,0.35);
 }
 ::-webkit-scrollbar-corner { background: transparent; }
 /* Firefox */
-html { scrollbar-width: thin; scrollbar-color: var(--accent) transparent; }
+html { scrollbar-width: thin; scrollbar-color: rgba(59,130,246,0.18) transparent; }
 
 html { overflow-x: clip; }
 
