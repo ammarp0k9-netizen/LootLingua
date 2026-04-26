@@ -620,7 +620,8 @@ window.fetchSuggestions = async function() {
       const arEsc   = escapeHtml(s.ar || '');
       const posEsc  = escapeHtml(s.pos || 'عام');
       const exEsc   = escapeHtml(s.ex || '');
-
+      const exArEsc = escapeHtml(s.ex_ar || ''); // ترجمة الجملة
+      
       // النجوم (بناءً على طلبك 3 نجوم للشيوع)
       const starsNum = Math.max(1, Math.min(3, Number(s.stars) || 1));
       const starsHtml = '★'.repeat(starsNum) + '☆'.repeat(3 - starsNum);
@@ -633,10 +634,15 @@ window.fetchSuggestions = async function() {
             <span class="sug-pos">${posEsc}</span>
           </div>
           <div class="sug-stars" style="color: #f1c40f;">${starsHtml}</div>
-          ${s.ex ? `<div class="sug-ex">"${exEsc}"</div>` : ''}
+          
+          ${s.ex ? `
+            <div class="sug-ex">
+              <div style="margin-bottom: 2px;">"${exEsc}"</div>
+              <div style="font-size: 0.85em; color: var(--text-gray); opacity: 0.8;">${exArEsc}</div>
+            </div>
+          ` : ''}
         </div>`;
-    });
-
+      
     if (suggestions.length > 4) {
       html += `<div class="sug-toggle" id="toggleMeaningsBtn"
                     onclick="const e=document.querySelectorAll('.extra-meaning'),h=e[0].style.display==='none';e.forEach(x=>x.style.display=h?'block':'none');this.innerHTML=h?'عرض أقل ▲':'عرض المزيد (${suggestions.length-4}) ▼'">
