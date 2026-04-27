@@ -14,8 +14,7 @@
     transition: transform 0.08s ease;
 }
 
-/* ── Theme System ──────────────────────────── */
-[data-theme="lootlingua"] {
+:root {
   --main-bg:    #0f172a;
   --card-bg:    #1e293b;
   --accent:     #3b82f6;
@@ -26,56 +25,6 @@
   --success:    #10b981;
   --star:       #f59e0b;
   --border:     #334155;
-  --scrollbar-thumb: rgba(59,130,246,0.18);
-  --scrollbar-thumb-hover: rgba(59,130,246,0.35);
-}
-
-[data-theme="golden"] {
-  --main-bg:    #1a0f00;
-  --card-bg:    #2d1f0d;
-  --accent:     #d4af37;
-  --accent2:    #c9a227;
-  --text-white: #f5f0e6;
-  --text-gray:  #c4b896;
-  --danger:     #d97706;
-  --success:    #b45309;
-  --star:       #fcd34d;
-  --border:     #4a3c1e;
-  --scrollbar-thumb: rgba(212,175,55,0.18);
-  --scrollbar-thumb-hover: rgba(212,175,55,0.35);
-}
-
-[data-theme="scroll"] {
-  --main-bg:    #f5e6d3;
-  --card-bg:    #fff8e7;
-  --accent:     #8b4513;
-  --accent2:    #a0522d;
-  --text-white: #3d2b1f;
-  --text-gray:  #6b5344;
-  --danger:     #8b2e2e;
-  --success:    #4a6b3a;
-  --star:       #c9a227;
-  --border:     #d4c4a8;
-  --scrollbar-thumb: rgba(139,69,19,0.18);
-  --scrollbar-thumb-hover: rgba(139,69,19,0.35);
-}
-
-[data-theme="ocean"] {
-  --main-bg:    #f0f9ff;
-  --card-bg:    #ffffff;
-  --accent:     #0ea5e9;
-  --accent2:    #0284c7;
-  --text-white: #1e293b;
-  --text-gray:  #64748b;
-  --danger:     #dc2626;
-  --success:    #16a34a;
-  --star:       #f59e0b;
-  --border:     #e2e8f0;
-  --scrollbar-thumb: rgba(14,165,233,0.18);
-  --scrollbar-thumb-hover: rgba(14,165,233,0.35);
-}
-
-:root {
   --sidebar-rail: 72px;
   --sidebar-open: 276px;
 }
@@ -86,15 +35,15 @@
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: rgba(59,130,246,0.18);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
+  background: rgba(59,130,246,0.35);
 }
 ::-webkit-scrollbar-corner { background: transparent; }
 /* Firefox */
-html { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+html { scrollbar-width: thin; scrollbar-color: rgba(59,130,246,0.18) transparent; }
 
 html { overflow-x: clip; }
 
@@ -1095,29 +1044,6 @@ body.game-bg-active .page-header h1 {
   background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.3);
   border-radius:8px; font-size:13px; color:#fca5a5;
 }
-
-/* ── Theme Selector ──────────────────────────── */
-.theme-selector { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
-.theme-option {
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  padding:10px 6px; border-radius:12px; cursor:pointer;
-  background:rgba(255,255,255,.04); border:1px solid var(--border);
-  transition:all .2s ease;
-}
-.theme-option:hover { background:rgba(255,255,255,.08); transform:scale(1.02); }
-.theme-option.active {
-  border-color:var(--accent);
-  box-shadow:0 0 0 2px var(--accent);
-}
-.theme-preview {
-  width:28px; height:28px; border-radius:50%; border:2px solid var(--border);
-}
-.preview-lootlingua { background:linear-gradient(135deg,#3b82f6,#6366f1); }
-.preview-golden    { background:linear-gradient(135deg,#d4af37,#c9a227); }
-.preview-scroll     { background:linear-gradient(135deg,#8b4513,#a0522d); }
-.preview-ocean     { background:linear-gradient(135deg,#0ea5e9,#0284c7); }
-.theme-name { font-size:11px; font-weight:600; color:var(--text-gray); text-align:center; }
-.theme-option.active .theme-name { color:var(--accent); }
 
 /* ══════════════════════════════════════════
    CONFETTI
