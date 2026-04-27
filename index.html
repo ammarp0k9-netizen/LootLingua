@@ -51,6 +51,25 @@
     <div class="sidebar-divider"><span class="side-label">الحساب</span></div>
     <button id="loginBtn"  class="auth-btn" data-tip="تسجيل دخول" onclick="login()"><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="side-label">تسجيل دخول بـ Google</span></button>
     <button id="logoutBtn" class="auth-btn" data-tip="تسجيل الخروج" onclick="showModal('logoutModal')"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> <span class="side-label">تسجيل الخروج</span></button>
+    <div class="sidebar-divider"><span class="side-label">المظهر</span></div>
+    <div class="theme-selector">
+      <div class="theme-option active" data-theme="lootlingua" onclick="setTheme('lootlingua')">
+        <div class="theme-preview preview-lootlingua"></div>
+        <span class="theme-name">LootLingua</span>
+      </div>
+      <div class="theme-option" data-theme="golden" onclick="setTheme('golden')">
+        <div class="theme-preview preview-golden"></div>
+        <span class="theme-name">الكنز الذهبي</span>
+      </div>
+      <div class="theme-option" data-theme="scroll" onclick="setTheme('scroll')">
+        <div class="theme-preview preview-scroll"></div>
+        <span class="theme-name">المخطوطة القديمة</span>
+      </div>
+      <div class="theme-option" data-theme="ocean" onclick="setTheme('ocean')">
+        <div class="theme-preview preview-ocean"></div>
+        <span class="theme-name">واحة الهدوء</span>
+      </div>
+    </div>
     <div class="xp-panel">
       <div class="xp-top">
         <span id="xpRankIcon" class="xp-icon"><i class="fa-solid fa-seedling" aria-hidden="true"></i></span>
