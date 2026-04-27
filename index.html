@@ -296,7 +296,54 @@
         xpValue:     d.data().xpValue ?? 3,
         createdAt:   d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null)
       }));
-      window.words = cloudWords;
+
+      // دمج ذكي: منع التكرار بالـ ID أو بنص الكلمة
+      const localWords = window.words || [];
+      const localById = {};
+      const localByText = {};
+      localWords.forEach(w => {
+        localById[w.id] = w;
+        const key = (w.word || '').toLowerCase().trim();
+        if (key) localByText[key] = localByText[key] || w;
+      });
+
+      const merged = [];
+      const seenIds = new Set();
+      const seenTexts = new Set();
+
+      // 1) أضف كلمات السحابة مع دمج القيم المحلية
+      cloudWords.forEach(cw => {
+        const lw = localById[cw.id] || localByText[(cw.word || '').toLowerCase().trim()];
+        const word = lw ? {
+          ...cw,
+          forgetCount: Math.max(cw.forgetCount || 0, lw.forgetCount || 0),
+          starred:     cw.starred || lw.starred,
+          xpValue:     Math.max(cw.xpValue || 0, lw.xpValue || 0),
+        } : cw;
+        merged.push(word);
+        seenIds.add(cw.id);
+        seenTexts.add((cw.word || '').toLowerCase().trim());
+      });
+
+      // 2) أضف كلمات محلية مش موجودة بالسحابة (وارفعها)
+      localWords.forEach(w => {
+        const textKey = (w.word || '').toLowerCase().trim();
+        if (seenIds.has(w.id) || (textKey && seenTexts.has(textKey))) return;
+        merged.push(w);
+        seenIds.add(w.id);
+        seenTexts.add(textKey);
+        // ارفع الكلمة المحلية للسحابة
+        if (window.saveWordToCloud) {
+          window.saveWordToCloud(w.word, w.category, w.meaning, w.example).then(realId => {
+            if (realId) {
+              const idx = window.words.findIndex(x => x.id === w.id);
+              if (idx !== -1) { window.words[idx].id = realId; localStorage.setItem('lootlinguaDict', JSON.stringify(window.words)); }
+            }
+          });
+        }
+      });
+
+      window.words = merged;
       saveAndRender();
     });
   }
