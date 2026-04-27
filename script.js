@@ -86,18 +86,19 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   if (!d) return;
   if (d.userXP !== undefined && d.userXP !== null) {
     const cloud = Number(d.userXP) || 0;
-    if (cloud !== userXP) {
-      userXP = Math.max(cloud, userXP);
-      saveInt('userXP', userXP);
-    }
+    userXP = Math.max(cloud, userXP);
+    saveInt('userXP', userXP);
   }
   if (d.dailyStreak !== undefined) {
-    dailyStreak = d.dailyStreak;
+    dailyStreak = Math.max(Number(d.dailyStreak) || 0, dailyStreak);
     saveInt('dailyStreak', dailyStreak);
   }
   if (d.lastActivityDate) {
-    lastActivity = d.lastActivityDate;
-    localStorage.setItem('lastActivityDate', lastActivity);
+    // خُّد الأحدث بين المحلي والسحابة
+    if (!lastActivity || d.lastActivityDate > lastActivity) {
+      lastActivity = d.lastActivityDate;
+      localStorage.setItem('lastActivityDate', lastActivity);
+    }
   }
   if (d.activityMap) {
     const localMap = loadJSON('activityMap', {});
@@ -1577,16 +1578,24 @@ function markForgot() {
   if (!w) return;
   const prevForget = w.forgetCount || 0;
   const nextForget = prevForget + 1;
+
+  // حدّث forgetCount في window.words
   window.words = window.words.map(x =>
     x.id === w.id ? { ...x, forgetCount: nextForget } : x
   );
   const updatedWord = { ...w, forgetCount: nextForget };
   currentQuizWords[quizIndex] = updatedWord;
+
+  // احفظ فوراً في localStorage والسحابة
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
-  // ← حفظ forgetCount في Firestore
   if (window.updateWordInCloud) window.updateWordInCloud(w.id, { forgetCount: nextForget });
-  const gap = Math.max(2, Math.min(5-nextForget, 4));
-  currentQuizWords.splice(Math.min(quizIndex+gap, currentQuizWords.length), 0, {...updatedWord});
+
+  // أعد إدراج الكلمة بعد 3-4 بطاقات
+  const gap = Math.max(2, Math.min(5 - nextForget, 4));
+  const insertAt = Math.min(quizIndex + gap, currentQuizWords.length);
+  currentQuizWords.splice(insertAt, 0, { ...updatedWord });
+
+  // حدّث عداد البطاقات في الواجهة
   quizIndex++;
   updateCard();
 }
