@@ -48,20 +48,6 @@ function setActiveNavLink(key) {
   });
 }
 
-// ── Theme Switching ──────────────────────────────
-window.setTheme = function(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('theme', theme);
-  document.querySelectorAll('.theme-option').forEach(opt => {
-    opt.classList.toggle('active', opt.dataset.theme === theme);
-  });
-};
-
-function loadTheme() {
-  const saved = localStorage.getItem('theme') || 'lootlingua';
-  setTheme(saved);
-}
-
 // ═══════════════════════════════════════════════════════
 // Modal & Toast
 // ═══════════════════════════════════════════════════════
@@ -1644,7 +1630,6 @@ window.onload = function() {
   // Gamification init
   // checkAndUpdateStreak يشتغل هنا فقط لو مش مسجل دخول
   // لو مسجل دخول، يشتغل بعد loadProfileFromCloud (في index.html)
-  loadTheme();
   renderXPBar();
   renderDailyGoal();
   renderStreak();
