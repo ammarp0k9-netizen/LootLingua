@@ -48,6 +48,20 @@ function setActiveNavLink(key) {
   });
 }
 
+// ── Theme Switching ──────────────────────────────
+window.setTheme = function(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  document.querySelectorAll('.theme-option').forEach(opt => {
+    opt.classList.toggle('active', opt.dataset.theme === theme);
+  });
+};
+
+function loadTheme() {
+  const saved = localStorage.getItem('theme') || 'lootlingua';
+  setTheme(saved);
+}
+
 // ═══════════════════════════════════════════════════════
 // Modal & Toast
 // ═══════════════════════════════════════════════════════
@@ -168,16 +182,16 @@ function rateLimit(key, limit, windowMs) {
 // XP & GAMIFICATION
 // ═══════════════════════════════════════════════════════
 const XP_RANKS = [
-  {min:0,   max:14,       label:'Noob',     iconClass:'fa-solid fa-seedling', color:'#94a3b8'},
-  {min:15,  max:39,       label:'Wanderer', iconClass:'fa-solid fa-compass', color:'#67e8f9'},
-  {min:40,  max:79,       label:'Learner',  iconClass:'fa-solid fa-book-open', color:'#60a5fa'},
-  {min:80,  max:149,      label:'Explorer', iconClass:'fa-solid fa-binoculars', color:'#818cf8'},
-  {min:150, max:249,      label:'Pro',      iconClass:'fa-solid fa-sword', color:'#34d399'},
-  {min:250, max:399,      label:'Veteran',  iconClass:'fa-solid fa-shield-halved', color:'#4ade80'},
-  {min:400, max:599,      label:'Elite',    iconClass:'fa-solid fa-fire', color:'#f59e0b'},
-  {min:600, max:899,      label:'Master',   iconClass:'fa-solid fa-star', color:'#fbbf24'},
-  {min:900, max:1299,     label:'Legend',   iconClass:'fa-solid fa-crown', color:'#a78bfa'},
-  {min:1300,max:Infinity, label:'Linguaer', iconClass:'fa-solid fa-trophy', color:'#f472b6'},
+  {min:0,   max:14,       label:'Noob',     iconClass:'fa-solid fa-seedling', color:'var(--text-gray)'},
+  {min:15,  max:39,       label:'Wanderer', iconClass:'fa-solid fa-compass', color:'var(--header-grad)'},
+  {min:40,  max:79,       label:'Learner',  iconClass:'fa-solid fa-book-open', color:'var(--accent)'},
+  {min:80,  max:149,      label:'Explorer', iconClass:'fa-solid fa-binoculars', color:'var(--accent2)'},
+  {min:150, max:249,      label:'Pro',      iconClass:'fa-solid fa-sword', color:'var(--success)'},
+  {min:250, max:399,      label:'Veteran',  iconClass:'fa-solid fa-shield-halved', color:'var(--success)'},
+  {min:400, max:599,      label:'Elite',    iconClass:'fa-solid fa-fire', color:'var(--star)'},
+  {min:600, max:899,      label:'Master',   iconClass:'fa-solid fa-star', color:'var(--star)'},
+  {min:900, max:1299,     label:'Legend',   iconClass:'fa-solid fa-crown', color:'var(--accent)'},
+  {min:1300,max:Infinity, label:'Linguaer', iconClass:'fa-solid fa-trophy', color:'var(--accent2)'},
 ];
 
 // userXP already declared in State section above — just reload from localStorage
@@ -220,8 +234,9 @@ function showXPBadge(amount, anchorId, isNeg) {
   const b = document.getElementById('xpBadge');
   if (!b) return;
   b.textContent      = (isNeg?'-':'+')+amount+' XP';
-  b.style.background = isNeg ? '#ef4444' : '#f59e0b';
-  b.style.color      = isNeg ? '#fff'    : '#0f172a';
+  const root = getComputedStyle(document.documentElement);
+  b.style.background = isNeg ? 'var(--danger)' : 'var(--star)';
+  b.style.color      = isNeg ? 'var(--text-on-accent)' : 'var(--text-on-star)';
   const a = anchorId ? document.getElementById(anchorId) : null;
   if (a) {
     const r=a.getBoundingClientRect();
@@ -236,7 +251,7 @@ function showXPBadge(amount, anchorId, isNeg) {
 function showRankUp(rank) {
   const t=document.getElementById('toastMessage'); if(!t)return;
   t.textContent='ترقية! أصبحت '+rank.label;
-  t.style.background=rank.color; t.style.color='#0f172a'; t.classList.add('show');
+  t.style.background='var(--accent)'; t.style.color='var(--text-on-accent)'; t.classList.add('show');
   try {
     const ctx=new(window.AudioContext||window.webkitAudioContext)();
     [523,659,784].forEach((f,i)=>{
@@ -291,10 +306,10 @@ function renderStreak() {
   const wrap = document.getElementById('streakWrap');
   if (!el) return;
   el.textContent = dailyStreak+' يوم';
-  if (dailyStreak>=30)      { if(ico)ico.innerHTML='<i class="fa-solid fa-bolt"></i>'; el.style.color='#60a5fa'; }
-  else if (dailyStreak>=14) { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='#a78bfa'; }
-  else if (dailyStreak>=7)  { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='#f59e0b'; }
-  else                      { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='#94a3b8'; }
+  if (dailyStreak>=30)      { if(ico)ico.innerHTML='<i class="fa-solid fa-bolt"></i>'; el.style.color='var(--accent)'; }
+  else if (dailyStreak>=14) { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='var(--accent2)'; }
+  else if (dailyStreak>=7)  { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='var(--star)'; }
+  else                      { if(ico)ico.innerHTML='<i class="fa-solid fa-fire"></i>'; el.style.color='var(--text-gray)'; }
   if (wrap) wrap.className='streak-wrap'+(dailyStreak>=7?' streak-hot':'');
 }
 
@@ -335,7 +350,7 @@ function renderDailyGoal() {
   if (!ring) return;
   const circ = 100.53;
   ring.style.strokeDashoffset = circ - (pct / 100) * circ;
-  ring.style.stroke = pct >= 100 ? '#10b981' : '#3b82f6';
+  ring.style.stroke = pct >= 100 ? 'var(--success)' : 'var(--accent)';
   if (txt) txt.textContent = count+'/'+DAILY_GOAL;
 }
 
@@ -353,7 +368,7 @@ function launchConfetti() {
   const container=document.getElementById('confettiContainer');
   if (!container) return;
   container.innerHTML='';
-  const colors=['#f59e0b','#3b82f6','#10b981','#a78bfa','#f472b6','#34d399'];
+  const colors=['var(--star)','var(--accent)','var(--success)','var(--accent2)','var(--danger)','var(--header-grad)'];
   for(let i=0;i<70;i++){
     const p=document.createElement('div'); p.className='confetti-piece';
     p.style.cssText=`left:${Math.random()*100}%;background:${colors[i%colors.length]};width:${6+Math.random()*6}px;height:${6+Math.random()*6}px;border-radius:${Math.random()>.5?'50%':'2px'};animation-delay:${Math.random()*.5}s;animation-duration:${1.2+Math.random()*.8}s;`;
@@ -523,7 +538,7 @@ window.editWord = function(id, event) {
   editId = id;
   const btn = document.getElementById('addBtn');
   btn.innerHTML = 'تحديث الكلمة ' + fe('floppy-disk', 18);
-  btn.style.background = '#059669';
+  btn.style.background = 'var(--accent)';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
@@ -651,7 +666,7 @@ window.fetchSuggestions = async function() {
             <span class="sug-ar">${arEsc}</span>
             <span class="sug-pos">${posEsc}</span>
           </div>
-          <div class="sug-stars" style="color: #f1c40f;">${starsHtml}</div>
+          <div class="sug-stars" style="color: var(--star);">${starsHtml}</div>
           ${s.ex ? `
             <div class="sug-ex">
               <div style="margin-bottom: 2px;">"${exEsc}"</div>
@@ -1453,7 +1468,7 @@ function render() {
           ${w.example ? `<div class="example-box"><b>Ex:</b> ${highlightText(w.example, query)}</div>` : ''}
         </div>
         ${isReorderMode
-          ? '<span style="font-size:20px;color:#475569;padding:0 8px;flex-shrink:0;">☰</span>'
+          ? '<span style="font-size:20px;color:var(--text-gray);padding:0 8px;flex-shrink:0;">☰</span>'
           : `<div class="actions">
                <button class="icon-circle sound-btn" data-tip="نطق" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
                <button class="icon-circle edit-btn"  data-tip="تعديل" onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
@@ -1630,6 +1645,7 @@ window.onload = function() {
   // Gamification init
   // checkAndUpdateStreak يشتغل هنا فقط لو مش مسجل دخول
   // لو مسجل دخول، يشتغل بعد loadProfileFromCloud (في index.html)
+  loadTheme();
   renderXPBar();
   renderDailyGoal();
   renderStreak();
