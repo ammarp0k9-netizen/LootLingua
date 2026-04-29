@@ -16,33 +16,33 @@
 
 /* ── Theme System ──────────────────────────── */
 [data-theme="lootlingua"] {
-  --main-bg:    #050b14;
-  --card-bg:    #0d1526;
-  --accent:     #2563eb;
-  --accent2:    #7c3aed;
+  --main-bg:    #020617;
+  --card-bg:    #0f172a;
+  --surface-bg: #1e293b;
+  --accent:     #3b82f6;
+  --accent2:    #6366f1;
   --text-white: #f8fafc;
   --text-gray:  #94a3b8;
   --danger:     #ef4444;
   --success:    #10b981;
   --star:       #f59e0b;
   --border:     #1e293b;
-  --scrollbar-thumb: rgba(37,99,235,0.25);
-  --scrollbar-thumb-hover: rgba(37,99,235,0.45);
-  --hover-bg:       rgba(37,99,235,0.1);
-  --surface-bg:     rgba(255,255,255,0.03);
+  --scrollbar-thumb: rgba(59,130,246,0.25);
+  --scrollbar-thumb-hover: rgba(59,130,246,0.45);
+  --hover-bg:       rgba(59,130,246,0.1);
   --track-bg:       rgba(255,255,255,0.06);
-  --accent-soft:    rgba(37,99,235,0.15);
+  --accent-soft:    rgba(59,130,246,0.15);
   --danger-soft:    rgba(239,68,68,0.15);
   --success-soft:   rgba(16,185,129,0.15);
   --star-soft:      rgba(245,158,11,0.15);
-  --overlay-bg:     rgba(5,11,20,0.92);
-  --active-nav-bg:  rgba(37,99,235,0.12);
-  --game-overlay:   rgba(5,11,20,0.75);
-  --game-card-bg:   rgba(13,21,38,0.82);
+  --overlay-bg:     rgba(2,6,23,0.95);
+  --active-nav-bg:  rgba(59,130,246,0.12);
+  --game-overlay:   rgba(2,6,23,0.75);
+  --game-card-bg:   rgba(15,23,42,0.82);
   --text-on-accent: #ffffff;
   --text-on-star:   #1a1a1a;
   --header-grad:    #60a5fa;
-  --focus-ring:     rgba(124,58,237,0.2);
+  --focus-ring:     rgba(99,102,241,0.2);
   --danger-warn-bg: rgba(239,68,68,0.12);
   --danger-warn-bdr:rgba(239,68,68,0.3);
   --danger-warn-txt:#fca5a5;
@@ -55,116 +55,116 @@
 
 [data-theme="golden"] {
   --main-bg:    #0a0a0a;
-  --card-bg:    #141414;
-  --accent:     #d4af37;
-  --accent2:    #9333ea;
+  --card-bg:    #171717;
+  --surface-bg: #262626;
+  --accent:     #b8860b;
+  --accent2:    #9a7b0c;
   --text-white: #ffffff;
   --text-gray:  #a1a1aa;
-  --danger:     #e11d48;
-  --success:    #059669;
-  --star:       #fcd34d;
-  --border:     #27272a;
-  --scrollbar-thumb: rgba(212,175,55,0.25);
-  --scrollbar-thumb-hover: rgba(212,175,55,0.45);
-  --hover-bg:       rgba(212,175,55,0.08);
-  --surface-bg:     rgba(255,255,255,0.03);
+  --danger:     #dc2626;
+  --success:    #16a34a;
+  --star:       #fbbf24;
+  --border:     #262626;
+  --scrollbar-thumb: rgba(184,134,11,0.25);
+  --scrollbar-thumb-hover: rgba(184,134,11,0.45);
+  --hover-bg:       rgba(184,134,11,0.08);
   --track-bg:       rgba(255,255,255,0.06);
-  --accent-soft:    rgba(212,175,55,0.12);
-  --danger-soft:    rgba(225,29,72,0.15);
-  --success-soft:   rgba(5,150,105,0.15);
-  --star-soft:      rgba(252,211,77,0.15);
-  --overlay-bg:     rgba(10,10,10,0.92);
-  --active-nav-bg:  rgba(212,175,55,0.12);
+  --accent-soft:    rgba(184,134,11,0.15);
+  --danger-soft:    rgba(220,38,38,0.15);
+  --success-soft:   rgba(22,163,74,0.15);
+  --star-soft:      rgba(251,191,36,0.15);
+  --overlay-bg:     rgba(10,10,10,0.95);
+  --active-nav-bg:  rgba(184,134,11,0.12);
   --game-overlay:   rgba(10,10,10,0.8);
-  --game-card-bg:   rgba(20,20,20,0.85);
-  --text-on-accent: #000000;
+  --game-card-bg:   rgba(23,23,23,0.85);
+  --text-on-accent: #ffffff;
   --text-on-star:   #000000;
-  --header-grad:    #fde047;
-  --focus-ring:     rgba(212,175,55,0.2);
-  --danger-warn-bg: rgba(225,29,72,0.12);
-  --danger-warn-bdr:rgba(225,29,72,0.3);
-  --danger-warn-txt:#fda4af;
+  --header-grad:    #fbbf24;
+  --focus-ring:     rgba(184,134,11,0.2);
+  --danger-warn-bg: rgba(220,38,38,0.12);
+  --danger-warn-bdr:rgba(220,38,38,0.3);
+  --danger-warn-txt:#fca5a5;
   --heatmap-0: rgba(255,255,255,0.05);
   --heatmap-1: #4a3c05;
   --heatmap-2: #8b710a;
-  --heatmap-3: #c29d0d;
+  --heatmap-3: #b8860b;
   --heatmap-4: #d4af37;
 }
 
 [data-theme="scroll"] {
-  --main-bg:    #e8e1d5;
-  --card-bg:    #f5f0e6;
-  --accent:     #2c3e50;
-  --accent2:    #8b4513;
-  --text-white: #1a1a1a;
-  --text-gray:  #5c5c5c;
-  --danger:     #b33939;
-  --success:    #218c53;
-  --star:       #d4a017;
-  --border:     #d1c7b8;
-  --scrollbar-thumb: rgba(44,62,80,0.2);
-  --scrollbar-thumb-hover: rgba(44,62,80,0.4);
-  --hover-bg:       rgba(44,62,80,0.06);
-  --surface-bg:     rgba(0,0,0,0.04);
-  --track-bg:       rgba(0,0,0,0.06);
-  --accent-soft:    rgba(44,62,80,0.1);
-  --danger-soft:    rgba(179,57,57,0.1);
-  --success-soft:   rgba(33,140,83,0.1);
-  --star-soft:      rgba(212,160,23,0.12);
-  --overlay-bg:     rgba(232,225,213,0.92);
-  --active-nav-bg:  rgba(44,62,80,0.1);
-  --game-overlay:   rgba(232,225,213,0.8);
-  --game-card-bg:   rgba(245,240,230,0.88);
+  --main-bg:    #d2c5ae;
+  --card-bg:    #f2e9d9;
+  --surface-bg: #e5dcc3;
+  --accent:     #4a3728;
+  --accent2:    #634a35;
+  --text-white: #2c1e12;
+  --text-gray:  #5d4037;
+  --danger:     #991b1b;
+  --success:    #166534;
+  --star:       #b45309;
+  --border:     #c4b69d;
+  --scrollbar-thumb: rgba(74,55,40,0.2);
+  --scrollbar-thumb-hover: rgba(74,55,40,0.4);
+  --hover-bg:       rgba(74,55,40,0.06);
+  --track-bg:       rgba(0,0,0,0.05);
+  --accent-soft:    rgba(74,55,40,0.1);
+  --danger-soft:    rgba(153,27,27,0.1);
+  --success-soft:   rgba(22,101,52,0.1);
+  --star-soft:      rgba(180,83,9,0.12);
+  --overlay-bg:     rgba(210,197,174,0.95);
+  --active-nav-bg:  rgba(74,55,40,0.1);
+  --game-overlay:   rgba(210,197,174,0.8);
+  --game-card-bg:   rgba(242,233,217,0.88);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
-  --header-grad:    #8b4513;
-  --focus-ring:     rgba(44,62,80,0.15);
-  --danger-warn-bg: rgba(179,57,57,0.08);
-  --danger-warn-bdr:rgba(179,57,57,0.25);
-  --danger-warn-txt:#b33939;
+  --header-grad:    #634a35;
+  --focus-ring:     rgba(74,55,40,0.15);
+  --danger-warn-bg: rgba(153,27,27,0.08);
+  --danger-warn-bdr:rgba(153,27,27,0.25);
+  --danger-warn-txt:#991b1b;
   --heatmap-0: rgba(0,0,0,0.04);
   --heatmap-1: #c4b69d;
-  --heatmap-2: #8b4513;
-  --heatmap-3: #5c2e0b;
-  --heatmap-4: #2c3e50;
+  --heatmap-2: #8b6a4b;
+  --heatmap-3: #5d4037;
+  --heatmap-4: #4a3728;
 }
 
 [data-theme="ocean"] {
-  --main-bg:    #f0f4f8;
+  --main-bg:    #f1f5f9;
   --card-bg:    #ffffff;
-  --accent:     #0284c7;
-  --accent2:    #0d9488;
+  --surface-bg: #e2e8f0;
+  --accent:     #2563eb;
+  --accent2:    #1d4ed8;
   --text-white: #0f172a;
   --text-gray:  #64748b;
-  --danger:     #e11d48;
+  --danger:     #dc2626;
   --success:    #16a34a;
-  --star:       #f59e0b;
-  --border:     #e2e8f0;
-  --scrollbar-thumb: rgba(2,132,199,0.2);
-  --scrollbar-thumb-hover: rgba(2,132,199,0.4);
-  --hover-bg:       rgba(2,132,199,0.06);
-  --surface-bg:     rgba(0,0,0,0.03);
+  --star:       #eab308;
+  --border:     #cbd5e1;
+  --scrollbar-thumb: rgba(37,99,235,0.2);
+  --scrollbar-thumb-hover: rgba(37,99,235,0.4);
+  --hover-bg:       rgba(37,99,235,0.06);
   --track-bg:       rgba(0,0,0,0.05);
-  --accent-soft:    rgba(2,132,199,0.12);
-  --danger-soft:    rgba(225,29,72,0.1);
+  --accent-soft:    rgba(37,99,235,0.1);
+  --danger-soft:    rgba(220,38,38,0.1);
   --success-soft:   rgba(22,163,74,0.1);
-  --star-soft:      rgba(245,158,11,0.12);
-  --overlay-bg:     rgba(240,244,248,0.92);
-  --active-nav-bg:  rgba(2,132,199,0.1);
-  --game-overlay:   rgba(240,244,248,0.85);
+  --star-soft:      rgba(234,179,8,0.1);
+  --overlay-bg:     rgba(241,245,249,0.95);
+  --active-nav-bg:  rgba(37,99,235,0.1);
+  --game-overlay:   rgba(241,245,249,0.85);
   --game-card-bg:   rgba(255,255,255,0.92);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
-  --header-grad:    #0ea5e9;
-  --focus-ring:     rgba(2,132,199,0.15);
-  --danger-warn-bg: rgba(225,29,72,0.08);
-  --danger-warn-bdr:rgba(225,29,72,0.2);
-  --danger-warn-txt:#e11d48;
+  --header-grad:    #3b82f6;
+  --focus-ring:     rgba(37,99,235,0.15);
+  --danger-warn-bg: rgba(220,38,38,0.08);
+  --danger-warn-bdr:rgba(220,38,38,0.2);
+  --danger-warn-txt:#dc2626;
   --heatmap-0: rgba(0,0,0,0.04);
-  --heatmap-1: #bae6fd;
-  --heatmap-2: #38bdf8;
-  --heatmap-3: #0284c7;
-  --heatmap-4: #0369a1;
+  --heatmap-1: #bfdbfe;
+  --heatmap-2: #60a5fa;
+  --heatmap-3: #2563eb;
+  --heatmap-4: #1d4ed8;
 }
 
 :root {
@@ -403,7 +403,7 @@ body.view-transitioning .sidebar.open {
 }
 
 input, select, textarea {
-  width: 100%; background: var(--card-bg); color: var(--text-white);
+  width: 100%; background: var(--surface-bg); color: var(--text-white);
   border: 1px solid var(--border); padding: 12px 14px;
   border-radius: 10px; font-family: inherit; outline: none;
   font-size: 14px; transition: border-color 0.2s;
@@ -540,6 +540,7 @@ ul { list-style: none; padding: 0; margin: 0; }
   display: flex; justify-content: space-between; align-items: flex-start;
   border-right: 4px solid var(--accent); border-top: 1px solid var(--border);
   animation: slideIn 0.25s ease; transition: transform 0.15s; cursor: pointer;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 .word-card:hover { transform: translateX(-2px); }
 
@@ -880,8 +881,8 @@ ul { list-style: none; padding: 0; margin: 0; }
 .game-search-inner input {
   width: 100%;
   padding-right: 40px;
-  background: var(--card-bg);
-  border: 1px solid var(--accent);
+  background: var(--surface-bg);
+  border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-white);
   font-size: 14px;
@@ -1207,10 +1208,10 @@ body.game-bg-active .page-header h1 {
 .theme-preview {
   width:28px; height:28px; border-radius:50%; border:2px solid var(--border);
 }
-.preview-lootlingua { background:linear-gradient(135deg,#2563eb,#7c3aed); }
-.preview-golden    { background:linear-gradient(135deg,#d4af37,#9333ea); }
-.preview-scroll     { background:linear-gradient(135deg,#2c3e50,#8b4513); }
-.preview-ocean     { background:linear-gradient(135deg,#0284c7,#0d9488); }
+.preview-lootlingua { background:linear-gradient(135deg,#3b82f6,#6366f1); }
+.preview-golden    { background:linear-gradient(135deg,#b8860b,#9a7b0c); }
+.preview-scroll     { background:linear-gradient(135deg,#4a3728,#634a35); }
+.preview-ocean     { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 .theme-name { font-size:11px; font-weight:600; color:var(--text-gray); text-align:center; }
 .theme-option.active .theme-name { color:var(--accent); }
 
