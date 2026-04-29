@@ -223,7 +223,7 @@ function renderXPBar() {
   };
   if (!el.fill) return;
   el.fill.style.width      = pct+'%';
-  el.fill.style.background = `linear-gradient(90deg,${rank.color}ee,${rank.color}55)`;
+  el.fill.style.background = rank.color;
   if (el.lbl) { el.lbl.textContent=rank.label; el.lbl.style.color=rank.color; }
   if (el.ico)   el.ico.innerHTML = `<i class="${rank.iconClass}" aria-hidden="true"></i>`;
   if (el.val)   el.val.textContent = userXP+' XP';
