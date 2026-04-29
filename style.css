@@ -16,37 +16,37 @@
 
 /* ── Theme System ──────────────────────────── */
 [data-theme="lootlingua"] {
-  --main-bg:    #0f172a;
-  --card-bg:    #1e293b;
-  --accent:     #3b82f6;
-  --accent2:    #6366f1;
+  --main-bg:    #050b14;
+  --card-bg:    #0d1526;
+  --accent:     #2563eb;
+  --accent2:    #7c3aed;
   --text-white: #f8fafc;
   --text-gray:  #94a3b8;
   --danger:     #ef4444;
   --success:    #10b981;
   --star:       #f59e0b;
-  --border:     #334155;
-  --scrollbar-thumb: rgba(59,130,246,0.18);
-  --scrollbar-thumb-hover: rgba(59,130,246,0.35);
-  --hover-bg:       rgba(59,130,246,0.08);
-  --surface-bg:     rgba(255,255,255,0.04);
-  --track-bg:       rgba(255,255,255,0.08);
-  --accent-soft:    rgba(59,130,246,0.15);
+  --border:     #1e293b;
+  --scrollbar-thumb: rgba(37,99,235,0.25);
+  --scrollbar-thumb-hover: rgba(37,99,235,0.45);
+  --hover-bg:       rgba(37,99,235,0.1);
+  --surface-bg:     rgba(255,255,255,0.03);
+  --track-bg:       rgba(255,255,255,0.06);
+  --accent-soft:    rgba(37,99,235,0.15);
   --danger-soft:    rgba(239,68,68,0.15);
   --success-soft:   rgba(16,185,129,0.15);
   --star-soft:      rgba(245,158,11,0.15);
-  --overlay-bg:     rgba(8,15,30,0.9);
-  --active-nav-bg: rgba(59,130,246,0.12);
-  --game-overlay:   rgba(8,15,30,0.72);
-  --game-card-bg:   rgba(30,41,59,0.78);
+  --overlay-bg:     rgba(5,11,20,0.92);
+  --active-nav-bg:  rgba(37,99,235,0.12);
+  --game-overlay:   rgba(5,11,20,0.75);
+  --game-card-bg:   rgba(13,21,38,0.82);
   --text-on-accent: #ffffff;
   --text-on-star:   #1a1a1a;
-  --header-grad:    #7dd3fc;
-  --focus-ring:     rgba(99,102,241,0.15);
-  --danger-warn-bg:   rgba(239,68,68,0.12);
-  --danger-warn-bdr:  rgba(239,68,68,0.3);
-  --danger-warn-txt:  #fca5a5;
-  --heatmap-0: rgba(255,255,255,0.05);
+  --header-grad:    #60a5fa;
+  --focus-ring:     rgba(124,58,237,0.2);
+  --danger-warn-bg: rgba(239,68,68,0.12);
+  --danger-warn-bdr:rgba(239,68,68,0.3);
+  --danger-warn-txt:#fca5a5;
+  --heatmap-0: rgba(255,255,255,0.04);
   --heatmap-1: #1e3a5f;
   --heatmap-2: #1d4ed8;
   --heatmap-3: #3b82f6;
@@ -54,117 +54,117 @@
 }
 
 [data-theme="golden"] {
-  --main-bg:    #0f0f0f;
-  --card-bg:    #1a1a1a;
-  --accent:     #f5c518;
-  --accent2:    #d4af37;
+  --main-bg:    #0a0a0a;
+  --card-bg:    #141414;
+  --accent:     #d4af37;
+  --accent2:    #9333ea;
   --text-white: #ffffff;
-  --text-gray:  #9ca3af;
-  --danger:     #ef4444;
-  --success:    #10b981;
-  --star:       #f5c518;
-  --border:     #2a2a2a;
-  --scrollbar-thumb: rgba(245, 197, 24, 0.25);
-  --scrollbar-thumb-hover: rgba(245, 197, 24, 0.45);
-  --hover-bg:       rgba(245, 197, 24, 0.08);
-  --surface-bg:     rgba(255, 255, 255, 0.03);
-  --track-bg:       rgba(255, 255, 255, 0.08);
-  --accent-soft:    rgba(245, 197, 24, 0.15);
-  --danger-soft:    rgba(239, 68, 68, 0.15);
-  --success-soft:   rgba(16, 185, 129, 0.15);
-  --star-soft:      rgba(245, 197, 24, 0.15);
-  --overlay-bg:     rgba(15, 15, 15, 0.92);
-  --active-nav-bg:  rgba(245, 197, 24, 0.12);
-  --game-overlay:   rgba(15, 15, 15, 0.75);
-  --game-card-bg:   rgba(26, 26, 26, 0.82);
+  --text-gray:  #a1a1aa;
+  --danger:     #e11d48;
+  --success:    #059669;
+  --star:       #fcd34d;
+  --border:     #27272a;
+  --scrollbar-thumb: rgba(212,175,55,0.25);
+  --scrollbar-thumb-hover: rgba(212,175,55,0.45);
+  --hover-bg:       rgba(212,175,55,0.08);
+  --surface-bg:     rgba(255,255,255,0.03);
+  --track-bg:       rgba(255,255,255,0.06);
+  --accent-soft:    rgba(212,175,55,0.12);
+  --danger-soft:    rgba(225,29,72,0.15);
+  --success-soft:   rgba(5,150,105,0.15);
+  --star-soft:      rgba(252,211,77,0.15);
+  --overlay-bg:     rgba(10,10,10,0.92);
+  --active-nav-bg:  rgba(212,175,55,0.12);
+  --game-overlay:   rgba(10,10,10,0.8);
+  --game-card-bg:   rgba(20,20,20,0.85);
   --text-on-accent: #000000;
   --text-on-star:   #000000;
-  --header-grad:    #ffe066;
-  --focus-ring:     rgba(245, 197, 24, 0.2);
-  --danger-warn-bg: rgba(239, 68, 68, 0.12);
-  --danger-warn-bdr:rgba(239, 68, 68, 0.3);
-  --danger-warn-txt:#fca5a5;
-  --heatmap-0: rgba(255, 255, 255, 0.05);
+  --header-grad:    #fde047;
+  --focus-ring:     rgba(212,175,55,0.2);
+  --danger-warn-bg: rgba(225,29,72,0.12);
+  --danger-warn-bdr:rgba(225,29,72,0.3);
+  --danger-warn-txt:#fda4af;
+  --heatmap-0: rgba(255,255,255,0.05);
   --heatmap-1: #4a3c05;
   --heatmap-2: #8b710a;
   --heatmap-3: #c29d0d;
-  --heatmap-4: #f5c518;
+  --heatmap-4: #d4af37;
 }
 
 [data-theme="scroll"] {
-  --main-bg:    #f0e6d3;
-  --card-bg:    #fffdf5;
-  --accent:     #8b4513;
-  --accent2:    #a0522d;
-  --text-white: #2d1f14;
-  --text-gray:  #5c4a3a;
-  --danger:     #c0392b;
-  --success:    #27ae60;
+  --main-bg:    #e8e1d5;
+  --card-bg:    #f5f0e6;
+  --accent:     #2c3e50;
+  --accent2:    #8b4513;
+  --text-white: #1a1a1a;
+  --text-gray:  #5c5c5c;
+  --danger:     #b33939;
+  --success:    #218c53;
   --star:       #d4a017;
-  --border:     #c4b896;
-  --scrollbar-thumb: rgba(139,69,19,0.18);
-  --scrollbar-thumb-hover: rgba(139,69,19,0.35);
-  --hover-bg:       rgba(139,69,19,0.08);
-  --surface-bg:     rgba(139,69,19,0.06);
-  --track-bg:       rgba(139,69,19,0.1);
-  --accent-soft:    rgba(139,69,19,0.12);
-  --danger-soft:    rgba(192,57,43,0.12);
-  --success-soft:   rgba(39,174,96,0.12);
+  --border:     #d1c7b8;
+  --scrollbar-thumb: rgba(44,62,80,0.2);
+  --scrollbar-thumb-hover: rgba(44,62,80,0.4);
+  --hover-bg:       rgba(44,62,80,0.06);
+  --surface-bg:     rgba(0,0,0,0.04);
+  --track-bg:       rgba(0,0,0,0.06);
+  --accent-soft:    rgba(44,62,80,0.1);
+  --danger-soft:    rgba(179,57,57,0.1);
+  --success-soft:   rgba(33,140,83,0.1);
   --star-soft:      rgba(212,160,23,0.12);
-  --overlay-bg:     rgba(240,230,211,0.92);
-  --active-nav-bg: rgba(139,69,19,0.12);
-  --game-overlay:   rgba(240,230,211,0.72);
-  --game-card-bg:   rgba(255,253,245,0.85);
-  --text-on-accent: #fffdf5;
-  --text-on-star:   #2d1f14;
-  --header-grad:    #a0522d;
-  --focus-ring:     rgba(160,82,45,0.15);
-  --danger-warn-bg:   rgba(192,57,43,0.1);
-  --danger-warn-bdr:  rgba(192,57,43,0.25);
-  --danger-warn-txt:  #c0392b;
-  --heatmap-0: rgba(139,69,19,0.06);
-  --heatmap-1: #d4c4a8;
-  --heatmap-2: #a0522d;
-  --heatmap-3: #8b4513;
-  --heatmap-4: #6b3410;
-}
-
-[data-theme="white"] {
-  --main-bg:    #f3f4f6;
-  --card-bg:    #ffffff;
-  --accent:     #dc2626;
-  --accent2:    #b91c1c;
-  --text-white: #111827;
-  --text-gray:  #6b7280;
-  --danger:     #ef4444;
-  --success:    #16a34a;
-  --star:       #f59e0b;
-  --border:     #e5e7eb;
-  --scrollbar-thumb: rgba(220, 38, 38, 0.2);
-  --scrollbar-thumb-hover: rgba(220, 38, 38, 0.4);
-  --hover-bg:       rgba(220, 38, 38, 0.05);
-  --surface-bg:     rgba(0, 0, 0, 0.03);
-  --track-bg:       rgba(0, 0, 0, 0.06);
-  --accent-soft:    rgba(220, 38, 38, 0.12);
-  --danger-soft:    rgba(239, 68, 68, 0.12);
-  --success-soft:   rgba(22, 163, 74, 0.12);
-  --star-soft:      rgba(245, 158, 11, 0.12);
-  --overlay-bg:     rgba(255, 255, 255, 0.92);
-  --active-nav-bg:  rgba(220, 38, 38, 0.1);
-  --game-overlay:   rgba(255, 255, 255, 0.85);
-  --game-card-bg:   rgba(255, 255, 255, 0.95);
+  --overlay-bg:     rgba(232,225,213,0.92);
+  --active-nav-bg:  rgba(44,62,80,0.1);
+  --game-overlay:   rgba(232,225,213,0.8);
+  --game-card-bg:   rgba(245,240,230,0.88);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
-  --header-grad:    #ef4444;
-  --focus-ring:     rgba(220, 38, 38, 0.15);
-  --danger-warn-bg: rgba(239, 68, 68, 0.08);
-  --danger-warn-bdr:rgba(239, 68, 68, 0.2);
-  --danger-warn-txt:#dc2626;
-  --heatmap-0: rgba(0, 0, 0, 0.05);
-  --heatmap-1: #fca5a5;
-  --heatmap-2: #ef4444;
-  --heatmap-3: #dc2626;
-  --heatmap-4: #991b1b;
+  --header-grad:    #8b4513;
+  --focus-ring:     rgba(44,62,80,0.15);
+  --danger-warn-bg: rgba(179,57,57,0.08);
+  --danger-warn-bdr:rgba(179,57,57,0.25);
+  --danger-warn-txt:#b33939;
+  --heatmap-0: rgba(0,0,0,0.04);
+  --heatmap-1: #c4b69d;
+  --heatmap-2: #8b4513;
+  --heatmap-3: #5c2e0b;
+  --heatmap-4: #2c3e50;
+}
+
+[data-theme="ocean"] {
+  --main-bg:    #f0f4f8;
+  --card-bg:    #ffffff;
+  --accent:     #0284c7;
+  --accent2:    #0d9488;
+  --text-white: #0f172a;
+  --text-gray:  #64748b;
+  --danger:     #e11d48;
+  --success:    #16a34a;
+  --star:       #f59e0b;
+  --border:     #e2e8f0;
+  --scrollbar-thumb: rgba(2,132,199,0.2);
+  --scrollbar-thumb-hover: rgba(2,132,199,0.4);
+  --hover-bg:       rgba(2,132,199,0.06);
+  --surface-bg:     rgba(0,0,0,0.03);
+  --track-bg:       rgba(0,0,0,0.05);
+  --accent-soft:    rgba(2,132,199,0.12);
+  --danger-soft:    rgba(225,29,72,0.1);
+  --success-soft:   rgba(22,163,74,0.1);
+  --star-soft:      rgba(245,158,11,0.12);
+  --overlay-bg:     rgba(240,244,248,0.92);
+  --active-nav-bg:  rgba(2,132,199,0.1);
+  --game-overlay:   rgba(240,244,248,0.85);
+  --game-card-bg:   rgba(255,255,255,0.92);
+  --text-on-accent: #ffffff;
+  --text-on-star:   #ffffff;
+  --header-grad:    #0ea5e9;
+  --focus-ring:     rgba(2,132,199,0.15);
+  --danger-warn-bg: rgba(225,29,72,0.08);
+  --danger-warn-bdr:rgba(225,29,72,0.2);
+  --danger-warn-txt:#e11d48;
+  --heatmap-0: rgba(0,0,0,0.04);
+  --heatmap-1: #bae6fd;
+  --heatmap-2: #38bdf8;
+  --heatmap-3: #0284c7;
+  --heatmap-4: #0369a1;
 }
 
 :root {
@@ -1207,10 +1207,10 @@ body.game-bg-active .page-header h1 {
 .theme-preview {
   width:28px; height:28px; border-radius:50%; border:2px solid var(--border);
 }
-.preview-lootlingua { background:linear-gradient(135deg,#3b82f6,#6366f1); }
-.preview-golden    { background:linear-gradient(135deg,#f5c518,#d4af37); }
-.preview-scroll     { background:linear-gradient(135deg,#8b4513,#a0522d); }
-.preview-white     { background:linear-gradient(135deg,#ef4444,#dc2626); }
+.preview-lootlingua { background:linear-gradient(135deg,#2563eb,#7c3aed); }
+.preview-golden    { background:linear-gradient(135deg,#d4af37,#9333ea); }
+.preview-scroll     { background:linear-gradient(135deg,#2c3e50,#8b4513); }
+.preview-ocean     { background:linear-gradient(135deg,#0284c7,#0d9488); }
 .theme-name { font-size:11px; font-weight:600; color:var(--text-gray); text-align:center; }
 .theme-option.active .theme-name { color:var(--accent); }
 
