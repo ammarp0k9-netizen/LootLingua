@@ -108,35 +108,35 @@
 }
 
 [data-theme="scroll"] {
-  --main-bg:    #c4b69d;
-  --card-bg:    #faf6f0;
-  --surface-bg: #e8dec8;
-  --accent:     #3d2b1f;
-  --accent2:    #5c4033;
+  --main-bg:    #b8a88e;
+  --card-bg:    #e8e0d4;
+  --surface-bg: #d4c8b8;
+  --accent:     #2d1f16;
+  --accent2:    #4a3528;
   --text-white: #1a120b;
-  --text-gray:  #4a3728;
+  --text-gray:  #5c4030;
   --danger:     #991b1b;
   --success:    #166534;
   --star:       #b45309;
-  --border:     #a89880;
-  --scrollbar-thumb: rgba(74,55,40,0.2);
-  --scrollbar-thumb-hover: rgba(74,55,40,0.4);
-  --hover-bg:       rgba(74,55,40,0.06);
-  --track-bg:       rgba(0,0,0,0.05);
-  --accent-soft:    rgba(74,55,40,0.1);
-  --danger-soft:    rgba(153,27,27,0.1);
-  --success-soft:   rgba(22,101,52,0.1);
-  --star-soft:      rgba(180,83,9,0.12);
-  --overlay-bg:     rgba(210,197,174,0.95);
-  --active-nav-bg:  rgba(74,55,40,0.1);
-  --game-overlay:   rgba(196,182,157,0.92);
-  --game-card-bg:   rgba(250,246,240,0.95);
+  --border:     #9c8b72;
+  --scrollbar-thumb: rgba(74,55,40,0.25);
+  --scrollbar-thumb-hover: rgba(74,55,40,0.45);
+  --hover-bg:       rgba(74,55,40,0.08);
+  --track-bg:       rgba(0,0,0,0.08);
+  --accent-soft:    rgba(74,55,40,0.12);
+  --danger-soft:    rgba(153,27,27,0.12);
+  --success-soft:   rgba(22,101,52,0.12);
+  --star-soft:      rgba(180,83,9,0.15);
+  --overlay-bg:     rgba(184,172,142,0.95);
+  --active-nav-bg:  rgba(74,55,40,0.12);
+  --game-overlay:   rgba(184,172,142,0.88);
+  --game-card-bg:   rgba(232,224,212,0.75);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
   --header-grad:    #634a35;
-  --focus-ring:     rgba(74,55,40,0.15);
-  --danger-warn-bg: rgba(153,27,27,0.08);
-  --danger-warn-bdr:rgba(153,27,27,0.25);
+  --focus-ring:     rgba(74,55,40,0.2);
+  --danger-warn-bg: rgba(153,27,27,0.1);
+  --danger-warn-bdr:rgba(153,27,27,0.3);
   --danger-warn-txt:#991b1b;
   --heatmap-0: rgba(0,0,0,0.04);
   --heatmap-1: #c4b69d;
@@ -154,35 +154,35 @@
 }
 
 [data-theme="ocean"] {
-  --main-bg:    #e2e8f0;
-  --card-bg:    #f8fafc;
-  --surface-bg: #cbd5e1;
-  --accent:     #2563eb;
-  --accent2:    #1d4ed8;
+  --main-bg:    #cbd5e1;
+  --card-bg:    #e2e8f0;
+  --surface-bg: #b4c4d4;
+  --accent:     #1e40af;
+  --accent2:    #1e3a8a;
   --text-white: #0f172a;
-  --text-gray:  #475569;
+  --text-gray:  #334155;
   --danger:     #dc2626;
   --success:    #16a34a;
-  --star:       #eab308;
-  --border:     #94a3b8;
-  --scrollbar-thumb: rgba(37,99,235,0.2);
-  --scrollbar-thumb-hover: rgba(37,99,235,0.4);
-  --hover-bg:       rgba(37,99,235,0.06);
-  --track-bg:       rgba(0,0,0,0.05);
-  --accent-soft:    rgba(37,99,235,0.1);
-  --danger-soft:    rgba(220,38,38,0.1);
-  --success-soft:   rgba(22,163,74,0.1);
-  --star-soft:      rgba(234,179,8,0.1);
-  --overlay-bg:     rgba(241,245,249,0.95);
-  --active-nav-bg:  rgba(37,99,235,0.1);
-  --game-overlay:   rgba(203,213,225,0.9);
-  --game-card-bg:   rgba(248,250,252,0.97);
+  --star:       #ca8a04;
+  --border:     #64748b;
+  --scrollbar-thumb: rgba(37,99,235,0.25);
+  --scrollbar-thumb-hover: rgba(37,99,235,0.45);
+  --hover-bg:       rgba(37,99,235,0.08);
+  --track-bg:       rgba(0,0,0,0.08);
+  --accent-soft:    rgba(37,99,235,0.12);
+  --danger-soft:    rgba(220,38,38,0.12);
+  --success-soft:   rgba(22,163,74,0.12);
+  --star-soft:      rgba(202,138,4,0.15);
+  --overlay-bg:     rgba(203,213,225,0.95);
+  --active-nav-bg:  rgba(37,99,235,0.12);
+  --game-overlay:   rgba(203,213,225,0.85);
+  --game-card-bg:   rgba(226,232,240,0.72);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
   --header-grad:    #3b82f6;
-  --focus-ring:     rgba(37,99,235,0.15);
-  --danger-warn-bg: rgba(220,38,38,0.08);
-  --danger-warn-bdr:rgba(220,38,38,0.2);
+  --focus-ring:     rgba(37,99,235,0.2);
+  --danger-warn-bg: rgba(220,38,38,0.1);
+  --danger-warn-bdr:rgba(220,38,38,0.3);
   --danger-warn-txt:#dc2626;
   --heatmap-0: rgba(0,0,0,0.04);
   --heatmap-1: #bfdbfe;
@@ -431,6 +431,27 @@ body.view-transitioning .sidebar.open {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
 }
 
+/* للصفحات اللي فيها خلفية ألعاب - عنوان أوضح */
+body.game-bg-active .page-header {
+  background: var(--game-card-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--accent);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  margin-bottom: 20px;
+}
+
+body.game-bg-active .page-header h1 {
+  background: none;
+  -webkit-background-clip: initial;
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  color: var(--text-white);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
 
 /* ── Card Box ─────────────────────────────── */
 .card-box {
@@ -438,13 +459,22 @@ body.view-transitioning .sidebar.open {
   border-radius: 16px; margin-bottom: 18px; border: 1px solid var(--border);
 }
 
+/* للثيمات الفاتحة - صندوق البطاقات أوضح */
+[data-theme="ocean"] .card-box,
+[data-theme="scroll"] .card-box {
+  background: var(--surface-bg);
+  border: 2px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+
 input, select, textarea {
   width: 100%; background: var(--surface-bg); color: var(--text-white);
   border: 1px solid var(--border); padding: 12px 14px;
   border-radius: 10px; font-family: inherit; outline: none;
-  font-size: 14px; transition: border-color 0.2s;
+  font-size: 14px; transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.08);
 }
-input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: inset 0 2px 4px rgba(0,0,0,0.05), 0 0 0 3px var(--focus-ring); }
 textarea { resize: vertical; }
 select option { background: var(--card-bg); color: var(--text-white); }
 
@@ -580,11 +610,13 @@ ul { list-style: none; padding: 0; margin: 0; }
 }
 .word-card:hover { transform: translateX(-2px); }
 
-/* للثيمات الفاتحة - ظل أوضح للبطاقات */
+/* للثيمات الفاتحة - ظل أوضح للبطاقات مع تباين */
 [data-theme="ocean"] .word-card,
 [data-theme="scroll"] .word-card {
-  box-shadow: 0 4px 12px -1px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
-  border-top: 1px solid var(--surface-bg);
+  background: var(--surface-bg);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.12), 0 2px 8px -1px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border);
+  border-right: 4px solid var(--accent);
 }
 
 @keyframes slideIn {
@@ -878,11 +910,13 @@ ul { list-style: none; padding: 0; margin: 0; }
   display: flex; justify-content: space-between; align-items: center;
   box-shadow: 0 4px 15px rgba(0,0,0,0.3); animation: slideIn 0.25s ease;
 }
-/* للثيمات الفاتحة - كروت اللعبة أوضح */
+/* للثيمات الفاتحة - كروت اللعبة شفافة تبين الخلفية */
 [data-theme="ocean"] .game-card,
 [data-theme="scroll"] .game-card {
   background: var(--game-card-bg);
-  box-shadow: 0 6px 24px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.12);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1);
   border: 2px solid var(--accent);
 }
 
@@ -912,6 +946,78 @@ ul { list-style: none; padding: 0; margin: 0; }
   .quiz-sound-btn { width: 40px; height: 40px; font-size: 18px; }
   .game-card { flex-direction: column; align-items: flex-start; gap: 12px; }
   .btn-add-mine { width: 100%; text-align: center; }
+}
+
+/* ══════════════════════════════════════════
+   GAME HEADER BAR (لرأس صفحة الألعاب)
+   ══════════════════════════════════════════ */
+.game-header-bar {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.game-header-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-white);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-stats-btn {
+  background: var(--surface-bg);
+  border: 1px solid var(--border);
+  color: var(--text-white);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-stats-btn:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+}
+
+.game-word-count {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px var(--accent-soft);
+}
+
+/* للثيمات الفاتحة - رأس الصفحة أوضح */
+[data-theme="ocean"] .game-header-bar,
+[data-theme="scroll"] .game-header-bar {
+  background: var(--surface-bg);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  border: 2px solid var(--border);
 }
 
 /* ══════════════════════════════════════════
@@ -954,6 +1060,14 @@ ul { list-style: none; padding: 0; margin: 0; }
 
 .game-search-inner input::placeholder {
   color: var(--text-gray);
+}
+
+/* للثيمات الفاتحة - حقل البحث أوضح */
+[data-theme="ocean"] .game-search-inner input,
+[data-theme="scroll"] .game-search-inner input {
+  background: var(--card-bg);
+  border: 2px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 /* مثال الجملة داخل game-card */
@@ -1284,8 +1398,8 @@ body.game-bg-active .page-header h1 {
 }
 .preview-lootlingua { background:linear-gradient(135deg,#3b82f6,#6366f1); }
 .preview-golden    { background:linear-gradient(135deg,#c9a227,#7c3aed); }
-.preview-scroll     { background:linear-gradient(135deg,#3d2b1f,#5c4033); }
-.preview-ocean     { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+.preview-scroll     { background:linear-gradient(135deg,#2d1f16,#5c4033); }
+.preview-ocean     { background:linear-gradient(135deg,#1e40af,#3b82f6); }
 .theme-name { font-size:11px; font-weight:600; color:var(--text-gray); text-align:center; }
 .theme-option.active .theme-name { color:var(--accent); }
 
@@ -1316,6 +1430,14 @@ body.game-bg-active .page-header h1 {
   border-radius:20px; padding:24px; width:100%; max-width:620px;
   animation:slideUp .35s ease;
 }
+
+/* للثيمات الفاتحة - صندوق الإحصائيات أوضح */
+[data-theme="ocean"] .stats-box,
+[data-theme="scroll"] .stats-box {
+  background: var(--surface-bg);
+  border: 2px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
 .stats-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
 .stats-header h2 { margin:0; font-size:18px; color:var(--text-white); }
 .stats-close { background:none; border:none; color:var(--text-gray); font-size:20px; cursor:pointer; padding:4px 8px; border-radius:6px; }
@@ -1324,11 +1446,12 @@ body.game-bg-active .page-header h1 {
 @media(max-width:400px){.stats-grid{grid-template-columns:repeat(2,1fr);}}
 .stat-card { background:var(--surface-bg); border:1px solid var(--border); border-radius:12px; padding:14px 12px; text-align:center; }
 
-/* للثيمات الفاتحة - كروت الإحصائيات أوضح */
+/* للثيمات الفاتحة - كروت الإحصائيات أغمق وأوضح */
 [data-theme="ocean"] .stat-card,
 [data-theme="scroll"] .stat-card {
-  background: var(--card-bg);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  background: var(--surface-bg);
+  box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+  border: 2px solid var(--border);
 }
 .stat-val { font-size:22px; font-weight:700; color:var(--accent); margin-bottom:4px; }
 .stat-lbl { font-size:11px; color:var(--text-gray); }
