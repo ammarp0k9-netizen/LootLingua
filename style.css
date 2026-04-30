@@ -65,14 +65,14 @@
   --main-bg:    #0a0a0a;
   --card-bg:    #171717;
   --surface-bg: #262626;
-  --accent:     #b8860b;
-  --accent2:    #9a7b0c;
+  --accent:     #c9a227;
+  --accent2:    #7c3aed;
   --text-white: #ffffff;
   --text-gray:  #a1a1aa;
   --danger:     #dc2626;
-  --success:    #16a34a;
-  --star:       #fbbf24;
-  --border:     #262626;
+  --success:    #10b981;
+  --star:       #f59e0b;
+  --border:     #27272a;
   --scrollbar-thumb: rgba(184,134,11,0.25);
   --scrollbar-thumb-hover: rgba(184,134,11,0.45);
   --hover-bg:       rgba(184,134,11,0.08);
@@ -83,8 +83,8 @@
   --star-soft:      rgba(251,191,36,0.15);
   --overlay-bg:     rgba(10,10,10,0.95);
   --active-nav-bg:  rgba(184,134,11,0.12);
-  --game-overlay:   rgba(10,10,10,0.8);
-  --game-card-bg:   rgba(23,23,23,0.85);
+  --game-overlay:   rgba(10,10,10,0.85);
+  --game-card-bg:   rgba(23,23,23,0.9);
   --text-on-accent: #ffffff;
   --text-on-star:   #000000;
   --header-grad:    #fbbf24;
@@ -108,17 +108,17 @@
 }
 
 [data-theme="scroll"] {
-  --main-bg:    #d2c5ae;
-  --card-bg:    #f2e9d9;
-  --surface-bg: #e5dcc3;
-  --accent:     #4a3728;
-  --accent2:    #634a35;
-  --text-white: #2c1e12;
-  --text-gray:  #5d4037;
+  --main-bg:    #c4b69d;
+  --card-bg:    #faf6f0;
+  --surface-bg: #e8dec8;
+  --accent:     #3d2b1f;
+  --accent2:    #5c4033;
+  --text-white: #1a120b;
+  --text-gray:  #4a3728;
   --danger:     #991b1b;
   --success:    #166534;
   --star:       #b45309;
-  --border:     #c4b69d;
+  --border:     #a89880;
   --scrollbar-thumb: rgba(74,55,40,0.2);
   --scrollbar-thumb-hover: rgba(74,55,40,0.4);
   --hover-bg:       rgba(74,55,40,0.06);
@@ -129,8 +129,8 @@
   --star-soft:      rgba(180,83,9,0.12);
   --overlay-bg:     rgba(210,197,174,0.95);
   --active-nav-bg:  rgba(74,55,40,0.1);
-  --game-overlay:   rgba(210,197,174,0.8);
-  --game-card-bg:   rgba(242,233,217,0.88);
+  --game-overlay:   rgba(196,182,157,0.92);
+  --game-card-bg:   rgba(250,246,240,0.95);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
   --header-grad:    #634a35;
@@ -154,17 +154,17 @@
 }
 
 [data-theme="ocean"] {
-  --main-bg:    #f1f5f9;
-  --card-bg:    #ffffff;
-  --surface-bg: #e2e8f0;
+  --main-bg:    #e2e8f0;
+  --card-bg:    #f8fafc;
+  --surface-bg: #cbd5e1;
   --accent:     #2563eb;
   --accent2:    #1d4ed8;
   --text-white: #0f172a;
-  --text-gray:  #64748b;
+  --text-gray:  #475569;
   --danger:     #dc2626;
   --success:    #16a34a;
   --star:       #eab308;
-  --border:     #cbd5e1;
+  --border:     #94a3b8;
   --scrollbar-thumb: rgba(37,99,235,0.2);
   --scrollbar-thumb-hover: rgba(37,99,235,0.4);
   --hover-bg:       rgba(37,99,235,0.06);
@@ -175,8 +175,8 @@
   --star-soft:      rgba(234,179,8,0.1);
   --overlay-bg:     rgba(241,245,249,0.95);
   --active-nav-bg:  rgba(37,99,235,0.1);
-  --game-overlay:   rgba(241,245,249,0.85);
-  --game-card-bg:   rgba(255,255,255,0.92);
+  --game-overlay:   rgba(203,213,225,0.9);
+  --game-card-bg:   rgba(248,250,252,0.97);
   --text-on-accent: #ffffff;
   --text-on-star:   #ffffff;
   --header-grad:    #3b82f6;
@@ -580,6 +580,13 @@ ul { list-style: none; padding: 0; margin: 0; }
 }
 .word-card:hover { transform: translateX(-2px); }
 
+/* للثيمات الفاتحة - ظل أوضح للبطاقات */
+[data-theme="ocean"] .word-card,
+[data-theme="scroll"] .word-card {
+  box-shadow: 0 4px 12px -1px rgba(0, 0, 0, 0.12), 0 2px 6px -1px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--surface-bg);
+}
+
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -749,6 +756,13 @@ ul { list-style: none; padding: 0; margin: 0; }
 .btn-starred { background: var(--star); color: var(--text-on-star); }
 .btn-all     { background: var(--main-bg); border: 1px solid var(--border); color: var(--text-white); }
 
+/* Golden Theme - ألوان فاخرة متنوعة للاختبار */
+[data-theme="golden"] .btn-new     { background: linear-gradient(135deg, #c9a227, #b8860b); }
+[data-theme="golden"] .btn-forgot  { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+[data-theme="golden"] .btn-old     { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
+[data-theme="golden"] .btn-starred { background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; }
+[data-theme="golden"] .btn-all     { background: #262626; border: 1px solid #404040; color: #ffffff; }
+
 .btn-close-quiz {
   background: transparent; color: var(--text-gray);
   text-decoration: underline; margin-top: 12px;
@@ -864,6 +878,14 @@ ul { list-style: none; padding: 0; margin: 0; }
   display: flex; justify-content: space-between; align-items: center;
   box-shadow: 0 4px 15px rgba(0,0,0,0.3); animation: slideIn 0.25s ease;
 }
+/* للثيمات الفاتحة - كروت اللعبة أوضح */
+[data-theme="ocean"] .game-card,
+[data-theme="scroll"] .game-card {
+  background: var(--game-card-bg);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.12);
+  border: 2px solid var(--accent);
+}
+
 .game-info { display: flex; align-items: center; gap: 15px; }
 .game-icon {
   width: 50px; height: 50px; border-radius: 8px;
@@ -1020,12 +1042,25 @@ body.game-bg-active .main-content {
 /* game-card يصبح أكثر شفافية لتبين الخلفية قليلاً */
 body.game-bg-active .game-card {
   background: var(--game-card-bg);
-  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--accent);
 }
 
 body.game-bg-active .page-header h1 {
   text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+}
+
+/* للثيمات الفاتحة - خلفية الألعاب تكون أوضح */
+[data-theme="ocean"].game-bg-active::before,
+[data-theme="scroll"].game-bg-active::before {
+  filter: blur(2px) brightness(0.7) saturate(0.8);
+  background-blend-mode: normal;
+}
+
+[data-theme="ocean"].game-bg-active .game-card,
+[data-theme="scroll"].game-bg-active .game-card {
+  backdrop-filter: blur(12px) saturate(1.1); -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
 
 /* ══════════════════════════════════════════
@@ -1248,8 +1283,8 @@ body.game-bg-active .page-header h1 {
   width:28px; height:28px; border-radius:50%; border:2px solid var(--border);
 }
 .preview-lootlingua { background:linear-gradient(135deg,#3b82f6,#6366f1); }
-.preview-golden    { background:linear-gradient(135deg,#b8860b,#9a7b0c); }
-.preview-scroll     { background:linear-gradient(135deg,#4a3728,#634a35); }
+.preview-golden    { background:linear-gradient(135deg,#c9a227,#7c3aed); }
+.preview-scroll     { background:linear-gradient(135deg,#3d2b1f,#5c4033); }
 .preview-ocean     { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
 .theme-name { font-size:11px; font-weight:600; color:var(--text-gray); text-align:center; }
 .theme-option.active .theme-name { color:var(--accent); }
@@ -1287,7 +1322,14 @@ body.game-bg-active .page-header h1 {
 .stats-close:hover { background:var(--border); color:var(--text-white); }
 .stats-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
 @media(max-width:400px){.stats-grid{grid-template-columns:repeat(2,1fr);}}
-.stat-card { background:var(--main-bg); border:1px solid var(--border); border-radius:12px; padding:14px 12px; text-align:center; }
+.stat-card { background:var(--surface-bg); border:1px solid var(--border); border-radius:12px; padding:14px 12px; text-align:center; }
+
+/* للثيمات الفاتحة - كروت الإحصائيات أوضح */
+[data-theme="ocean"] .stat-card,
+[data-theme="scroll"] .stat-card {
+  background: var(--card-bg);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
 .stat-val { font-size:22px; font-weight:700; color:var(--accent); margin-bottom:4px; }
 .stat-lbl { font-size:11px; color:var(--text-gray); }
 
