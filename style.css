@@ -108,7 +108,7 @@
 }
 
 [data-theme="scroll"] {
-  --main-bg:    #b8a88e;
+  --main-bg:    #eee8dd;
   --card-bg:    #e8e0d4;
   --surface-bg: #d4c8b8;
   --accent:     #2d1f16;
@@ -197,6 +197,76 @@
   --tag-general: #475569;
   --tag-adverb: #2563eb;
   --tag-game: #d97706;
+}
+
+[data-theme="glass"] {
+  /* نظام الزجاج المتكامل - Glass System */
+  --glass-bg-1:     rgba(255, 255, 255, 0.15);   /* للطبقات الخلفية */
+  --glass-bg-2:     rgba(255, 255, 255, 0.25);   /* للبطاقات العادية */
+  --glass-bg-3:     rgba(255, 255, 255, 0.35);   /* للعناصر الأمامية */
+  --glass-bg-input: rgba(255, 255, 255, 0.40);   /* للمدخلات */
+  
+  --glass-border-1: rgba(255, 255, 255, 0.35);   /* حدود خفيفة */
+  --glass-border-2: rgba(255, 255, 255, 0.50);   /* حدود واضحة */
+  --glass-border-3: rgba(255, 255, 255, 0.70);   /* حدود بيضاء */
+  
+  --glass-blur-bg:    20px;
+  --glass-blur-card:  16px;
+  --glass-blur-input: 12px;
+  --glass-saturation: 100%;
+  
+  --glass-shadow-soft:  0 4px 24px rgba(31, 38, 135, 0.12);
+  --glass-shadow-medium: 0 8px 32px rgba(31, 38, 135, 0.15);
+  --glass-shadow-strong: 0 16px 48px rgba(31, 38, 135, 0.20);
+  --glass-inner-glow: inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  
+  /* الألوان الأساسية */
+  --main-bg:    linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --card-bg:    var(--glass-bg-2);
+  --surface-bg: var(--glass-bg-input);
+  --accent:     #0ea5e9;
+  --accent2:    #06b6d4;
+  --text-white: #1e293b;
+  --text-gray:  #475569;
+  --danger:     #ef4444;
+  --success:    #10b981;
+  --star:       #f59e0b;
+  --border:     var(--glass-border-2);
+  --glass-blur: 4px;
+  --glass-saturation: 100%;
+  --scrollbar-thumb: rgba(14,165,233,0.3);
+  --scrollbar-thumb-hover: rgba(14,165,233,0.5);
+  --hover-bg:       rgba(255,255,255,0.15);
+  --track-bg:       rgba(255,255,255,0.1);
+  --accent-soft:    rgba(14,165,233,0.15);
+  --danger-soft:    rgba(239,68,68,0.15);
+  --success-soft:   rgba(16,185,129,0.15);
+  --star-soft:      rgba(245,158,11,0.2);
+  --overlay-bg:     rgba(15,23,42,0.85);
+  --active-nav-bg:  rgba(255,255,255,0.2);
+  --game-overlay:   rgba(15,23,42,0.7);
+  --game-card-bg:   rgba(255,255,255,0.3);
+  --text-on-accent: #ffffff;
+  --text-on-star:   #ffffff;
+  --header-grad:    #0ea5e9;
+  --focus-ring:     rgba(14,165,233,0.25);
+  --danger-warn-bg: rgba(239,68,68,0.12);
+  --danger-warn-bdr:rgba(239,68,68,0.3);
+  --danger-warn-txt:#ef4444;
+  --heatmap-0: rgba(255,255,255,0.1);
+  --heatmap-1: #bae6fd;
+  --heatmap-2: #7dd3fc;
+  --heatmap-3: #38bdf8;
+  --heatmap-4: #0ea5e9;
+  --tag-verb: #f97316;
+  --tag-noun: #8b5cf6;
+  --tag-adj: #10b981;
+  --tag-tool: #ef4444;
+  --tag-sentence: #06b6d4;
+  --tag-general: #64748b;
+  --tag-adverb: #3b82f6;
+  --tag-game: #f59e0b;
 }
 
 :root {
@@ -1381,7 +1451,7 @@ body.game-bg-active .page-header h1 {
 }
 
 /* ── Theme Selector ──────────────────────────── */
-.theme-selector { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.theme-selector { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:8px; }
 .theme-option {
   display:flex; flex-direction:column; align-items:center; gap:6px;
   padding:10px 6px; border-radius:12px; cursor:pointer;
@@ -1400,6 +1470,7 @@ body.game-bg-active .page-header h1 {
 .preview-golden    { background:linear-gradient(135deg,#c9a227,#7c3aed); }
 .preview-scroll     { background:linear-gradient(135deg,#2d1f16,#5c4033); }
 .preview-ocean     { background:linear-gradient(135deg,#2563eb,#60a5fa); }
+.preview-glass { background:linear-gradient(135deg,rgba(102,126,234,0.8),rgba(118,75,162,0.8)); border:2px solid rgba(255,255,255,0.6); box-shadow:0 0 14px rgba(14,165,233,0.5), inset 0 1px 1px rgba(255,255,255,0.4); }
 .theme-name { font-size:11px; font-weight:600; color:var(--text-gray); text-align:center; }
 .theme-option.active .theme-name { color:var(--accent); }
 
@@ -1453,6 +1524,331 @@ body.game-bg-active .page-header h1 {
   box-shadow: 0 3px 12px rgba(0,0,0,0.08);
   border: 1px solid var(--border);
 }
+
+/* ═════════════════════════════════════════════════════════════════
+   LIQUID GLASS THEME - iOS Style Glassmorphism
+   نظام زجاجي متكامل مع تأثيرات سائلة وتكيف تلقائي
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Glass Cards with Depth Separation ── */
+[data-theme="glass"] .card-box,
+[data-theme="glass"] .word-card,
+[data-theme="glass"] .game-card,
+[data-theme="glass"] .stat-card {
+  background: var(--glass-bg-2);
+  backdrop-filter: blur(var(--glass-blur-card)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur-card)) saturate(var(--glass-saturation));
+  border: 1px solid var(--glass-border-2);
+  border-top: 1px solid var(--glass-border-3);
+  box-shadow: var(--glass-shadow-medium), var(--glass-inner-glow);
+  border-radius: 16px;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Inner highlight effect (glass reflection) */
+[data-theme="glass"] .card-box::before,
+[data-theme="glass"] .word-card::before,
+[data-theme="glass"] .game-card::before,
+[data-theme="glass"] .stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%);
+  pointer-events: none;
+  border-radius: 16px 16px 0 0;
+}
+
+/* Hover - Liquid glow effect */
+[data-theme="glass"] .card-box:hover,
+[data-theme="glass"] .word-card:hover,
+[data-theme="glass"] .game-card:hover,
+[data-theme="glass"] .stat-card:hover {
+  box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow);
+  border-color: var(--glass-border-3);
+  transform: translateY(-2px);
+}
+
+/* ── 2. Glass Inputs with Frost Effect ── */
+[data-theme="glass"] input,
+[data-theme="glass"] select,
+[data-theme="glass"] textarea {
+  background: var(--glass-bg-input);
+  backdrop-filter: blur(var(--glass-blur-input)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur-input)) saturate(140%);
+  border: 1px solid var(--glass-border-2);
+  border-bottom: 1px solid var(--glass-border-1);
+  box-shadow: var(--glass-shadow-soft), var(--glass-inner-glow);
+  border-radius: 12px;
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="glass"] input:focus,
+[data-theme="glass"] select:focus,
+[data-theme="glass"] textarea:focus {
+  background: var(--glass-bg-3);
+  border-color: var(--glass-border-3);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2), var(--glass-shadow-soft);
+}
+
+/* ── 3. Glass Sidebar - Back Layer ── */
+[data-theme="glass"] .sidebar {
+  position: relative;
+  background: transparent;
+  border-left: 1px solid var(--glass-border-2);
+  border-right: none;
+  box-shadow: var(--glass-shadow-strong);
+  z-index: 100;
+}
+
+[data-theme="glass"] .sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--glass-bg-1);
+  backdrop-filter: blur(var(--glass-blur-bg)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur-bg)) saturate(var(--glass-saturation));
+  z-index: -1;
+  pointer-events: none;
+}
+
+[data-theme="glass"] .sidebar > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 4. Glass Game Header - Floating Layer ── */
+[data-theme="glass"] .game-header-bar {
+  background: var(--glass-bg-2);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid var(--glass-border-2);
+  box-shadow: var(--glass-shadow-medium);
+  border-radius: 14px;
+}
+
+/* ── 5. Glass Stats Panel - Modal Layer ── */
+[data-theme="glass"] .stats-box {
+  background: var(--glass-bg-2);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--glass-border-2);
+  border-top: 1px solid var(--glass-border-3);
+  box-shadow: var(--glass-shadow-strong), 0 25px 50px rgba(0, 0, 0, 0.15);
+  border-radius: 20px;
+}
+
+[data-theme="glass"] .stats-overlay {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+/* ── 6. Glass Search Bar ── */
+[data-theme="glass"] .search-bar-row input,
+[data-theme="glass"] .search-bar-row select {
+  background: var(--glass-bg-3);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border-2);
+  box-shadow: var(--glass-shadow-soft);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+[data-theme="glass"] .search-bar-row input:hover,
+[data-theme="glass"] .search-bar-row select:hover {
+  background: var(--glass-bg-input);
+  border-color: var(--glass-border-3);
+  box-shadow: var(--glass-shadow-medium);
+}
+
+/* ── 7. Glass Buttons with Liquid Glow ── */
+[data-theme="glass"] .btn-primary {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.85), rgba(6, 182, 212, 0.85));
+  border: 1px solid var(--glass-border-2);
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.25), var(--glass-inner-glow);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme="glass"] .btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  transition: left 0.6s;
+}
+
+[data-theme="glass"] .btn-primary:hover {
+  box-shadow: 0 8px 30px rgba(14, 165, 233, 0.4);
+  border-color: var(--glass-border-3);
+  transform: translateY(-1px);
+}
+
+[data-theme="glass"] .btn-primary:hover::before {
+  left: 100%;
+}
+
+[data-theme="glass"] .btn-primary:active {
+  transform: scale(0.98);
+  box-shadow: 0 2px 10px rgba(14, 165, 233, 0.3);
+}
+
+/* ── 8. Text Readability Over Images ── */
+[data-theme="glass"] .game-card {
+  position: relative;
+}
+
+[data-theme="glass"] .game-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+  pointer-events: none;
+  border-radius: 16px;
+}
+
+[data-theme="glass"] .game-card .game-info {
+  position: relative;
+  z-index: 2;
+}
+
+/* Enhanced text shadow for readability */
+[data-theme="glass"] .word-card .word-text,
+[data-theme="glass"] .game-card .game-name,
+[data-theme="glass"] .stat-card .stat-val {
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+/* ── 9. Glass Dropdowns & Modals ── */
+[data-theme="glass"] select option,
+[data-theme="glass"] .dropdown-menu {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border-2);
+  box-shadow: var(--glass-shadow-strong);
+}
+
+/* ── 10. Layer Separation - Z-Index for Layout Components Only ── */
+[data-theme="glass"] .sidebar { z-index: 1000; }
+[data-theme="glass"] .sidebar-open .sidebar { z-index: 1000; }
+[data-theme="glass"] .sidebar-overlay { z-index: 90; }
+[data-theme="glass"] .game-header-bar { z-index: 50; }
+[data-theme="glass"] .stats-box { z-index: 200; }
+
+/* ── 11. Glass Hover Effects for Buttons & Icons ── */
+[data-theme="glass"] .sort-btn,
+[data-theme="glass"] .search-settings-btn {
+  background: var(--glass-bg-2);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border-2);
+  box-shadow: var(--glass-shadow-soft);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+[data-theme="glass"] .sort-btn:hover,
+[data-theme="glass"] .search-settings-btn:hover {
+  background: var(--glass-bg-3);
+  border-color: var(--glass-border-3);
+  box-shadow: var(--glass-shadow-medium);
+  transform: translateY(-1px);
+}
+
+/* ── 12. Glass Quiz Card Back (Fix Red Color) ── */
+[data-theme="glass"] .quiz-card-back {
+  background: var(--glass-bg-2);
+  backdrop-filter: blur(var(--glass-blur-card)) saturate(var(--glass-saturation));
+  border: 1px solid var(--glass-border-2);
+  box-shadow: var(--glass-shadow-medium);
+}
+
+/* ── 13. Game Cards Text Readability Enhancement ── */
+[data-theme="glass"] .game-card .word-text,
+[data-theme="glass"] .game-card .word-definition,
+[data-theme="glass"] .game-card .game-word {
+  color: var(--text-white);
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8), 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+}
+
+[data-theme="glass"] .game-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
+  pointer-events: none;
+  border-radius: 16px;
+  z-index: 1;
+}
+
+[data-theme="glass"] .game-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   PERFORMANCE ADAPTATION - Auto-adjust for device capability
+   ═════════════════════════════════════════════════════════════════ */
+
+/* Mobile / Low-power devices - Reduce effects automatically */
+@media (pointer: coarse), (max-width: 768px), (prefers-reduced-motion: reduce) {
+  [data-theme="glass"] {
+    --glass-blur-bg: 10px;
+    --glass-blur-card: 8px;
+    --glass-blur-input: 6px;
+    --glass-saturation: 120%;
+    --glass-shadow-soft: 0 2px 12px rgba(31, 38, 135, 0.08);
+    --glass-shadow-medium: 0 4px 20px rgba(31, 38, 135, 0.1);
+    --glass-shadow-strong: 0 8px 32px rgba(31, 38, 135, 0.12);
+  }
+  
+  [data-theme="glass"] .card-box,
+  [data-theme="glass"] .word-card,
+  [data-theme="glass"] .game-card,
+  [data-theme="glass"] .stat-card {
+    border-radius: 14px;
+  }
+  
+  [data-theme="glass"] .card-box::before,
+  [data-theme="glass"] .word-card::before,
+  [data-theme="glass"] .game-card::before,
+  [data-theme="glass"] .stat-card::before {
+    display: none; /* Remove reflection on mobile */
+  }
+  
+  [data-theme="glass"] .btn-primary::before {
+    display: none; /* Remove shimmer on mobile */
+  }
+}
+
+/* Very low-end devices - Minimal glass effects */
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme="glass"] {
+    --glass-blur-bg: 4px;
+    --glass-blur-card: 4px;
+    --glass-blur-input: 2px;
+  }
+  
+  [data-theme="glass"] .sidebar,
+  [data-theme="glass"] .card-box,
+  [data-theme="glass"] .word-card,
+  [data-theme="glass"] .game-card,
+  [data-theme="glass"] .stat-card,
+  [data-theme="glass"] input,
+  [data-theme="glass"] select,
+  [data-theme="glass"] textarea {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(4px);
+  }
+}
+
 .stat-val { font-size:22px; font-weight:700; color:var(--accent); margin-bottom:4px; }
 .stat-lbl { font-size:11px; color:var(--text-gray); }
 
