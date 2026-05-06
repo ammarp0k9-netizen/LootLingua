@@ -13,6 +13,86 @@ let pendingDeleteId  = null;
 let userXP           = parseInt(localStorage.getItem('userXP')) || 0;
 let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg' | 'starred' | 'quiz'
 
+// ── MOBILE LONG-PRESS TOOLTIP ──────────────────────────
+// Show tooltip only on long press (500ms), not on normal tap
+(function initMobileTooltip() {
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+  if (!isTouch) return; // Only for touch devices
+
+  let longPressTimer = null;
+  let currentTooltip = null;
+  const LONG_PRESS_DURATION = 500; // ms
+
+  // Find all tooltip wraps
+  document.querySelectorAll('.tooltip-wrap').forEach(wrap => {
+    const tooltip = wrap.querySelector('.tooltip-text');
+    if (!tooltip) return;
+
+    // Touch start - start timer
+    wrap.addEventListener('touchstart', (e) => {
+      longPressTimer = setTimeout(() => {
+        // Show tooltip on long press
+        tooltip.classList.add('show');
+        currentTooltip = tooltip;
+
+        // Position tooltip near touch point
+        const touch = e.touches[0];
+        const rect = wrap.getBoundingClientRect();
+        tooltip.style.left = (touch.clientX - 50) + 'px';
+        tooltip.style.top = (rect.top - tooltip.offsetHeight - 8) + 'px';
+      }, LONG_PRESS_DURATION);
+    }, { passive: true });
+
+    // Touch end - clear timer and hide tooltip
+    wrap.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+      setTimeout(() => {
+        if (currentTooltip) {
+          currentTooltip.classList.remove('show');
+          currentTooltip = null;
+        }
+      }, 1500); // Hide after 1.5 seconds
+    });
+
+    // Touch move - cancel long press
+    wrap.addEventListener('touchmove', () => {
+      clearTimeout(longPressTimer);
+    }, { passive: true });
+
+    // Touch cancel - clear timer
+    wrap.addEventListener('touchcancel', () => {
+      clearTimeout(longPressTimer);
+      if (currentTooltip) {
+        currentTooltip.classList.remove('show');
+        currentTooltip = null;
+      }
+    });
+  });
+})();
+
+// ── ACTION BUTTONS ISOLATION ───────────────────────────
+// Prevent card click when tapping action buttons (mobile)
+(function initActionButtonIsolation() {
+  const actionButtons = document.querySelectorAll('.btn-audio, .btn-edit, .btn-delete');
+
+  actionButtons.forEach(btn => {
+    // Stop propagation on touchstart
+    btn.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
+
+    // Stop propagation on click
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    // Prevent default on touch devices
+    btn.addEventListener('touchend', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
+  });
+})();
+
 // ── Fluent Emoji helper (Microsoft CDN) ──────────────────
 // https://github.com/microsoft/fluentui-emoji
 const FE_BASE = 'https://cdn.jsdelivr.net/npm/fluentui-emoji@latest/icons';
