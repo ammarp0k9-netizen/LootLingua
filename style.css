@@ -201,10 +201,13 @@
 
 [data-theme="glass"] {
   /* نظام الزجاج المتكامل - Glass System */
-  --glass-bg-1:     rgba(255, 255, 255, 0.15);   /* للطبقات الخلفية */
-  --glass-bg-2:     rgba(255, 255, 255, 0.25);   /* للبطاقات العادية */
-  --glass-bg-3:     rgba(255, 255, 255, 0.35);   /* للعناصر الأمامية */
-  --glass-bg-input: rgba(255, 255, 255, 0.40);   /* للمدخلات */
+  --glass-bg-1:     rgba(255, 255, 255, 0.05);   /* للطبقات الخلفية */
+  --glass-bg-2:     rgba(255, 255, 255, 0.08);   /* للبطاقات العادية */
+  --glass-bg-3:     rgba(255, 255, 255, 0.10);   /* للعناصر الأمامية */
+  --glass-bg-input: rgba(255, 255, 255, 0.12);   /* للمدخلات */
+  
+  /* لمعة قطريه - Diagonal Specular Highlight */
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
   
   --glass-border-1: rgba(255, 255, 255, 0.35);   /* حدود خفيفة */
   --glass-border-2: rgba(255, 255, 255, 0.50);   /* حدود واضحة */
@@ -222,7 +225,8 @@
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6);
   
   /* الألوان الأساسية */
-  --main-bg:    linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --main-bg:    linear-gradient(135deg, #06b6d4 0%, #0891b2 25%, #0c4a6e 50%, #075985 75%, #06b6d4 100%);
+  --main-bg-size: 400% 400%;
   --card-bg:    var(--glass-bg-2);
   --surface-bg: var(--glass-bg-input);
   --accent:     #0ea5e9;
@@ -1281,43 +1285,75 @@ body.game-bg-active .page-header h1 {
 /* ══════════════════════════════════════════
    TOOLTIP
    ══════════════════════════════════════════ */
+
+/* إصلاح tooltip stacking context وثبات الطبقة */
 .tooltip-wrap {
-  position: relative;
+  position: static !important;
   display: inline-flex;
+  z-index: initial;
 }
 
+
+/* Tooltip يظهر دائماً فوق كل العناصر */
 .tooltip-text {
   visibility: hidden;
   opacity: 0;
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed !important;
+  bottom: auto;
+  left: 0;
+  top: 0;
+  transform: none;
   background: var(--card-bg);
   color: var(--text-white);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   pointer-events: none;
   transition: opacity 0.15s;
-  z-index: 100;
+  z-index: 9999 !important;
+  box-shadow: 0 6px 32px 0 rgba(0,0,0,0.18);
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }
 
+
+/* السهم أسفل التولتيب */
 .tooltip-text::after {
   content: '';
   position: absolute;
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  border: 5px solid transparent;
+  border: 6px solid transparent;
   border-top-color: var(--card-bg);
+  z-index: 9999;
 }
 
-.tooltip-wrap:hover .tooltip-text {
+
+.tooltip-wrap:hover .tooltip-text,
+.tooltip-wrap:focus-within .tooltip-text {
   visibility: visible;
   opacity: 1;
+}
+
+/* إزالة أي تأثير زجاجي عن نص التولتيب لضمان الوضوح */
+[data-theme="glass"] .tooltip-text {
+  background: rgba(30,41,59,0.98) !important;
+  color: #fff !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: #fff !important;
+  background-clip: border-box !important;
+  text-fill-color: #fff !important;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.22), 0 1px 0 rgba(0,0,0,0.13);
+  filter: none !important;
+  mix-blend-mode: normal !important;
+}
+
+/* إزالة أي overflow: hidden أو clip من العناصر الأب الشائعة حول الأزرار */
+.card-box, .sidebar, .main-content, .stat-card, .game-card, .word-card {
+  overflow: visible !important;
 }
 
 /* Responsive */
@@ -1538,16 +1574,24 @@ body.game-bg-active .page-header h1 {
   background: var(--glass-bg-2);
   backdrop-filter: blur(var(--glass-blur-card)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur-card)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border-2);
-  border-top: 1px solid var(--glass-border-3);
-  box-shadow: var(--glass-shadow-medium), var(--glass-inner-glow);
+  /* 3D Borders: top/left = white highlight, bottom/right = dark shadow */
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+  border-left: 1px solid rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  /* Inset highlight from top for 3D glass feel */
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05),
+    var(--glass-shadow-medium);
   border-radius: 16px;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  will-change: transform;
   position: relative;
   overflow: hidden;
 }
 
-/* Inner highlight effect (glass reflection) */
+/* Diagonal specular highlight - ضربة ضوء قطرية */
 [data-theme="glass"] .card-box::before,
 [data-theme="glass"] .word-card::before,
 [data-theme="glass"] .game-card::before,
@@ -1557,10 +1601,11 @@ body.game-bg-active .page-header h1 {
   top: 0;
   left: 0;
   right: 0;
-  height: 40%;
-  background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 100%);
+  bottom: 0;
+  background: var(--glass-shine);
   pointer-events: none;
-  border-radius: 16px 16px 0 0;
+  border-radius: 16px;
+  opacity: 0.8;
 }
 
 /* Hover - Liquid glow effect */
@@ -1571,6 +1616,64 @@ body.game-bg-active .page-header h1 {
   box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow);
   border-color: var(--glass-border-3);
   transform: translateY(-2px);
+}
+
+/* ── Glass Text محسّن ── */
+
+[data-theme="glass"] {
+  --glass-text-main: rgba(255,255,255,0.9);
+  --glass-text-soft: rgba(255,255,255,0.7);
+}
+
+/* النص الأساسي */
+[data-theme="glass"] h1,
+[data-theme="glass"] h2,
+[data-theme="glass"] h3,
+[data-theme="glass"] .word-text,
+[data-theme="glass"] .side-label,
+[data-theme="glass"] .cat-tag,
+[data-theme="glass"] .settings-title {
+  color: var(--glass-text-main);
+  text-shadow:
+    0 1px 2px rgba(0,0,0,0.3),
+    0 0 8px rgba(255,255,255,0.25);
+}
+
+/* النصوص الصغيرة */
+[data-theme="glass"] .meaning-text,
+[data-theme="glass"] .example-box,
+[data-theme="glass"] .hint-text,
+[data-theme="glass"] .tooltip-text,
+[data-theme="glass"] .settings-label {
+  color: var(--glass-text-soft);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+/* ── إصلاح إعدادات البحث 🔥 ── */
+[data-theme="glass"] .search-settings,
+[data-theme="glass"] .search-settings * {
+  color: var(--glass-text-main) !important;
+}
+
+/* ── إصلاح الـ tooltip (النيم تاج) 🔥 ── */
+[data-theme="glass"] .tooltip,
+[data-theme="glass"] .tooltip-text {
+  color: rgba(255,255,255,0.95) !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+/* ── لمعة خفيفة للنص (Apple vibe) ── */
+[data-theme="glass"] strong,
+[data-theme="glass"] .highlight {
+  text-shadow:
+    0 0 10px rgba(255,255,255,0.35),
+    0 1px 2px rgba(0,0,0,0.25);
+}
+
+/* ── إلغاء أي تخبيص سابق ── */
+[data-theme="glass"] * {
+  mix-blend-mode: normal !important;
+  -webkit-text-fill-color: unset !important;
 }
 
 /* ── 2. Glass Inputs with Frost Effect ── */
@@ -1632,6 +1735,18 @@ body.game-bg-active .page-header h1 {
 }
 
 /* ── 5. Glass Stats Panel - Modal Layer ── */
+[data-theme="glass"] body {
+  /* خلفية ثابتة gradient أزرق فاتح هادئ بدون حركة */
+  background: linear-gradient(180deg, #3f7fc9, #2562a8);
+  background-attachment: fixed;
+  background-size: cover;
+  position: relative;
+  overflow-x: hidden;
+  /* إزالة أي animation */
+}
+
+/* إزالة أي keyframes أو حركة للخلفية */
+
 [data-theme="glass"] .stats-box {
   background: var(--glass-bg-2);
   backdrop-filter: blur(24px) saturate(140%);
@@ -1665,136 +1780,439 @@ body.game-bg-active .page-header h1 {
   box-shadow: var(--glass-shadow-medium);
 }
 
-/* ── 7. Glass Buttons with Liquid Glow ── */
-[data-theme="glass"] .btn-primary {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.85), rgba(6, 182, 212, 0.85));
-  border: 1px solid var(--glass-border-2);
-  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.25), var(--glass-inner-glow);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+/* ── 15. Sidebar Fix - Position & Layering ── */
+/* Desktop: Sidebar as rail (56px) */
+[data-theme="glass"] .sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: var(--sidebar-rail);  /* 56px rail by default */
+  /* Glass background WITHOUT blur on the sidebar itself */
+  background: rgba(255, 255, 255, 0.15);
+  /* 3D Borders - Glass edge effect */
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+  border-left: 1px solid rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.2);
+  z-index: 1001;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
-[data-theme="glass"] .btn-primary::before {
-  content: '';
-  position: absolute;
+/* Sidebar OPEN state on Desktop */
+[data-theme="glass"] .sidebar.open,
+[data-theme="glass"] body.sidebar-open .sidebar {
+  width: var(--sidebar-open);  /* 280px when open */
+  overflow-y: auto;
+}
+
+/* Overlay - blur effect on content BEHIND sidebar */
+[data-theme="glass"] .overlay {
+  position: fixed;
   top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-  transition: left 0.6s;
-}
-
-[data-theme="glass"] .btn-primary:hover {
-  box-shadow: 0 8px 30px rgba(14, 165, 233, 0.4);
-  border-color: var(--glass-border-3);
-  transform: translateY(-1px);
-}
-
-[data-theme="glass"] .btn-primary:hover::before {
-  left: 100%;
-}
-
-[data-theme="glass"] .btn-primary:active {
-  transform: scale(0.98);
-  box-shadow: 0 2px 10px rgba(14, 165, 233, 0.3);
-}
-
-/* ── 8. Text Readability Over Images ── */
-[data-theme="glass"] .game-card {
-  position: relative;
-}
-
-[data-theme="glass"] .game-card::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
-  pointer-events: none;
-  border-radius: 16px;
-}
-
-[data-theme="glass"] .game-card .game-info {
-  position: relative;
-  z-index: 2;
-}
-
-/* Enhanced text shadow for readability */
-[data-theme="glass"] .word-card .word-text,
-[data-theme="glass"] .game-card .game-name,
-[data-theme="glass"] .stat-card .stat-val {
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
-}
-
-/* ── 9. Glass Dropdowns & Modals ── */
-[data-theme="glass"] select option,
-[data-theme="glass"] .dropdown-menu {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border-2);
-  box-shadow: var(--glass-shadow-strong);
-}
-
-/* ── 10. Layer Separation - Z-Index for Layout Components Only ── */
-[data-theme="glass"] .sidebar { z-index: 1000; }
-[data-theme="glass"] .sidebar-open .sidebar { z-index: 1000; }
-[data-theme="glass"] .sidebar-overlay { z-index: 90; }
-[data-theme="glass"] .game-header-bar { z-index: 50; }
-[data-theme="glass"] .stats-box { z-index: 200; }
-
-/* ── 11. Glass Hover Effects for Buttons & Icons ── */
-[data-theme="glass"] .sort-btn,
-[data-theme="glass"] .search-settings-btn {
-  background: var(--glass-bg-2);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border-2);
-  box-shadow: var(--glass-shadow-soft);
-  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
 }
 
-[data-theme="glass"] .sort-btn:hover,
-[data-theme="glass"] .search-settings-btn:hover {
-  background: var(--glass-bg-3);
-  border-color: var(--glass-border-3);
-  box-shadow: var(--glass-shadow-medium);
-  transform: translateY(-1px);
-}
-
-/* ── 12. Glass Quiz Card Back (Fix Red Color) ── */
-[data-theme="glass"] .quiz-card-back {
-  background: var(--glass-bg-2);
-  backdrop-filter: blur(var(--glass-blur-card)) saturate(var(--glass-saturation));
-  border: 1px solid var(--glass-border-2);
-  box-shadow: var(--glass-shadow-medium);
-}
-
-/* ── 13. Game Cards Text Readability Enhancement ── */
-[data-theme="glass"] .game-card .word-text,
-[data-theme="glass"] .game-card .word-definition,
-[data-theme="glass"] .game-card .game-word {
-  color: var(--text-white);
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.8), 0 2px 4px rgba(0, 0, 0, 0.1);
-  font-weight: 500;
-}
-
-[data-theme="glass"] .game-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 100%);
-  pointer-events: none;
-  border-radius: 16px;
-  z-index: 1;
-}
-
-[data-theme="glass"] .game-card > * {
+/* Sidebar content stays sharp - no blur */
+[data-theme="glass"] .sidebar > * {
   position: relative;
   z-index: 2;
 }
 
 /* ═════════════════════════════════════════════════════════════════
-   PERFORMANCE ADAPTATION - Auto-adjust for device capability
+   GLASS BUBBLES ANIMATION - Performance Optimized (GPU Only)
+   ═════════════════════════════════════════════════════════════════ */
+
+/* Bubbles container */
+[data-theme="glass"] .bubbles-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* Individual bubbles - GPU optimized with transform only */
+[data-theme="glass"] .bubble {
+  position: absolute;
+  bottom: -100px;
+  background: radial-gradient(circle at 30% 30%, 
+    rgba(255, 255, 255, 0.15) 0%, 
+    rgba(255, 255, 255, 0.05) 50%, 
+    transparent 70%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  animation: floatUp linear infinite;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* Bubble sizes */
+[data-theme="glass"] .bubble--small { width: 20px; height: 20px; }
+[data-theme="glass"] .bubble--medium { width: 40px; height: 40px; }
+[data-theme="glass"] .bubble--large { width: 60px; height: 60px; }
+
+/* GPU-optimized animation - ONLY transform and opacity */
+@keyframes floatUp {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-120vh) translateX(20px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+/* Varying animation durations for different speeds */
+[data-theme="glass"] .bubble--slow { animation-duration: 15s; }
+[data-theme="glass"] .bubble--normal { animation-duration: 10s; }
+[data-theme="glass"] .bubble--fast { animation-duration: 7s; }
+
+/* Mobile - Reduced bubbles for performance */
+@media (pointer: coarse), (max-width: 768px) {
+  [data-theme="glass"] .bubbles-container {
+    display: none; /* Disable on mobile for performance */
+  }
+
+  /* ── تحسين تفاعل اللمس على الموبايل (Tap Interactions) ── */
+
+  /* تأثير ضغط للأزرار (scale + feedback) */
+  .btn-main:active,
+  .btn-ai:active,
+  .auth-btn:active,
+  .btn-icon-tip:active,
+  .btn-backup:active,
+  .quiz-btn:active,
+  .setup-btn:active,
+  .btn-confirm:active,
+  .btn-cancel:active {
+    transform: scale(0.96);
+    opacity: 0.93;
+    transition: transform 0.13s cubic-bezier(.4,0,.2,1), opacity 0.13s;
+    will-change: transform;
+    /* Ripple effect بسيط */
+    overflow: hidden;
+  }
+
+  /* تأثير ضغط للكروت والقوائم */
+  .card-box:active,
+  .word-card:active,
+  .game-card:active,
+  .stat-card:active,
+  .nav-link:active,
+  .cat-tag:active {
+    transform: scale(0.97) translateY(2px);
+    opacity: 0.96;
+    transition: transform 0.14s cubic-bezier(.4,0,.2,1), opacity 0.14s;
+    will-change: transform;
+  }
+
+  /* تأثير ضغط لعناصر القوائم الصغيرة */
+  .side-label:active,
+  .sidebar-divider:active,
+  .sidebar-header:active {
+    opacity: 0.8;
+    transition: opacity 0.13s;
+  }
+
+  /* Ripple effect بسيط للأزرار (اختياري) */
+  .btn-main:active::after,
+  .btn-ai:active::after,
+  .btn-icon-tip:active::after,
+  .setup-btn:active::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120%;
+    height: 120%;
+    background: radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.00) 70%);
+    transform: translate(-50%, -50%) scale(1.1);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: rippleMobile 0.32s linear;
+    z-index: 2;
+  }
+
+  @keyframes rippleMobile {
+    0%   { opacity: 0.32; transform: translate(-50%, -50%) scale(0.7); }
+    80%  { opacity: 0.18; transform: translate(-50%, -50%) scale(1.1); }
+    100% { opacity: 0;    transform: translate(-50%, -50%) scale(1.3); }
+  }
+
+  /* إصلاح stacking context لعناصر فيها position */
+  .btn-main,
+  .btn-ai,
+  .btn-icon-tip,
+  .setup-btn {
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ═══════════════════════════════════════════
+     MOBILE INTERACTION FIXES - Professional Touch
+     ═══════════════════════════════════════════ */
+
+  /* 1. COMPLETELY DISABLE hover on mobile */
+  @media (hover: none) and (pointer: coarse) {
+    .btn-main:hover,
+    .btn-ai:hover,
+    .btn-icon-tip:hover,
+    .btn-audio:hover,
+    .btn-edit:hover,
+    .btn-delete:hover,
+    .card-box:hover,
+    .word-card:hover,
+    .game-card:hover,
+    .stat-card:hover,
+    .nav-link:hover,
+    .search-btn:hover {
+      /* Reset ALL hover effects */
+      transform: none !important;
+      scale: none !important;
+      filter: none !important;
+      box-shadow: inherit !important;
+      background: inherit !important;
+      color: inherit !important;
+      opacity: 1 !important;
+      /* Prevent sticky hover state */
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* 2. ACTION BUTTONS - Professional Tap Effect (NO tooltip) */
+    .btn-audio,
+    .btn-edit,
+    .btn-delete {
+      /* Remove any tooltip capability */
+      pointer-events: auto !important;
+      touch-action: manipulation !important;
+      -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+      /* Isolation to prevent card interaction */
+      isolation: isolate !important;
+    }
+
+    /* Action buttons tap feedback */
+    .btn-audio:active,
+    .btn-edit:active,
+    .btn-delete:active {
+      transform: scale(0.92) !important;
+      opacity: 0.85 !important;
+      transition: transform 0.08s ease-out, opacity 0.08s ease-out !important;
+      will-change: transform;
+      /* Prevent bubbling to card */
+      pointer-events: auto !important;
+    }
+
+    /* 3. MAIN BUTTONS Tap Effect */
+    .btn-main:active,
+    .btn-ai:active,
+    .btn-icon-tip:active,
+    .search-btn:active {
+      transform: scale(0.95) !important;
+      opacity: 0.9 !important;
+      transition: transform 0.1s ease-out, opacity 0.1s ease-out !important;
+      will-change: transform;
+    }
+
+    /* 4. Card tap effect - BUT NOT when clicking action buttons */
+    .card-box:active:not(:has(.btn-audio:active, .btn-edit:active, .btn-delete:active)),
+    .word-card:active:not(:has(.btn-audio:active, .btn-edit:active, .btn-delete:active)),
+    .game-card:active:not(:has(.btn-audio:active, .btn-edit:active, .btn-delete:active)),
+    .stat-card:active {
+      transform: scale(0.98) !important;
+      transition: transform 0.12s ease-out !important;
+    }
+
+    /* 5. NO tooltip on action buttons */
+    .btn-audio .tooltip-text,
+    .btn-edit .tooltip-text,
+    .btn-delete .tooltip-text,
+    [data-tooltip] .btn-audio::after,
+    [data-tooltip] .btn-edit::after,
+    [data-tooltip] .btn-delete::after {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    /* 6. TOOLTIP - Hidden on normal tap, show on long-press only (EXCEPT action buttons) */
+    .tooltip-text {
+      /* Completely hide tooltip on mobile by default */
+      visibility: hidden !important;
+      opacity: 0 !important;
+      display: none !important;
+      /* Prevent any hover-triggered visibility */
+      transition: none !important;
+    }
+
+    /* Tooltip only shows with .show class (added via JS on long-press) */
+    .tooltip-text.show {
+      visibility: visible !important;
+      opacity: 1 !important;
+      display: block !important;
+      position: fixed !important;
+      z-index: 9999 !important;
+    }
+
+    /* 7. Prevent text selection on tap */
+    .btn-main,
+    .btn-ai,
+    .btn-icon-tip,
+    .btn-audio,
+    .btn-edit,
+    .btn-delete,
+    .card-box,
+    .word-card,
+    .game-card {
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+    }
+  }
+
+  /* تحسين الأداء */
+  .btn-main,
+  .btn-ai,
+  .btn-icon-tip,
+  .setup-btn,
+  .card-box,
+  .word-card,
+  .game-card,
+  .stat-card,
+  .nav-link {
+    will-change: transform;
+  }
+}
+
+/* END Mobile Interaction Fixes */
+
+/* ── تحسين وتوحيد أسلوب النص الزجاجي في ثيم Glass ── */
+[data-theme="glass"] .card-box,
+[data-theme="glass"] .word-card,
+[data-theme="glass"] .game-card,
+[data-theme="glass"] .stat-card,
+[data-theme="glass"] .sidebar,
+[data-theme="glass"] .btn-main,
+[data-theme="glass"] .btn-ai,
+[data-theme="glass"] .auth-btn,
+[data-theme="glass"] .btn-icon-tip,
+[data-theme="glass"] .search-bar-row input,
+[data-theme="glass"] .search-bar-row select,
+[data-theme="glass"] .search-bar-row,
+[data-theme="glass"] .sidebar-header h2,
+[data-theme="glass"] .side-label,
+[data-theme="glass"] .nav-link,
+[data-theme="glass"] .nav-link.active,
+[data-theme="glass"] .sidebar-divider,
+[data-theme="glass"] .page-header h1,
+[data-theme="glass"] .modal-content h2,
+[data-theme="glass"] .modal-content p,
+[data-theme="glass"] .quiz-word,
+[data-theme="glass"] .quiz-meaning,
+[data-theme="glass"] .quiz-example,
+[data-theme="glass"] .meaning-text,
+[data-theme="glass"] .example-box,
+[data-theme="glass"] .hint-text,
+[data-theme="glass"] .cat-tag,
+[data-theme="glass"] .streak-count,
+[data-theme="glass"] .xp-val,
+[data-theme="glass"] .xp-hint,
+[data-theme="glass"] .xp-next-val,
+[data-theme="glass"] .stat-lbl,
+[data-theme="glass"] .heatmap-title,
+[data-theme="glass"] .heatmap-legend,
+[data-theme="glass"] .btn-backup,
+[data-theme="glass"] .game-header-title,
+[data-theme="glass"] .game-stats-btn,
+[data-theme="glass"] .game-word-count,
+[data-theme="glass"] .quiz-btn,
+[data-theme="glass"] .btn-remember,
+[data-theme="glass"] .btn-forget,
+[data-theme="glass"] .btn-new,
+[data-theme="glass"] .btn-old,
+[data-theme="glass"] .btn-starred,
+[data-theme="glass"] .btn-all,
+[data-theme="glass"] .btn-close-quiz,
+[data-theme="glass"] .btn-confirm,
+[data-theme="glass"] .btn-cancel,
+[data-theme="glass"] .star-btn,
+[data-theme="glass"] .actions,
+[data-theme="glass"] .icon-circle,
+[data-theme="glass"] .backup-zone {
+  color: rgba(255,255,255,0.93) !important;
+  text-shadow:
+    0 2px 8px rgba(60,120,200,0.13),
+    0 1px 0 rgba(0,0,0,0.10),
+    0 0 6px rgba(255,255,255,0.10);
+}
+
+[data-theme="glass"] .meaning-text,
+[data-theme="glass"] .example-box,
+[data-theme="glass"] .hint-text,
+[data-theme="glass"] .quiz-example,
+[data-theme="glass"] .modal-content p,
+[data-theme="glass"] .stats-header h2,
+[data-theme="glass"] .stat-card,
+[data-theme="glass"] .cat-tag,
+[data-theme="glass"] .side-label,
+[data-theme="glass"] .sidebar-divider,
+[data-theme="glass"] .tooltip-text,
+[data-theme="glass"] .streak-count,
+[data-theme="glass"] .xp-val,
+[data-theme="glass"] .xp-hint,
+[data-theme="glass"] .xp-next-val,
+[data-theme="glass"] .stat-lbl,
+[data-theme="glass"] .heatmap-title,
+[data-theme="glass"] .heatmap-legend {
+  color: rgba(255,255,255,0.82) !important;
+  text-shadow:
+    0 1px 6px rgba(60,120,200,0.10),
+    0 1px 0 rgba(0,0,0,0.08),
+    0 0 4px rgba(255,255,255,0.08);
+}
+
+/* إصلاح tooltips: لون أبيض واضح دائماً فوق كل شيء */
+[data-theme="glass"] .tooltip-text {
+  color: #fff !important;
+  text-shadow: 0 2px 8px rgba(60,120,200,0.18), 0 1px 0 rgba(0,0,0,0.13);
+  background: rgba(30,41,59,0.98) !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: #fff !important;
+  background-clip: border-box !important;
+  text-fill-color: #fff !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
+}
+
+/* إصلاح search settings: فرض لون النص الأبيض */
+[data-theme="glass"] .search-bar-row input,
+[data-theme="glass"] .search-bar-row select,
+[data-theme="glass"] .search-bar-row {
+  color: rgba(255,255,255,0.93) !important;
+  text-shadow: 0 2px 8px rgba(60,120,200,0.13), 0 1px 0 rgba(0,0,0,0.10);
+}
+/* END تحسين وتوحيد أسلوب النص الزجاجي في ثيم Glass */
+
+/* ═════════════════════════════════════════════════════════════════
+   GLASS THEME SPECIFIC STYLES - Liquid iOS Style
    ═════════════════════════════════════════════════════════════════ */
 
 /* Mobile / Low-power devices - Reduce effects automatically */
@@ -1807,6 +2225,31 @@ body.game-bg-active .page-header h1 {
     --glass-shadow-soft: 0 2px 12px rgba(31, 38, 135, 0.08);
     --glass-shadow-medium: 0 4px 20px rgba(31, 38, 135, 0.1);
     --glass-shadow-strong: 0 8px 32px rgba(31, 38, 135, 0.12);
+  }
+  
+  /* Mobile: Sidebar hidden off-screen with transform */
+  [data-theme="glass"] .sidebar {
+    width: 260px;
+    right: -280px;  /* Hidden off-screen */
+    transform: translateX(0);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(255, 255, 255, 0.95);
+  }
+  
+  /* Mobile: Sidebar visible when open */
+  [data-theme="glass"] .sidebar.open,
+  [data-theme="glass"] body.sidebar-open .sidebar {
+    right: 0;
+    width: 260px;
+  }
+  
+  /* Mobile: lighter overlay */
+  [data-theme="glass"] .overlay {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.2);
   }
   
   [data-theme="glass"] .card-box,
@@ -1866,3 +2309,29 @@ body.game-bg-active .page-header h1 {
 
 /* btn-already-added */
 .btn-already-added { background:var(--border)!important; color:var(--text-gray)!important; cursor:default!important; opacity:.75; }
+
+/* ═══════════════════════════════════════════════════════
+   QUIZ CARD BUTTON POSITIONS
+   ═══════════════════════════════════════════════════════ */
+
+/* زر الرجوع - خارج الكارد على الشمال فوق */
+.quiz-back-btn {
+  position: absolute;
+  top: -50px;
+  left: 0;
+  z-index: 10;
+}
+
+/* زر الصوت - داخل الكارد بزاوية فوق شمال */
+.quiz-sound-btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+}
+
+/* Quiz card relative positioning for absolute children */
+.quiz-card {
+  position: relative;
+}
+
