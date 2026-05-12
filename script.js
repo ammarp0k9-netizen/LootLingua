@@ -1932,6 +1932,30 @@ window.onload = function() {
 })();
 
 // ═══════════════════════════════════════════════════════
+// Sidebar toggle (must be defined BEFORE any code that wraps window.toggleSidebar)
+// ═══════════════════════════════════════════════════════
+if (typeof window.toggleSidebar !== 'function') {
+  window.toggleSidebar = function() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('show', isOpen);
+  };
+}
+
+if (typeof window.closeSidebarIfOpen !== 'function') {
+  window.closeSidebarIfOpen = function() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    if (sidebar && sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('show');
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════
 // Sidebar Book Icon → Open Icon on Hover
 // ═══════════════════════════════════════════════════════
 (function(){
@@ -1957,27 +1981,3 @@ window.onload = function() {
     if (icon) icon.className = sidebar.classList.contains('open') ? origClass : origClass;
   };
 })();
-
-// ═══════════════════════════════════════════════════════
-// Sidebar toggle (defined here if not already defined)
-// ═══════════════════════════════════════════════════════
-if (typeof window.toggleSidebar !== 'function') {
-  window.toggleSidebar = function() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
-    if (!sidebar) return;
-    const isOpen = sidebar.classList.toggle('open');
-    if (overlay) overlay.classList.toggle('show', isOpen);
-  };
-}
-
-if (typeof window.closeSidebarIfOpen !== 'function') {
-  window.closeSidebarIfOpen = function() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('overlay');
-    if (sidebar && sidebar.classList.contains('open')) {
-      sidebar.classList.remove('open');
-      if (overlay) overlay.classList.remove('show');
-    }
-  };
-}
