@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Word suggestions: POST /api/dictionary → JSON array from server. Backend: dictionary-server/index.js (pools + AI Sparks). -->
   <title>LootLingua | قاموس الأساطير</title>
   <link rel="icon" type="image/png" href="ammar1.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -25,27 +26,27 @@
   <div class="sidebar-header" data-tip="فتح الشريط الجانبي" onclick="toggleSidebar()"><h2><i class="fa-solid fa-book-open"></i> <span class="side-label">LootLingua</span></h2></div>
   <nav>
     <!-- قاموسك الشخصي -->
-    <a href="#" class="nav-link active" data-view="personal" data-tip="قاموسك الشخصي" onclick="loadPersonalDictionary(); return false;">
+    <a href="#" class="nav-link active" data-feature="personal" data-view="personal" data-tip="قاموسك الشخصي" onclick="return onSidebarFeatureClick(event, 'personal', function () { loadPersonalDictionary(); });">
       <i class="fas fa-user-shield"></i> <span class="side-label">قاموسك الشخصي</span>
     </a>
     <!-- الكلمات الصعبة — تحت قاموسك الشخصي -->
     <div class="nav-thin-divider nav-divider-strong"></div>
-    <a href="#" class="nav-link" id="navStarred" data-view="starred" data-tip="الكلمات الصعبة" onclick="loadStarredView(); return false;">
+    <a href="#" class="nav-link" id="navStarred" data-feature="starred" data-view="starred" data-tip="الكلمات الصعبة" onclick="return onSidebarFeatureClick(event, 'starred', function () { loadStarredView(); });">
       <i class="fas fa-star"></i> <span class="side-label">الكلمات الصعبة</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">موسوعة الأساطير</span></div>
-    <a href="#" class="nav-link" data-view="minecraft" data-tip="Minecraft Dict" onclick="loadGameDictionary('minecraft'); return false;">
+    <a href="#" class="nav-link" data-feature="minecraft" data-view="minecraft" data-tip="Minecraft Dict" onclick="return onSidebarFeatureClick(event, 'minecraft', function () { loadGameDictionary('minecraft'); });">
       <i class="fas fa-cube"></i> <span class="side-label">Minecraft Dict</span>
     </a>
-    <a href="#" class="nav-link" data-view="pubg" data-tip="PUBG Terms" onclick="loadGameDictionary('pubg'); return false;">
+    <a href="#" class="nav-link" data-feature="pubg" data-view="pubg" data-tip="PUBG Terms" onclick="return onSidebarFeatureClick(event, 'pubg', function () { loadGameDictionary('pubg'); });">
       <i class="fas fa-crosshairs"></i> <span class="side-label">PUBG Terms</span>
     </a>
     <!-- إحصائيات + كويز — بعد قواميس الألعاب بنفس فاصل sidebar-divider -->
     <div class="sidebar-divider"><span class="side-label">الأدوات</span></div>
-    <a href="#" class="nav-link" data-tip="إحصائياتي" onclick="openStatsPanel(); closeSidebarIfOpen(); return false;">
+    <a href="#" class="nav-link" data-feature="stats" data-tip="إحصائياتي" onclick="return onSidebarFeatureClick(event, 'stats', function () { openStatsPanel(); });">
       <i class="fas fa-chart-bar"></i> <span class="side-label">إحصائياتي</span>
     </a>
-    <a href="#" class="nav-link" id="navQuiz" data-view="quiz" data-tip="الاختبار" onclick="loadQuizView(); return false;">
+    <a href="#" class="nav-link" id="navQuiz" data-feature="quiz" data-view="quiz" data-tip="الاختبار" onclick="return onSidebarFeatureClick(event, 'quiz', function () { loadQuizView(); });">
       <i class="fas fa-gamepad"></i> <span class="side-label">الاختبار</span>
     </a>
     <div class="sidebar-divider"><span class="side-label">الحساب</span></div>
@@ -236,6 +237,20 @@
     <div class="modal-buttons">
       <button id="deleteConfirmBtn" class="btn-confirm">نعم، احذف</button>
       <button id="deleteCancelBtn" onclick="hideModal('deleteModal')" class="btn-cancel">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: شرح القفل (ميزة مقفلة) ══ -->
+<div id="unlockExplainModal" class="custom-modal unlock-explain-modal" role="dialog" aria-modal="true" aria-labelledby="unlockExplainTitle" onclick="if (event.target === this) hideModal('unlockExplainModal')">
+  <div class="modal-content unlock-explain-content" onclick="event.stopPropagation()">
+    <div class="modal-icon unlock-explain-icon"><i class="fa-solid fa-lock" aria-hidden="true"></i></div>
+    <h2 id="unlockExplainTitle">ميزة مقفلة</h2>
+    <p id="unlockExplainWhy" class="unlock-explain-text"></p>
+    <p id="unlockExplainHow" class="unlock-explain-text unlock-explain-how"></p>
+    <p id="unlockExplainProgress" class="unlock-explain-progress"></p>
+    <div class="modal-buttons">
+      <button type="button" class="btn-cancel unlock-explain-close" onclick="hideModal('unlockExplainModal')">حسناً</button>
     </div>
   </div>
 </div>
@@ -442,16 +457,14 @@
 <!-- ══ FIREBASE PROFILE SYNC ══ -->
 <script type="module">
 // نستورد setDoc و getDoc بشكل منفصل عشان ما يكسر الـ module الأول
-import { initializeApp, getApps }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getApps }  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-// نستخدم نفس الـ app الموجود (ما نعمل app جديد)
-const app  = getApps()[0];
-const db   = getFirestore(app);
-const auth = getAuth(app);
+// استخدم التطبيق الموجود فقط بدون إعادة تعريف إذا كان معرف مسبقًا
+let app  = getApps()[0];
+let db   = getFirestore(app);
+let auth = getAuth(app);
 
 let _saveProfileDebounce = null;
 async function performProfileSave() {
