@@ -34,98 +34,231 @@ let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg' | 'starr
         // Show tooltip on long press
         tooltip.classList.add('show');
         currentTooltip = tooltip;
-
-        // Position tooltip near touch point
-        const touch = e.touches[0];
-        const rect = wrap.getBoundingClientRect();
-        tooltip.style.left = (touch.clientX - 50) + 'px';
-        tooltip.style.top = (rect.top - tooltip.offsetHeight - 8) + 'px';
+        if (sidebar?.classList.contains('open')) toggleSidebar();
       }, LONG_PRESS_DURATION);
-    }, { passive: true });
-
-    // Touch end - clear timer and hide tooltip
+    });
+    // Touch end/cancel - clear timer and hide tooltip
     wrap.addEventListener('touchend', () => {
       clearTimeout(longPressTimer);
-      setTimeout(() => {
-        if (currentTooltip) {
-          currentTooltip.classList.remove('show');
-          currentTooltip = null;
-        }
-      }, 1500); // Hide after 1.5 seconds
+      setTimeout(() => { if (currentTooltip) currentTooltip.classList.remove('show'); }, 100);
     });
-
-    // Touch move - cancel long press
-    wrap.addEventListener('touchmove', () => {
-      clearTimeout(longPressTimer);
-    }, { passive: true });
-
-    // Touch cancel - clear timer
     wrap.addEventListener('touchcancel', () => {
       clearTimeout(longPressTimer);
-      if (currentTooltip) {
-        currentTooltip.classList.remove('show');
-        currentTooltip = null;
-      }
+      setTimeout(() => { if (currentTooltip) currentTooltip.classList.remove('show'); }, 100);
     });
   });
-})();
-
-// ── ACTION BUTTONS ISOLATION ───────────────────────────
-// Prevent card click when tapping action buttons (mobile)
-(function initActionButtonIsolation() {
-  const actionButtons = document.querySelectorAll('.btn-audio, .btn-edit, .btn-delete');
-
-  actionButtons.forEach(btn => {
-    // Stop propagation on touchstart
-    btn.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-    }, { passive: true });
-
-    // Stop propagation on click
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
-
-    // Prevent default on touch devices
-    btn.addEventListener('touchend', (e) => {
-      e.stopPropagation();
-    }, { passive: true });
-  });
-})();
-
-// ── Fluent Emoji helper (Microsoft CDN) ──────────────────
-// https://github.com/microsoft/fluentui-emoji
-const FE_BASE = 'https://cdn.jsdelivr.net/npm/fluentui-emoji@latest/icons';
-
-// نستخدم inline <img> بدل نص الإيموجي في الأماكن المهمة
-function fe(name, size = 20) {
-  // name مثل: 'star', 'sword', 'fire' — تتطابق مع أسماء الملفات
-  return `<img src="${FE_BASE}/${name}/flat/default.svg" width="${size}" height="${size}" style="vertical-align:middle; display:inline-block;" alt="" onerror="this.style.display='none'">`;
-}
-
-// ═══════════════════════════════════════════════════════
-// Sidebar
-// ═══════════════════════════════════════════════════════
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('overlay');
-  if (!sidebar || !overlay) return;
-  sidebar.classList.toggle('open');
-  const isOpen = sidebar.classList.contains('open');
-  overlay.classList.toggle('show', isOpen);
-  document.body.classList.toggle('sidebar-open', isOpen);
-}
-
-function closeSidebarIfOpen() {
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar?.classList.contains('open')) toggleSidebar();
-}
+});
+// نهاية دالة initMobileTooltip
 
 function setActiveNavLink(key) {
   // key: 'personal' | 'minecraft' | 'pubg'
   document.querySelectorAll('.nav-link[data-view]').forEach(l => {
     l.classList.toggle('active', l.dataset.view === key);
   });
+}
+
+// ═══════════════════════════════════════════════════════
+// Feature unlocks — UI sync (rules: optional window.getUnlockedFeatures / window.unlockedFeatures)
+// ═══════════════════════════════════════════════════════
+
+function getUnlockProgressSnapshot() {
+  const words = Array.isArray(window.words) ? window.words : [];
+  return {
+    wordCount: words.length,
+    starredCount: words.filter(w => w.starred).length,
+    userXP: loadInt('userXP', 0),
+    dailyStreak: loadInt('dailyStreak', 0),
+    dailyAdded: typeof getDailyCount === 'function' ? getDailyCount() : 0,
+  };
+}
+
+/** Default gates if host page does not define `getUnlockedFeatures` or `unlockedFeatures`. */
+function computeDefaultUnlockedFeatures() {
+  const p = getUnlockProgressSnapshot();
+  const u = new Set(['personal', 'stats']);
+  if (p.wordCount >= 1) u.add('starred');
+  if (p.wordCount >= 3 || p.userXP >= 20) u.add('minecraft');
+  if (p.wordCount >= 8 || p.userXP >= 55) u.add('pubg');
+  if (p.wordCount >= 5) u.add('quiz');
+  return u;
+}
+
+function resolveUnlockedFeatures() {
+  if (typeof window.getUnlockedFeatures === 'function') {
+    const r = window.getUnlockedFeatures();
+    if (r instanceof Set) return r;
+    if (Array.isArray(r)) return new Set(r);
+  }
+  if (window.unlockedFeatures instanceof Set) return window.unlockedFeatures;
+  if (Array.isArray(window.unlockedFeatures)) return new Set(window.unlockedFeatures);
+  return computeDefaultUnlockedFeatures();
+}
+
+function isFeatureUnlocked(featureId) {
+  return resolveUnlockedFeatures().has(featureId);
+}
+
+const UNLOCK_EXPLAIN = {
+  personal: {
+    title: 'قاموسك الشخصي',
+    why: 'هذه البداية الأساسية — متاحة دائماً.',
+    how: 'لا يوجد شرط.',
+    progress: () => '',
+  },
+  stats: {
+    title: 'إحصائياتي',
+    why: 'لوحة الإحصائيات متاحة لمتابعة تقدّمك.',
+    how: 'لا يوجد شرط.',
+    progress: () => '',
+  },
+  starred: {
+    title: 'الكلمات الصعبة',
+    why: 'نفعّل قائمة الكلمات الصعبة بعد ما يصير عندك كلمات تقدر تعلّم عليها نجمة.',
+    how: 'أضف كلمة واحدة على الأقل إلى قاموسك.',
+    progress: (p) => {
+      const need = 1;
+      const n = p.wordCount;
+      return n >= need ? `تقدّمك: ${n} كلمة (تم استيفاء الشرط).` : `تقدّمك: ${n} من ${need} كلمة في القاموس.`;
+    },
+  },
+  minecraft: {
+    title: 'قاموس Minecraft',
+    why: 'قاموس اللعبة يفتح بعد شوي تقدّم في التعلم.',
+    how: 'أضف 3 كلمات على الأقل إلى قاموسك، أو أوصل إلى 20 XP.',
+    progress: (p) => {
+      const ok = p.wordCount >= 3 || p.userXP >= 20;
+      return ok
+        ? `تقدّمك: ${p.wordCount} كلمة، ${p.userXP} XP (تم استيفاء أحد الشرطين).`
+        : `تقدّمك: ${p.wordCount} من 3 كلمات، و${p.userXP} من 20 XP.`;
+    },
+  },
+  pubg: {
+    title: 'مصطلحات PUBG',
+    why: 'قاموس PUBG يفتح بعد ما يتوسّع قاموسك أكثر.',
+    how: 'أضف 8 كلمات على الأقل، أو أوصل إلى 55 XP.',
+    progress: (p) => {
+      const ok = p.wordCount >= 8 || p.userXP >= 55;
+      return ok
+        ? `تقدّمك: ${p.wordCount} كلمة، ${p.userXP} XP (تم استيفاء أحد الشرطين).`
+        : `تقدّمك: ${p.wordCount} من 8 كلمات، و${p.userXP} من 55 XP.`;
+    },
+  },
+  quiz: {
+    title: 'الاختبار',
+    why: 'الاختبار يحتاج مجموعة كلمات كافية عشان يكون مفيد.',
+    how: 'أضف 5 كلمات على الأقل إلى قاموسك.',
+    progress: (p) => {
+      const need = 5;
+      return p.wordCount >= need
+        ? `تقدّمك: ${p.wordCount} كلمة (تم استيفاء الشرط).`
+        : `تقدّمك: ${p.wordCount} من ${need} كلمات في القاموس.`;
+    },
+  },
+};
+
+function openUnlockExplainModal(featureId) {
+  const meta = UNLOCK_EXPLAIN[featureId] || {
+    title: 'ميزة مقفلة',
+    why: 'هذه الميزة غير متاحة حالياً.',
+    how: 'تابع التعلّم وإضافة الكلمات لفتح المزيد.',
+    progress: (p) => `XP: ${p.userXP} — كلمات القاموس: ${p.wordCount}`,
+  };
+  const snap = getUnlockProgressSnapshot();
+  const tTitle = document.getElementById('unlockExplainTitle');
+  const tWhy = document.getElementById('unlockExplainWhy');
+  const tHow = document.getElementById('unlockExplainHow');
+  const tPr = document.getElementById('unlockExplainProgress');
+  if (tTitle) tTitle.textContent = meta.title;
+  if (tWhy) tWhy.textContent = meta.why;
+  if (tHow) tHow.textContent = meta.how;
+  if (tPr) tPr.textContent = typeof meta.progress === 'function' ? meta.progress(snap) : (meta.progress || '');
+  showModal('unlockExplainModal');
+}
+
+window.onSidebarFeatureClick = function(ev, featureId, fn) {
+  if (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  if (!isFeatureUnlocked(featureId)) {
+    openUnlockExplainModal(featureId);
+    return false;
+  }
+  if (featureId !== 'personal') {
+    if (typeof closeSidebarIfOpen === 'function') closeSidebarIfOpen();
+  }
+  if (typeof fn === 'function') fn();
+  return false;
+};
+
+function triggerUnlockPulseOnLink(link) {
+  if (!link) return;
+  link.classList.remove('unlock-pulse');
+  void link.offsetWidth;
+  const finish = () => {
+    link.classList.remove('unlock-pulse');
+  };
+  const onEnd = (e) => {
+    if (e.animationName !== 'unlockPulse') return;
+    link.removeEventListener('animationend', onEnd);
+    finish();
+  };
+  link.addEventListener('animationend', onEnd);
+  link.classList.add('unlock-pulse');
+  setTimeout(() => {
+    link.removeEventListener('animationend', onEnd);
+    finish();
+  }, 520);
+}
+
+function syncNavLockUi() {
+  const unlocked = resolveUnlockedFeatures();
+  const currentLocks = {};
+  document.querySelectorAll('.nav-link[data-feature]').forEach((link) => {
+    const id = link.getAttribute('data-feature');
+    if (id) currentLocks[id] = !unlocked.has(id);
+  });
+
+  const prev = window.__navLockPrev;
+  const pulseIds = [];
+  if (window.__navLockAnimSeeded && prev) {
+    for (const id of Object.keys(currentLocks)) {
+      if (prev[id] === true && currentLocks[id] === false) pulseIds.push(id);
+    }
+  }
+  if (!window.__navLockAnimSeeded) window.__navLockAnimSeeded = true;
+
+  document.querySelectorAll('.nav-link[data-feature]').forEach((link) => {
+    const id = link.getAttribute('data-feature');
+    if (!id) return;
+    const locked = !unlocked.has(id);
+    link.classList.toggle('feature-locked', locked);
+    link.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    let badge = link.querySelector('.feature-lock-badge');
+    if (locked) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'feature-lock-badge';
+        badge.setAttribute('aria-hidden', 'true');
+        badge.innerHTML = '<i class="fa-solid fa-lock"></i>';
+        link.appendChild(badge);
+      }
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+
+  for (const id of pulseIds) {
+    document.querySelectorAll('.nav-link[data-feature]').forEach((link) => {
+      if (link.getAttribute('data-feature') === id) triggerUnlockPulseOnLink(link);
+    });
+  }
+
+  window.__navLockPrev = { ...currentLocks };
+}
+
+function refreshFeatureUnlockUI() {
+  if (typeof syncNavLockUi === 'function') syncNavLockUi();
 }
 
 // ── Theme Switching ──────────────────────────────
@@ -208,6 +341,7 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   renderStreak();
   renderDailyGoal();
   renderXPBar();
+  refreshFeatureUnlockUI();
   if (typeof renderStatsNumbers === 'function' &&
       document.getElementById('statsPanel')?.style.display !== 'none') {
     renderStatsNumbers();
@@ -289,6 +423,7 @@ function updateXP(amount) {
   renderXPBar();
   if (amount > 0 && getRank(userXP).label !== oldRank.label)
     setTimeout(()=>showRankUp(getRank(userXP)), 400);
+  refreshFeatureUnlockUI();
 }
 
 function renderXPBar() {
@@ -539,7 +674,7 @@ function renderStatsNumbers() {
 // ═══════════════════════════════════════════════════════
 function saveAndRender() {
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
-  render();
+  render(); // Now optimized (includes refreshFeatureUnlockUI)
 }
 
 function clearInputs() {
@@ -1143,6 +1278,11 @@ function restoreViewScroll(viewKey) {
 }
 
 window.loadGameDictionary = function(gameKey) {
+  if (!isFeatureUnlocked(gameKey)) {
+    openUnlockExplainModal(gameKey);
+    refreshFeatureUnlockUI();
+    return;
+  }
   beginViewSwitch();
   saveCurrentViewScroll();
   closeSidebarIfOpen();
@@ -1177,6 +1317,7 @@ window.loadGameDictionary = function(gameKey) {
 
   renderGameWords(currentGameWords);
   restoreViewScroll(gameKey);
+  refreshFeatureUnlockUI();
 };
 
 function renderGameWords(words) {
@@ -1282,6 +1423,11 @@ function hideAllViewElements() {
 
 // ── Starred Words View ──
 window.loadStarredView = function() {
+  if (!isFeatureUnlocked('starred')) {
+    openUnlockExplainModal('starred');
+    refreshFeatureUnlockUI();
+    return;
+  }
   beginViewSwitch();
   saveCurrentViewScroll();
   closeSidebarIfOpen();
@@ -1304,6 +1450,7 @@ window.loadStarredView = function() {
 
   renderStarredWords();
   restoreViewScroll('starred');
+  refreshFeatureUnlockUI();
 };
 
 function renderStarredWords() {
@@ -1368,6 +1515,11 @@ function renderStarredWords() {
 
 // ── Quiz Full-Page View ──
 window.loadQuizView = function() {
+  if (!isFeatureUnlocked('quiz')) {
+    openUnlockExplainModal('quiz');
+    refreshFeatureUnlockUI();
+    return;
+  }
   beginViewSwitch();
   saveCurrentViewScroll();
   closeSidebarIfOpen();
@@ -1395,6 +1547,7 @@ window.loadQuizView = function() {
     : 'القاموس فاضي!';
 
   restoreViewScroll('quiz');
+  refreshFeatureUnlockUI();
 };
 
 window.loadPersonalDictionary = function() {
@@ -1426,6 +1579,7 @@ window.loadPersonalDictionary = function() {
   setActiveNavLink('personal');
   render();
   restoreViewScroll('personal');
+  refreshFeatureUnlockUI();
 };
 
 window.addFromGame = async function(text, meaning, example, btnEl) {
@@ -1476,11 +1630,17 @@ function highlightText(text, query) {
 
 function render() {
   // لو مش على القاموس الشخصي ما نرندر
-  if (currentView !== 'personal') return;
+  if (currentView !== 'personal') {
+    refreshFeatureUnlockUI();
+    return;
+  }
 
   const searchEl = document.getElementById('searchInput');
   const filterEl = document.getElementById('searchFilter');
-  if (!searchEl) return;
+  if (!searchEl) {
+    refreshFeatureUnlockUI();
+    return;
+  }
 
   const query      = searchEl.value.toLowerCase().trim();
   const searchType = filterEl ? filterEl.value : 'all';
@@ -1517,6 +1677,7 @@ function render() {
         <div style="font-size:32px;margin-bottom:10px;"><i class="fa-solid fa-book-open" aria-hidden="true"></i></div>
         ${query ? 'ما في نتائج للبحث' : 'قاموسك فاضي، ابدأ بإضافة كلمة!'}
       </li>`;
+    refreshFeatureUnlockUI();
     return;
   }
 
@@ -1557,6 +1718,7 @@ function render() {
         }
       </li>`;
   }).join('');
+  refreshFeatureUnlockUI();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1735,6 +1897,7 @@ window.onload = function() {
   setTimeout(() => {
     if (!window._profileLoaded) checkAndUpdateStreak();
   }, 1200);
+  refreshFeatureUnlockUI();
 };
 
 // ═══════════════════════════════════════════════════════
@@ -1789,8 +1952,32 @@ window.onload = function() {
   // رجّع الأيقون لما يفتح السايدبار
   const origToggle = window.toggleSidebar;
   window.toggleSidebar = function() {
-    origToggle();
+    if (typeof origToggle === 'function') origToggle();
     const icon = headerIcon();
     if (icon) icon.className = sidebar.classList.contains('open') ? origClass : origClass;
   };
 })();
+
+// ═══════════════════════════════════════════════════════
+// Sidebar toggle (defined here if not already defined)
+// ═══════════════════════════════════════════════════════
+if (typeof window.toggleSidebar !== 'function') {
+  window.toggleSidebar = function() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('show', isOpen);
+  };
+}
+
+if (typeof window.closeSidebarIfOpen !== 'function') {
+  window.closeSidebarIfOpen = function() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    if (sidebar && sidebar.classList.contains('open')) {
+      sidebar.classList.remove('open');
+      if (overlay) overlay.classList.remove('show');
+    }
+  };
+}
