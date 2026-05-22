@@ -52,37 +52,41 @@
     <div class="sidebar-divider"><span class="side-label">الحساب</span></div>
     <button id="loginBtn"  class="auth-btn" data-tip="تسجيل دخول" onclick="login()"><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="side-label">تسجيل دخول بـ Google</span></button>
     <button id="logoutBtn" class="auth-btn" data-tip="تسجيل الخروج" onclick="showModal('logoutModal')"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> <span class="side-label">تسجيل الخروج</span></button>
-    <div class="sidebar-divider"><span class="side-label">المظهر</span></div>
-    <div class="xp-panel">
-      <div class="xp-top">
-        <span id="xpRankIcon" class="xp-icon"><i class="fa-solid fa-seedling" aria-hidden="true"></i></span>
-        <span id="xpRankLabel" class="xp-rank">Noob</span>
-        <span id="xpValue" class="xp-val">0 XP</span>
-      </div>
-      <div class="xp-track"><div id="xpFill" class="xp-fill"></div></div>
-      <div class="xp-bottom">
-        <span class="xp-hint">التالي:</span>
-        <span id="xpNext" class="xp-next-val">15 XP</span>
+    <button id="replayOnboardingBtn" class="auth-btn" data-tip="إعادة الشرح" onclick="startOnboarding(true)"><i class="fa-solid fa-redo" aria-hidden="true"></i> <span class="side-label">إعادة الشرح</span></button>
+    <div class="sidebar-divider" id="levelDivider"><span class="side-label">المستوى</span></div>
+    <div id="levelSection" class="level-section">
+      <div class="xp-panel">
+        <div class="xp-top">
+          <span id="xpRankIcon" class="xp-icon"><i class="fa-solid fa-seedling" aria-hidden="true"></i></span>
+          <span id="xpRankLabel" class="xp-rank">Noob</span>
+          <span id="xpValue" class="xp-val">0 XP</span>
+        </div>
+        <div class="xp-track"><div id="xpFill" class="xp-fill"></div></div>
+        <div class="xp-bottom">
+          <span class="xp-hint">التالي:</span>
+          <span id="xpNext" class="xp-next-val">15 XP</span>
+        </div>
       </div>
     </div>
+    <div class="sidebar-divider"><span class="side-label">المظهر</span></div>
     <div class="theme-selector">
-      <div class="theme-option active" data-theme="lootlingua" onclick="setTheme('lootlingua')">
+      <div class="theme-option active" data-theme="lootlingua" data-unlock-level="1" onclick="setTheme('lootlingua')">
         <div class="theme-preview preview-lootlingua"></div>
         <span class="theme-name">LootLingua</span>
       </div>
-      <div class="theme-option" data-theme="golden" onclick="setTheme('golden')">
+      <div class="theme-option" data-theme="golden" data-unlock-level="2" onclick="setTheme('golden')">
         <div class="theme-preview preview-golden"></div>
         <span class="theme-name">الكنز الذهبي</span>
       </div>
-      <div class="theme-option" data-theme="scroll" onclick="setTheme('scroll')">
+      <div class="theme-option" data-theme="scroll" data-unlock-level="3" onclick="setTheme('scroll')">
         <div class="theme-preview preview-scroll"></div>
         <span class="theme-name">المخطوطة القديمة</span>
       </div>
-      <div class="theme-option" data-theme="ocean" onclick="setTheme('ocean')">
+      <div class="theme-option" data-theme="ocean" data-unlock-level="4" onclick="setTheme('ocean')">
         <div class="theme-preview preview-ocean"></div>
         <span class="theme-name">واحة الهدوء</span>
       </div>
-      <div class="theme-option" data-theme="glass" onclick="setTheme('glass')">
+      <div class="theme-option" data-theme="glass" data-unlock-level="5" onclick="setTheme('glass')">
         <div class="theme-preview preview-glass"></div>
         <span class="theme-name">Liquid Glass</span>
       </div>
@@ -116,10 +120,11 @@
 
   <!-- بطاقة الإضافة (تُخفى عند قواميس الألعاب) -->
   <div class="card-box" id="personalControls">
-    <div style="display:flex; gap:8px; margin-bottom:10px;">
+    <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
       <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai btn-icon-tip" data-tip="بحث ذكي"><i class="fas fa-search"></i></button>
       <input type="text" id="wordInput" placeholder="الكلمة بالإنجليزي (مثال: Sword)" dir="ltr">
     </div>
+    <div id="onboardingExampleChips" class="onboarding-examples" style="display:none;"></div>
     <div id="suggestionsBox">
       <p style="font-size:13px; color:var(--accent); font-weight:bold; margin:0; padding:10px 14px 4px;">اختر المعنى الأنسب:</p>
       <div id="suggestionsList"></div>
@@ -220,13 +225,34 @@
 
   <!-- تصدير / استيراد -->
   <div class="backup-zone">
-    <button class="btn-backup" onclick="exportData()"><i class="fa-solid fa-file-export" aria-hidden="true"></i> تصدير JSON</button>
-    <button class="btn-backup" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-file-import" aria-hidden="true"></i> استيراد JSON</button>
+    <div class="backup-row">
+      <button class="btn-backup" onclick="exportData()"><i class="fa-solid fa-file-export" aria-hidden="true"></i> تصدير JSON</button>
+      <button type="button" class="icon-circle help-btn" aria-label="شرح التصدير" title="شرح التصدير" onclick="showBackupHelp('export', event)"><i class="fa-solid fa-question" aria-hidden="true"></i></button>
+    </div>
+    <div class="backup-row">
+      <button class="btn-backup" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-file-import" aria-hidden="true"></i> استيراد JSON</button>
+      <button type="button" class="icon-circle help-btn" aria-label="شرح الاستيراد" title="شرح الاستيراد" onclick="showBackupHelp('import', event)"><i class="fa-solid fa-question" aria-hidden="true"></i></button>
+    </div>
     <input type="file" id="importFile" style="display:none;" onchange="importData(event)">
   </div>
 </main>
 
 
+
+<!-- ══ Onboarding Overlay & Guide ══ -->
+<div id="onboardingBackdrop" class="onboarding-backdrop hidden"></div>
+<div id="onboardingBox" class="onboarding-box hidden" aria-live="polite" role="dialog" aria-modal="true">
+  <div class="onboarding-content">
+    <h2 id="onboardingTitle">مرحباً في LootLingua</h2>
+    <p id="onboardingText"></p>
+    <div id="onboardingExtras" class="onboarding-extras"></div>
+    <div class="onboarding-buttons">
+      <button id="onboardingPrimaryBtn" class="btn-main"></button>
+      <button id="onboardingSecondaryBtn" class="btn-secondary"></button>
+    </div>
+  </div>
+</div>
+<div id="onboardingTooltip" class="onboarding-tooltip hidden"></div>
 
 <!-- ══ MODAL: حذف ══ -->
 <div id="deleteModal" class="custom-modal">
@@ -301,8 +327,14 @@
   onAuthStateChanged(auth, (user) => {
     document.getElementById('logoutBtn').style.display = user ? 'block' : 'none';
     document.getElementById('loginBtn').style.display  = user ? 'none'  : 'block';
-    if (user) loadWordsFromCloud(user);
-    else { window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || []; render(); }
+    if (user) {
+      window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || [];
+      if (typeof window.render === 'function') window.render();
+      loadWordsFromCloud(user);
+    } else {
+      window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || [];
+      render();
+    }
   });
 
   window.login = async function() {
