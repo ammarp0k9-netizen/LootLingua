@@ -11,7 +11,10 @@ let quizIndex        = 0;
 let currentStreak    = 0;
 let pendingDeleteId  = null;
 let userXP           = parseInt(localStorage.getItem('userXP')) || 0;
+let dailyStreak      = loadInt('dailyStreak', 0);
+let lastActivity     = localStorage.getItem('lastActivityDate') || '';
 let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg' | 'starred' | 'quiz'
+let renderLimit      = 20;  // عدد الكلمات التي تظهر في البداية
 
 // ── MOBILE LONG-PRESS TOOLTIP ──────────────────────────
 // Show tooltip only on long press (500ms), not on normal tap
@@ -50,6 +53,10 @@ let currentView      = 'personal'; // 'personal' | 'minecraft' | 'pubg' | 'starr
 });
 // نهاية دالة initMobileTooltip
 
+// Global variables for scroll lock during onboarding
+let mainContentScrollArea = null;
+let originalMainContentScrollAreaOverflow = '';
+
 function setActiveNavLink(key) {
   // key: 'personal' | 'minecraft' | 'pubg'
   document.querySelectorAll('.nav-link[data-view]').forEach(l => {
@@ -67,6 +74,7 @@ function getUnlockProgressSnapshot() {
     wordCount: words.length,
     starredCount: words.filter(w => w.starred).length,
     userXP: loadInt('userXP', 0),
+    userLevel: getLevelFromXP(loadInt('userXP', 0)),
     dailyStreak: loadInt('dailyStreak', 0),
     dailyAdded: typeof getDailyCount === 'function' ? getDailyCount() : 0,
   };
@@ -77,8 +85,8 @@ function computeDefaultUnlockedFeatures() {
   const p = getUnlockProgressSnapshot();
   const u = new Set(['personal', 'stats']);
   if (p.wordCount >= 1) u.add('starred');
-  if (p.wordCount >= 3 || p.userXP >= 20) u.add('minecraft');
-  if (p.wordCount >= 8 || p.userXP >= 55) u.add('pubg');
+  if (p.wordCount >= 2 || p.userXP >= 10) u.add('minecraft');
+  if (p.wordCount >= 2 || p.userXP >= 10) u.add('pubg');
   if (p.wordCount >= 5) u.add('quiz');
   return u;
 }
@@ -123,24 +131,24 @@ const UNLOCK_EXPLAIN = {
   },
   minecraft: {
     title: 'قاموس Minecraft',
-    why: 'قاموس اللعبة يفتح بعد شوي تقدّم في التعلم.',
-    how: 'أضف 3 كلمات على الأقل إلى قاموسك، أو أوصل إلى 20 XP.',
+    why: 'قاموس اللعبة يفتح بسرعة بعد شوية كلمات جديدة.',
+    how: 'أضف 2 كلمة فقط إلى قاموسك، أو أوصل إلى 10 XP.',
     progress: (p) => {
-      const ok = p.wordCount >= 3 || p.userXP >= 20;
+      const ok = p.wordCount >= 2 || p.userXP >= 10;
       return ok
         ? `تقدّمك: ${p.wordCount} كلمة، ${p.userXP} XP (تم استيفاء أحد الشرطين).`
-        : `تقدّمك: ${p.wordCount} من 3 كلمات، و${p.userXP} من 20 XP.`;
+        : `تقدّمك: ${p.wordCount} من 2 كلمات، و${p.userXP} من 10 XP.`;
     },
   },
   pubg: {
     title: 'مصطلحات PUBG',
-    why: 'قاموس PUBG يفتح بعد ما يتوسّع قاموسك أكثر.',
-    how: 'أضف 8 كلمات على الأقل، أو أوصل إلى 55 XP.',
+    why: 'قاموس PUBG يفتح بسرعة بعد شوية كلمات جديدة.',
+    how: 'أضف 2 كلمة فقط إلى قاموسك، أو أوصل إلى 10 XP.',
     progress: (p) => {
-      const ok = p.wordCount >= 8 || p.userXP >= 55;
+      const ok = p.wordCount >= 2 || p.userXP >= 10;
       return ok
         ? `تقدّمك: ${p.wordCount} كلمة، ${p.userXP} XP (تم استيفاء أحد الشرطين).`
-        : `تقدّمك: ${p.wordCount} من 8 كلمات، و${p.userXP} من 55 XP.`;
+        : `تقدّمك: ${p.wordCount} من 2 كلمات، و${p.userXP} من 10 XP.`;
     },
   },
   quiz: {
@@ -211,6 +219,30 @@ function triggerUnlockPulseOnLink(link) {
   }, 520);
 }
 
+function playUnlockSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.08;
+    gain.connect(ctx.destination);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 520;
+    osc.connect(gain);
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    osc.start();
+    osc.stop(ctx.currentTime + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    osc.onended = () => { ctx.close().catch(() => {}); };
+  } catch (e) {
+    // Autoplay or audio failure is okay; fail silently.
+  }
+}
+
 function syncNavLockUi() {
   const unlocked = resolveUnlockedFeatures();
   const currentLocks = {};
@@ -253,6 +285,12 @@ function syncNavLockUi() {
       if (link.getAttribute('data-feature') === id) triggerUnlockPulseOnLink(link);
     });
   }
+  if (pulseIds.length > 0) {
+    playUnlockSound();
+    const firstTitle = UNLOCK_EXPLAIN[pulseIds[0]]?.title || 'ميزة جديدة';
+    const suffix = pulseIds.length > 1 ? ` و${pulseIds.length - 1} ميزة أخرى` : '';
+    showToast(`🎉 تم فتح ميزة: ${firstTitle}${suffix}`, 'success');
+  }
 
   window.__navLockPrev = { ...currentLocks };
 }
@@ -262,17 +300,55 @@ function refreshFeatureUnlockUI() {
 }
 
 // ── Theme Switching ──────────────────────────────
-window.setTheme = function(theme) {
+const THEME_USE_MESSAGES = {
+  lootlingua: 'رجعنا للستايل الأصلي.. نظيف ومرتب مثل أول سيف باللعبة.',
+  golden: 'الكنز الذهبي اشتغل. واضح إن القاموس صار داخل غرفة loot.',
+  scroll: 'المخطوطة القديمة جاهزة. جو دراسة، بس بدون غبار المكتبات.',
+  ocean: 'واحة الهدوء مفعلة. هذا الثيم معمول للمراجعة براحة.',
+  glass: 'Liquid Glass اشتغل. هيك دخلنا مرحلة الستايل الفاخر.',
+};
+
+const THEME_UNLOCK_MESSAGES = {
+  golden: 'فتحت ثيم الكنز الذهبي. أول إنجاز بصري محترم.',
+  scroll: 'فتحت ثيم المخطوطة القديمة. القاموس صار عنده تاريخ.',
+  ocean: 'فتحت ثيم واحة الهدوء. مكافأة لطيفة بعد التقدم.',
+  glass: 'فتحت Liquid Glass. وصلت للستايل الثقيل.',
+};
+
+function themeSeenKey(type, theme) {
+  return `lootlingua:${type}:theme:${theme}`;
+}
+
+function showThemeUseMessageOnce(theme) {
+  const key = themeSeenKey('used', theme);
+  if (localStorage.getItem(key)) return;
+  const msg = THEME_USE_MESSAGES[theme];
+  if (!msg) return;
+  localStorage.setItem(key, '1');
+  setTimeout(() => showToast(msg, 'success', 5200), 2400);
+}
+
+window.setTheme = function(theme, skipLockCheck = false) {
+  const previousTheme = localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'lootlingua';
+  if (!skipLockCheck && !isThemeUnlocked(theme)) {
+    showToast(getThemeLockedMessage(theme), 'warning');
+    return false;
+  }
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('theme', theme);
   document.querySelectorAll('.theme-option').forEach(opt => {
     opt.classList.toggle('active', opt.dataset.theme === theme);
   });
+  refreshThemeLockUI();
+  if (!skipLockCheck && theme !== previousTheme) showThemeUseMessageOnce(theme);
+  return true;
 };
 
 function loadTheme() {
   const saved = localStorage.getItem('theme') || 'lootlingua';
-  setTheme(saved);
+  const candidate = isThemeUnlocked(saved) ? saved : 'lootlingua';
+  setTheme(candidate, true);
+  refreshThemeLockUI();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -281,12 +357,609 @@ function loadTheme() {
 function showModal(id) { document.getElementById(id).style.display = 'flex'; }
 function hideModal(id) { document.getElementById(id).style.display = 'none'; }
 
-function showToast(msg) {
+function showToast(msg, type = 'info', duration = 2500) {
   const t = document.getElementById('toastMessage');
   if (!t) return;
   t.textContent = String(msg ?? '');
+  t.style.background = '';
+  t.style.color = '';
+  t.classList.remove('toast-success', 'toast-warning', 'toast-danger', 'toast-info');
+  t.classList.add(type === 'success' ? 'toast-success' : type === 'danger' ? 'toast-danger' : type === 'warning' ? 'toast-warning' : 'toast-info');
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  clearTimeout(window.__toastHideTimer);
+  window.__toastHideTimer = setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ═══════════════════════════════════════════════════════
+// ONBOARDING — Event-driven, simple, step-based
+// ═══════════════════════════════════════════════════════
+const ONBOARDING_STORAGE_KEY = 'lootlinguaOnboarding';
+
+const ONBOARDING_STEPS = [
+  { id: 'welcome', type: 'modal', title: 'مرحباً في LootLingua', text: 'LootLingua هو قاموسك الشخصي (إنجليزي - عربي).' },
+  { id: 'wordInput', target: '#wordInput', text: '✍️ هنا تكتب الكلمة بالإنجليزي. سنستخدم كلمة جاهزة لتسهيل البداية.', action: 'fill' },
+  { id: 'searchBtn', target: '#searchBtn', text: '🔍 اضغط هنا لجلب معنى الكلمة وجملة عليها.', waitFor: 'searchClicked' },
+  { id: 'selectSug', target: '#suggestionsBox', text: '✨ اختر أحد المعاني المقترحة لتعبئة البيانات.', waitFor: 'suggestionSelected', preferredSide: 'left' },
+  { id: 'addBtn', target: '#addBtn', text: '⭐ اضغط هنا لإضافة الكلمة إلى القاموس.', waitFor: 'addWordSuccess' },
+  { id: 'sound', target: '#list .word-card:first-child .sound-btn', text: '🔊 اضغط هنا لتسمع نطق الكلمة.', waitFor: 'audioClicked' },
+  { id: 'openSidebar', target: '#menuBtn', text: '📚 افتح الشريط الجانبي لاستعراض القواميس والأقسام.', waitFor: 'sidebarOpened', preferredSide: 'viewport-right' },
+  { id: 'sidebarExplain', target: '#sidebar', text: '📂 هنا تجد الكلمات الصعبة، قواميس الألعاب (Minecraft/PUBG)، والاختبارات.', waitFor: 'next' },
+  { id: 'stats', target: '#levelSection', text: '🚀 هنا تتابع مستواك، الـ XP، وإحصائياتك اليومية.', waitFor: 'next', preferredSide: 'left' },
+  { id: 'login', target: '#loginBtn', text: '☁️ سجل دخولك لحفظ كلماتك ومزامنتها على كل أجهزتك.', waitFor: 'next', preferredSide: 'left' },
+  { id: 'finish', target: 'body', text: '🎉 انتهى الشرح! أنت جاهز الآن! استكشف التطبيق وابدأ رحلة التعلّم.', waitFor: 'next' }
+];
+
+let onboardState = { active: false, stepIndex: -1, currentStep: null, waitingFor: null };
+
+function getSafeWord() {
+  const options = ['book', 'go', 'learn', 'run', 'jump', 'play', 'see', 'look'];
+  const existing = new Set(window.words.map(w => (w.word || '').toLowerCase().trim()));
+  return options.find(w => !existing.has(w.toLowerCase())) || 'go';
+}
+
+let currentHighlightedElement = null; // Track the currently highlighted element
+
+function handleSoundStep(btn) {
+  if (!btn) return null;
+
+  const wordId = btn.dataset?.id || '';
+  const wordObj = window.words.find(w => String(w.id) === String(wordId));
+  const wordToPlay = wordObj?.word || btn.closest('.word-card')?.querySelector('.word-text')?.textContent?.trim() || '';
+
+  btn.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (typeof window.playSound === "function") {
+      window.playSound(wordId || wordToPlay, e);
+    }
+
+    setTimeout(() => nextStep(), 450);
+  }, { once: true });
+
+  return btn;
+}
+function showTooltip(target, text, options = {}) {
+  const { preferredSide } = options; // 'left' | 'right' | undefined
+  const tooltip = document.getElementById('onboardingTooltip');
+  if (!tooltip || !target) return;
+
+  const isMobile = window.innerWidth <= 768;
+
+  // Remove highlight from previous element
+  if (currentHighlightedElement) {
+    currentHighlightedElement.classList.remove('onboarding-active-target');
+  }
+  target.classList.add('onboarding-active-target');
+  currentHighlightedElement = target;
+
+  // Prepare tooltip off-screen, visible to layout but invisible to the user.
+  tooltip.style.opacity = '0';
+  tooltip.style.pointerEvents = 'none';
+  tooltip.style.left = '-9999px';
+  tooltip.style.top = '0px';
+  tooltip.style.right = 'auto';
+  tooltip.style.bottom = 'auto';
+  tooltip.style.transform = '';
+  tooltip.innerHTML = `<div>${text}</div>`;
+  tooltip.classList.remove('arrow-top', 'arrow-bottom', 'arrow-left', 'arrow-right', 'mobile-sheet', 'kb-active');
+  tooltip.classList.add('visible');
+
+  // Add a Next button if step just requires reading
+  if (onboardState.currentStep?.waitFor === 'next') {
+    const btn = document.createElement('button');
+    btn.className = 'onboarding-next-btn';
+    btn.innerText = 'التالي';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      nextStep();
+    }, { once: true });
+    tooltip.querySelector('div').appendChild(btn);
+  }
+
+  // Force layout after the new content and button are already inside the tooltip.
+  void tooltip.offsetWidth;
+
+  if (isMobile) {
+    tooltip.classList.add('mobile-sheet');
+    const activeEl = document.activeElement;
+    if ((activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') && activeEl.type !== 'button') {
+      tooltip.classList.add('kb-active');
+    }
+    tooltip.style.left = '';
+    tooltip.style.top = '';
+    tooltip.style.opacity = '1';
+    tooltip.style.pointerEvents = 'auto';
+    return;
+  }
+
+  const targetRect = target.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  let tipW = tooltipRect.width || tooltip.offsetWidth;
+  let tipH = tooltipRect.height || tooltip.offsetHeight;
+  const margin = 15;
+
+  // Guard against stale/zero layout readings without waiting on timers.
+  if (!tipW || tipW < 1) tipW = Math.min(280, window.innerWidth - margin * 2);
+  if (!tipH || tipH < 1) tipH = 80;
+
+  let top = 0, left = 0, arrowClass = '';
+  const isRTL = document.dir === 'rtl' || getComputedStyle(document.body).direction === 'rtl';
+
+  if (preferredSide === 'viewport-right') {
+    top = targetRect.bottom + margin;
+    left = window.innerWidth - tipW - margin;
+    arrowClass = 'arrow-top';
+  } else if (target.id === 'sidebar' || target.id === 'menuBtn') {
+    left = isRTL ? (targetRect.left - tipW - margin) : (targetRect.right + margin);
+    top = targetRect.top + Math.min(40, Math.max(0, targetRect.height / 2 - tipH / 2));
+    arrowClass = isRTL ? 'arrow-left' : 'arrow-right';
+  } else if (preferredSide) {
+    top = targetRect.top + (targetRect.height / 2) - (tipH / 2);
+    left = (preferredSide === 'left') ? (targetRect.left - tipW - margin) : (targetRect.right + margin);
+    arrowClass = (preferredSide === 'left') ? 'arrow-left' : 'arrow-right';
+  } else if (targetRect.bottom + tipH + margin < window.innerHeight) {
+    top = targetRect.bottom + margin;
+    left = targetRect.left + (targetRect.width / 2) - (tipW / 2);
+    arrowClass = 'arrow-bottom';
+  } else {
+    top = targetRect.top - tipH - margin;
+    left = targetRect.left + (targetRect.width / 2) - (tipW / 2);
+    arrowClass = 'arrow-top';
+  }
+
+  left = Math.max(margin, Math.min(left, window.innerWidth - tipW - margin));
+  top = Math.max(margin, Math.min(top, window.innerHeight - tipH - margin));
+
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${left}px`;
+  tooltip.classList.remove('arrow-top', 'arrow-bottom', 'arrow-left', 'arrow-right');
+  if (arrowClass) tooltip.classList.add(arrowClass);
+  tooltip.style.opacity = '1';
+  tooltip.style.pointerEvents = 'auto';
+}
+function hideTooltip() {
+  const tooltip = document.getElementById('onboardingTooltip');
+  if (tooltip) {
+    tooltip.classList.remove('visible');
+    tooltip.classList.remove('arrow-top', 'arrow-bottom', 'arrow-left', 'arrow-right');
+    tooltip.innerHTML = ''; // Clear content
+  }
+  // Remove highlight from the last element
+  if (currentHighlightedElement) {
+    currentHighlightedElement.classList.remove('onboarding-active-target');
+    currentHighlightedElement = null;
+  }
+}
+
+// دالة مخصصة لعرض التلميح على يسار الزر (داخل الصفحة)
+function setOnboardingStatus(status) {
+  localStorage.setItem(ONBOARDING_STORAGE_KEY, status);
+}
+
+function getOnboardingStatus() {
+  return localStorage.getItem(ONBOARDING_STORAGE_KEY);
+}
+
+function hasOnboardingState() {
+  return ['completed', 'skipped'].includes(getOnboardingStatus());
+}
+
+let isProcessingNextStep = false; // لمنع تكرار الخطوات على الهاتف
+let onboardingStepAdvanceTimer = null;
+
+window.startOnboarding = function(force = false) {
+  if (force) setOnboardingStatus('new');
+  
+  if (typeof closeSidebarIfOpen === 'function') {
+    closeSidebarIfOpen();
+  }
+  
+  onboardState.active = true;
+  onboardState.stepIndex = 0;
+  // قفل السكرول بشكل كامل (Root + Body)
+  document.documentElement.classList.add('onboarding-active');
+  document.body.classList.add('onboarding-active');
+  if (mainContentScrollArea) mainContentScrollArea.style.overflow = 'hidden';
+  
+  // منع التمرير عبر اللمس والماوس برمجياً لضمان الاحترافية
+  window.addEventListener('wheel', preventScroll, { passive: false });
+  window.addEventListener('touchmove', preventScroll, { passive: false });
+
+  runStep();
+};
+
+function nextStep(expectedStepIndex = null) {
+  expectedStepIndex = Number.isInteger(expectedStepIndex) ? expectedStepIndex : null;
+  if (expectedStepIndex !== null && onboardState.stepIndex !== expectedStepIndex) return;
+  if (isProcessingNextStep) return;
+  isProcessingNextStep = true;
+
+  if (onboardingStepAdvanceTimer) {
+    clearTimeout(onboardingStepAdvanceTimer);
+    onboardingStepAdvanceTimer = null;
+  }
+
+  onboardState.stepIndex++;
+  onboardState.waitingFor = null;
+  runStep();
+
+  setTimeout(() => { isProcessingNextStep = false; }, 700);
+}
+
+window.onboardingEvent = function(eventName) {
+  if (!onboardState.active || !onboardState.currentStep) return;
+  if (onboardState.currentStep.waitFor === eventName) {
+    const expectedStepIndex = onboardState.stepIndex;
+    onboardState.waitingFor = null;
+    if (onboardingStepAdvanceTimer) clearTimeout(onboardingStepAdvanceTimer);
+    onboardingStepAdvanceTimer = setTimeout(() => {
+      onboardingStepAdvanceTimer = null;
+      nextStep(expectedStepIndex);
+    }, 100);
+  }
+};
+
+function runStep() {
+  hideTooltip();
+
+  const step = ONBOARDING_STEPS[onboardState.stepIndex];
+  if (!step) {
+    endOnboarding();
+    return;
+  }
+
+  if (step.id === 'openSidebar') {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar?.classList.contains('open') && typeof closeSidebarIfOpen === 'function') closeSidebarIfOpen();
+  }
+
+  onboardState.currentStep = step;
+
+  if (step.type === 'modal') {
+    showOnboardingBox(step);
+    return;
+  } else {
+    const box = document.getElementById('onboardingBox');
+    const backdrop = document.getElementById('onboardingBackdrop');
+    if (backdrop) backdrop.classList.remove('modal-backdrop');
+    if (box) {
+        box.classList.add('hidden');
+        box.style.display = 'none'; // تأكيد الإخفاء التام
+    }
+  }
+
+  let el = document.querySelector(step.target);
+  if (step.id === 'openSidebar' && (!el || el.getClientRects().length === 0)) {
+    el = document.querySelector('#sidebar .sidebar-header') || document.querySelector('#sidebar');
+  }
+  if (!el) {
+    // If target doesn't exist yet (e.g. list rendering), retry shortly
+    setTimeout(runStep, 100);
+    return;
+  }
+
+  const sidebar = document.getElementById('sidebar');
+  const stepTargetsSidebar = !!el.closest?.('#sidebar') || step.id === 'sidebarExplain';
+  if (stepTargetsSidebar && sidebar && !sidebar.classList.contains('open') && typeof window.toggleSidebar === 'function') {
+    window.toggleSidebar();
+  } else if (!stepTargetsSidebar && step.id !== 'openSidebar' && typeof closeSidebarIfOpen === 'function') {
+    closeSidebarIfOpen();
+  }
+
+  // تمركز تلقائي: في الأعلى للعناصر العلوية، وفي المنتصف للبقية
+  if (el !== document.body) {
+    const isTopElement = step.id === 'openSidebar' || step.id === 'sidebarExplain';
+    el.scrollIntoView({ behavior: 'smooth', block: isTopElement ? 'start' : 'center' });
+  }
+
+  // Interaction Step: Attach one-time click listener
+  if (step.id === 'sound') {
+    el = handleSoundStep(el); // تمرير العنصر للزر الجديد لضمان موقع التولتيب
+  } else if (step.waitFor && !['addWordSuccess', 'suggestionSelected', 'sidebarOpened', 'next'].includes(step.waitFor)) {
+    el.addEventListener('click', () => {
+      onboardingEvent(step.waitFor);
+    }, { once: true });
+  }
+
+  // Special handling for sidebar steps
+  if (step.id === 'openSidebar') {
+    // العودة للأعلى تماماً لضمان رؤية الهيدر
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // تعطيل Pointer Events على الشاشة كاملة لمنع النقرات المزدوجة
+    const disablePointerEvents = () => {
+      document.body.style.pointerEvents = 'none';
+      setTimeout(() => {
+        document.body.style.pointerEvents = 'auto';
+      }, 1000); // مدة الثانية الواحدة كما اقترح
+    };
+
+    // منع تكرار الأحداث عبر استخدام flag وليس multiple listeners
+    let sidebarOpenTriggered = false;
+    const handleSidebarOpen = () => {
+      if (!onboardState.active || onboardState.currentStep?.id !== 'openSidebar') return;
+      if (sidebarOpenTriggered) return; // منع التكرار
+      
+      sidebarOpenTriggered = true;
+      // تعطيل النقرات لمدة ثانية
+      disablePointerEvents();
+      
+      // إزالة المستمعين فوراً لمنع التكرار
+      el.removeEventListener('click', handleSidebarOpen);
+      onboardingEvent('sidebarOpened');
+    };
+
+    el.addEventListener('click', handleSidebarOpen, { once: true });
+    showTooltip(el, step.text, { preferredSide: step.preferredSide });
+    return; // Skip the default showTooltip call at the end
+  }
+
+  if (step.id === 'sidebarExplain') {
+    if (typeof window.toggleSidebar === 'function' && !document.getElementById('sidebar').classList.contains('open')) {
+      window.toggleSidebar();
+    }
+  }
+
+  if (step.action === 'fill') {
+    el.value = getSafeWord();
+    el.dispatchEvent(new Event('input', { bubbles: true })); // Use bubbles: true for better event propagation
+    setTimeout(nextStep, 1500);
+  }
+
+  // Special handling for the final step - show centered tooltip
+  if (step.id === 'finish') {
+    showFinishTooltip(step.text);
+    return;
+  }
+
+  showTooltip(el, step.text, { preferredSide: step.preferredSide });
+}
+
+function showOnboardingBox(step) {
+  const box = document.getElementById('onboardingBox');
+  const backdrop = document.getElementById('onboardingBackdrop');
+  const title = document.getElementById('onboardingTitle');
+  const text = document.getElementById('onboardingText');
+  const primary = document.getElementById('onboardingPrimaryBtn');
+  const secondary = document.getElementById('onboardingSecondaryBtn');
+
+  title.textContent = step.title;
+  text.innerHTML = step.text;
+  backdrop.classList.toggle('modal-backdrop', step.id === 'welcome');
+  
+  if (step.id === 'welcome') {
+    primary.textContent = 'ابدأ الشرح';
+    primary.addEventListener('click', () => nextStep(), { once: true });
+    secondary.textContent = 'لاحقًا';
+    secondary.style.display = 'inline-flex';
+    secondary.addEventListener('click', () => {
+      endOnboarding();
+      setOnboardingStatus('skipped');
+    }, { once: true });
+  } else {
+    primary.textContent = 'تمام';
+    primary.addEventListener('click', () => {
+      setOnboardingStatus('completed');
+      hideOnboarding();
+      showToast('الشرح انتهى بنجاح!', 'success');
+    }, { once: true });
+    secondary.style.display = 'none';
+  }
+
+  primary.style.display = 'inline-flex';
+  box.classList.remove('hidden');
+  backdrop.classList.add('visible');
+}
+
+function initOnboarding() {
+  // حقن تنسيقات الاحترافية للموبايل والـ Spotlight
+  const style = document.createElement('style');
+  style.textContent = `
+    .onboarding-active-target {
+      /* لا نغير الـ position من fixed - نحافظ على الترتيب الطبقي الأصلي */
+      z-index: 100006 !important;
+      box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.8) !important;
+      pointer-events: auto !important;
+      transition: box-shadow 0.3s ease;
+    }
+    #onboardingTooltip {
+      z-index: 100020 !important; /* فوق الـ backdrop والسايدبار وأي overlay داخلي */
+    }
+    #onboardingBackdrop.visible {
+      background: rgba(0, 0, 0, 0.64) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    #onboardingBackdrop.visible.modal-backdrop {
+      background: rgba(0, 0, 0, 0.68) !important;
+      backdrop-filter: blur(4px) saturate(0.85) !important;
+      -webkit-backdrop-filter: blur(4px) saturate(0.85) !important;
+    }
+    #onboardingBox {
+      z-index: 100030 !important;
+      filter: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    body.onboarding-active #sidebar:has(.onboarding-active-target),
+    body.onboarding-active #sidebar.onboarding-active-target {
+      z-index: 100006 !important;
+    }
+    body.onboarding-active .word-card:has(.sound-btn.onboarding-active-target) .edit-btn,
+    body.onboarding-active .word-card:has(.sound-btn.onboarding-active-target) .del-btn,
+    body.onboarding-active .word-card:has(.sound-btn.onboarding-active-target) .star-btn {
+      position: relative !important;
+      z-index: 1 !important;
+    }
+    /* تجميد محتوى السايدبار أثناء خطوة الشرح لمنع العجقة */
+    body.onboarding-active #overlay.show {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    #sidebar.onboarding-active-target * {
+      pointer-events: none !important;
+    }
+
+    /* القفل الحديدي للسكرول */
+    html.onboarding-active, body.onboarding-active {
+      overflow: hidden !important;
+      overscroll-behavior: none !important; /* يمنع الارتداد في الموبايل */
+    }
+    /* تأثير انتقالي ناعم للنص عند تغير الخطوات */
+    #onboardingTooltip div {
+      animation: onboardingTextFade 0.4s ease-out forwards;
+    }
+    @keyframes onboardingTextFade {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      #onboardingTooltip.mobile-sheet {
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+        max-width: none !important;
+        border-radius: 1.5rem 1.5rem 0 0 !important;
+        padding: 0.8rem 1rem !important; /* تقليل الحشو ليكون الصندوق أصغر */
+        background: var(--card-bg) !important;
+        border: none !important;
+        border-top: 3px solid var(--accent) !important;
+        box-shadow: 0 -10px 30px rgba(0,0,0,0.5) !important;
+        transform: translateY(0) !important;
+        margin: 0 !important;
+        text-align: center !important;
+        z-index: 100020 !important;
+      }
+      #onboardingTooltip.mobile-sheet div {
+        font-size: 0.95rem !important; /* تصغير حجم الخط */
+        line-height: 1.4 !important; /* تحسين تباعد الأسطر للحجم الجديد */
+      }
+      #onboardingTooltip.mobile-sheet.kb-active {
+        bottom: auto !important;
+        top: 0 !important;
+        border-top: none !important;
+        border-bottom: 3px solid var(--accent) !important;
+        border-radius: 0 0 1.5rem 1.5rem !important;
+      }
+      .onboarding-next-btn {
+        width: 80% !important;
+        margin-top: 1rem !important;
+        padding: 0.8rem !important;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  // مراقبة لوحة المفاتيح لتحديث مكان التلميح
+  // تحديد العنصر الرئيسي القابل للتمرير بعد تحميل DOM
+  // **هام:** يجب تغيير 'app-main-scroll-area' إلى الـ ID الفعلي للعنصر الذي يحتوي على المحتوى القابل للتمرير في صفحتك.
+  // إذا كان الـ body هو العنصر الوحيد القابل للتمرير، اتركه كما هو (document.body).
+  mainContentScrollArea = document.getElementById('app-main-scroll-area') || document.body;
+  originalMainContentScrollAreaOverflow = mainContentScrollArea.style.overflow;
+
+
+  window.addEventListener('focusin', (e) => {
+    if (!onboardState.active || window.innerWidth > 768) return;
+    const activeEl = document.activeElement;
+    const tip = document.getElementById('onboardingTooltip');
+    if (tip && tip.classList.contains('mobile-sheet') && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      tip.classList.add('kb-active');
+    }
+  });
+  window.addEventListener('focusout', (e) => {
+    const tip = document.getElementById('onboardingTooltip');
+    if (tip) tip.classList.remove('kb-active');
+  });
+
+  // Start if first time or if forced from a button elsewhere
+  const status = getOnboardingStatus();
+  if (!status || status === 'new') {
+    setTimeout(() => startOnboarding(), 1500);
+  }
+}
+
+function preventScroll(e) {
+  if (onboardState.active) e.preventDefault();
+}
+
+function endOnboarding() {
+  onboardState.active = false;
+  hideOnboarding();
+}
+
+function hideOnboarding() {
+  const box = document.getElementById('onboardingBox');
+  const backdrop = document.getElementById('onboardingBackdrop');
+  const tooltip = document.getElementById('onboardingTooltip');
+
+  box.classList.add('hidden');
+  backdrop.classList.remove('visible', 'modal-backdrop');
+  tooltip.classList.remove('visible');
+  
+  // إعادة كل شيء لحالته الطبيعية
+  document.documentElement.classList.remove('onboarding-active');
+  document.body.classList.remove('onboarding-active');
+  if (mainContentScrollArea) mainContentScrollArea.style.overflow = originalMainContentScrollAreaOverflow;
+  
+  window.removeEventListener('wheel', preventScroll);
+  window.removeEventListener('touchmove', preventScroll);
+}
+
+// دالة لعرض tooltip في منتصف الشاشة للخطوة الأخيرة
+function showFinishTooltip(text) {
+  const tooltip = document.getElementById('onboardingTooltip');
+  const backdrop = document.getElementById('onboardingBackdrop');
+  if (!tooltip) return;
+  if (backdrop) backdrop.classList.add('visible', 'modal-backdrop');
+
+  // إزالة أي highlight سابق
+  if (currentHighlightedElement) {
+    currentHighlightedElement.classList.remove('onboarding-active-target');
+    currentHighlightedElement = null;
+  }
+
+  // إعداد محتوى tooltip
+  tooltip.innerHTML = `<div>${text}</div>`;
+  tooltip.classList.remove('arrow-top', 'arrow-bottom', 'arrow-left', 'arrow-right');
+
+  // إضافة زر "التالي" (الإنهاء)
+  const btn = document.createElement('button');
+  btn.className = 'onboarding-next-btn';
+  btn.innerText = 'تمام';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOnboardingStatus('completed');
+    hideOnboarding();
+    showToast('الشرح انتهى بنجاح! 🎉', 'success');
+    // إطلاق confetti كاحتفال
+    if (typeof launchConfetti === 'function') launchConfetti();
+  }, { once: true });
+  tooltip.querySelector('div').appendChild(btn);
+
+  tooltip.classList.add('visible');
+  void tooltip.offsetWidth; // Force reflow
+
+  // الحصول على أبعاد tooltip
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const tipW = tooltipRect.width;
+  const tipH = tooltipRect.height;
+
+  // حساب الموقع في منتصف الشاشة
+  const left = (window.innerWidth - tipW) / 2;
+  const top = (window.innerHeight - tipH) / 2 - 50; // أعلى قليلاً من المنتصف
+
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${left}px`;
+  tooltip.classList.add('arrow-bottom'); // سهم يشير للأسفل
+
+  // إضافة تأثير احتفالي على الـ tooltip
+  tooltip.style.animation = 'tooltipPopIn 0.5s ease-out';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -310,6 +983,8 @@ window.getLootlinguaProfilePayload = function() {
 };
 
 window.mergeLootlinguaProfileFromCloud = function(d) {
+  // Track if we loaded from cloud to avoid double checkAndUpdateStreak
+  window._profileLoaded = true;
   if (!d) return;
   if (d.userXP !== undefined && d.userXP !== null) {
     const cloud = Number(d.userXP) || 0;
@@ -414,6 +1089,87 @@ userXP = loadInt('userXP', 0);
 function getRank(xp)     { return [...XP_RANKS].reverse().find(r=>xp>=r.min)||XP_RANKS[0]; }
 function getNextRank(xp) { return XP_RANKS.find(r=>r.min>xp)||null; }
 
+const THEME_UNLOCK_LEVELS = {
+  lootlingua: 1,
+  golden: 2,
+  scroll: 3,
+  ocean: 4,
+  glass: 5,
+};
+
+function getLevelFromXP(xp) {
+  const level = XP_RANKS.filter(r => xp >= r.min).length;
+  return Math.max(1, level);
+}
+
+function isThemeUnlocked(theme) {
+  const required = THEME_UNLOCK_LEVELS[theme] || 1;
+  return getLevelFromXP(userXP) >= required;
+}
+
+function getThemeLockedMessage(theme) {
+  const required = THEME_UNLOCK_LEVELS[theme] || 1;
+  return required === 1
+    ? 'هذا الثيم متاح الآن.'
+    : `سيفتح هذا الثيم عند الوصول إلى Level ${required}`;
+}
+
+function refreshThemeLockUI() {
+  const previous = window.__themeLockPrev;
+  const current = {};
+  const newlyUnlocked = [];
+  const newlyLocked = [];
+  let activeThemeLocked = false;
+  const activeTheme = localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'lootlingua';
+
+  document.querySelectorAll('.theme-option').forEach(opt => {
+    const theme = opt.dataset.theme;
+    const unlocked = isThemeUnlocked(theme);
+    current[theme] = !unlocked;
+    opt.classList.toggle('theme-locked', !unlocked);
+    opt.setAttribute('aria-disabled', unlocked ? 'false' : 'true');
+    if (!unlocked) {
+      opt.title = getThemeLockedMessage(theme);
+    } else {
+      opt.removeAttribute('title');
+    }
+
+    if (window.__themeLockSeeded && previous?.[theme] === false && !unlocked) {
+      newlyLocked.push(theme);
+      localStorage.removeItem(themeSeenKey('unlocked', theme));
+      localStorage.removeItem(themeSeenKey('used', theme));
+    }
+
+    const unlockKey = themeSeenKey('unlocked', theme);
+    if (window.__themeLockSeeded && previous?.[theme] === true && unlocked && !localStorage.getItem(unlockKey)) {
+      newlyUnlocked.push(theme);
+      localStorage.setItem(unlockKey, '1');
+    }
+
+    if (theme === activeTheme && !unlocked) activeThemeLocked = true;
+  });
+
+  if (activeThemeLocked) {
+    document.documentElement.setAttribute('data-theme', 'lootlingua');
+    localStorage.setItem('theme', 'lootlingua');
+    document.querySelectorAll('.theme-option').forEach(opt => {
+      opt.classList.toggle('active', opt.dataset.theme === 'lootlingua');
+    });
+    if (window.__themeLockSeeded) {
+      setTimeout(() => showToast('الثيم هذا رجع للخزنة مؤقتًا. ارجع ارفع مستواك وبتفتحه من جديد.', 'warning', 5600), 600);
+    }
+  }
+
+  if (!window.__themeLockSeeded) window.__themeLockSeeded = true;
+  window.__themeLockPrev = current;
+
+  if (newlyUnlocked.length > 0) {
+    const theme = newlyUnlocked[0];
+    playUnlockSound();
+    setTimeout(() => showToast(THEME_UNLOCK_MESSAGES[theme] || 'فتحت ثيم جديد. شكلك ماشي صح.', 'success', 5200), 4100);
+  }
+}
+
 function updateXP(amount) {
   if (!amount) return;
   const oldRank = getRank(userXP);
@@ -439,6 +1195,7 @@ function renderXPBar() {
   if (!el.fill) return;
   el.fill.style.width      = pct+'%';
   el.fill.style.background = rank.color;
+  refreshThemeLockUI();
   if (el.lbl) { el.lbl.textContent=rank.label; el.lbl.style.color=rank.color; }
   if (el.ico)   el.ico.innerHTML = `<i class="${rank.iconClass}" aria-hidden="true"></i>`;
   if (el.val)   el.val.textContent = userXP+' XP';
@@ -481,9 +1238,6 @@ function showRankUp(rank) {
 }
 
 // ── Daily Streak ──────────────────────────────────────
-let dailyStreak  = loadInt('dailyStreak', 0);
-let lastActivity = localStorage.getItem('lastActivityDate') || '';
-
 /**
  * يُستدعى مرة واحدة عند فتح الصفحة — يسجّل اليوم ويحدث الـ streak
  */
@@ -674,6 +1428,7 @@ function renderStatsNumbers() {
 // ═══════════════════════════════════════════════════════
 function saveAndRender() {
   localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  renderLimit = 20; // العودة للحد الأول عند الحفظ
   render(); // Now optimized (includes refreshFeatureUnlockUI)
 }
 
@@ -710,7 +1465,8 @@ window.addWord = async function() {
     );
     if (window.updateWordInCloud) await window.updateWordInCloud(editId, { word: w, meaning: m, example: ex, category: c });
     editId = null;
-    btn.innerHTML = 'إضافة للقاموس ' + fe('floppy-disk', 18);
+    renderLimit = 20;
+    btn.innerHTML = 'إضافة للقاموس <i class="fa-solid fa-floppy-disk"></i>';
     btn.style.background = '';
   } else {
     // Spam: max 30 words per minute
@@ -727,9 +1483,11 @@ window.addWord = async function() {
     const gained  = isCombo ? xpGain * 2 : xpGain;
     if (isCombo) setTimeout(()=>showToast('COMBO! Double XP! +'+gained+' XP'),100);
     updateXP(gained);
+    renderLimit = 20;
     showXPBadge(gained, 'addBtn', false);
     checkAndUpdateStreak();
     incrementDailyCount();
+    onboardingEvent('addWordSuccess');
   }
 
   clearInputs();
@@ -752,7 +1510,7 @@ window.editWord = function(id, event) {
   document.getElementById('categoryInput').value = item.category;
   editId = id;
   const btn = document.getElementById('addBtn');
-  btn.innerHTML = 'تحديث الكلمة ' + fe('floppy-disk', 18);
+  btn.innerHTML = 'تحديث الكلمة <i class="fa-solid fa-floppy-disk"></i>';
   btn.style.background = 'var(--accent)';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 };
@@ -779,14 +1537,28 @@ window.deleteWord = function(id, event) {
 
   document.getElementById('deleteConfirmBtn').onclick = async function() {
     hideModal('deleteModal');
-    if (xpLoss > 0) { updateXP(-xpLoss); showXPBadge(xpLoss, null, true); }
-    decrementDailyCount();
-    window.words = window.words.filter(w => w.id !== pendingDeleteId);
-    if (window.deleteWordFromCloud) await window.deleteWordFromCloud(pendingDeleteId);
-    pendingDeleteId = null;
-    document.querySelector('#deleteModal .xp-delete-warn')?.remove();
-    saveAndRender();
-    if (currentView === 'starred') renderStarredWords();
+
+    // البحث عن العنصر في الواجهة لعمل أنيميشن التلاشي قبل الحذف
+    const li = document.querySelector(`[data-id="${pendingDeleteId}"]`)?.closest('.word-card');
+    if (li) {
+      li.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+      li.style.transform = 'scale(0.9) translateY(10px)';
+      li.style.opacity = '0';
+    }
+
+    setTimeout(async () => {
+      if (xpLoss > 0) { updateXP(-xpLoss); showXPBadge(xpLoss, null, true); }
+      decrementDailyCount();
+      window.words = window.words.filter(w => w.id !== pendingDeleteId);
+      if (window.deleteWordFromCloud) await window.deleteWordFromCloud(pendingDeleteId);
+      pendingDeleteId = null;
+      document.querySelector('#deleteModal .xp-delete-warn')?.remove();
+      
+      // تحديث البيانات في الخلفية ورسم القائمة من جديد (بعد اكتمال الأنيميشن)
+      localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+      if (currentView === 'starred') renderStarredWords();
+      else render();
+    }, 300);
   };
   const cBtn = document.getElementById('deleteCancelBtn');
   if (cBtn) cBtn.onclick = () => { hideModal('deleteModal'); document.querySelector('#deleteModal .xp-delete-warn')?.remove(); };
@@ -800,10 +1572,32 @@ window.toggleStar = function(id, event) {
   if (event) event.stopPropagation();
   const word = window.words.find(w => w.id === id);
   if (!word) return;
+
   word.starred = !word.starred;
+
+  // تحديث البيانات في الخلفية بصمت
+  localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
   if (window.updateWordInCloud) window.updateWordInCloud(id, { starred: word.starred });
-  saveAndRender();
-  if (currentView === 'starred') renderStarredWords();
+
+  // تحديث شكل النجمة مباشرة في الـ DOM لتجنب الرمشة
+  // تم استبدال currentTarget بـ target.closest لحل مشكلة تفويض الأحداث
+  const btn = event?.target ? event.target.closest('.star-btn') : document.querySelector(`[data-id="${id}"][data-action="star"]`);
+  if (btn) btn.classList.toggle('active', word.starred);
+
+  // إذا كنا في عرض "الكلمات الصعبة" والكلمة لم تعد صعبة، نحذفها بأنيميشن
+  if ((currentView === 'starred' || currentFilter === 'starred') && !word.starred) {
+    const li = btn.closest('.word-card');
+    if (li) {
+      li.style.transition = 'all 0.4s ease';
+      li.style.opacity = '0';
+      li.style.transform = 'translateX(30px)';
+      setTimeout(() => {
+        li.remove();
+        const list = document.getElementById('list');
+        if (list && list.children.length === 0) render();
+      }, 400);
+    }
+  }
 };
 
 // ═══════════════════════════════════════════════════════
@@ -827,8 +1621,13 @@ window.playSound = function(identifier, event) {
 // AI Suggestions
 // ═══════════════════════════════════════════════════════
 window.fetchSuggestions = async function() {
-  const word = document.getElementById('wordInput').value.trim();
-  if (!word) { showToast("اكتب الكلمة أولاً!"); return; }
+  const word = document.getElementById('wordInput')?.value.trim();
+
+  if (!word) {
+    showToast("اكتب الكلمة أولاً!");
+    return;
+  }
+
   // Spam protection: max 5 requests per 30 seconds
   if (!rateLimit('fetchSuggestions', 5, 30000)) return;
 
@@ -840,8 +1639,16 @@ window.fetchSuggestions = async function() {
   btn.disabled  = true;
   if (box) box.style.display = 'block';
   
-  // رسالة ذكية في حال كان السيرفر نايم
-  list.innerHTML = "<p style='text-align:center;font-size:12px;color:var(--text-gray);padding:10px;'>جاري البحث... (قد يستغرق بضع ثوانٍ)</p>";
+  const loadingTimers = [];
+  const setLoadingMessage = (message) => {
+    if (!list) return;
+    list.innerHTML = `<p style="text-align:center;font-size:12px;color:var(--text-gray);padding:10px;line-height:1.8;">${message}</p>`;
+  };
+
+  setLoadingMessage('جاري البحث... لحظة وبنجيب المعاني.');
+  loadingTimers.push(setTimeout(() => setLoadingMessage('استنى شوي.. هي المعاني بترسبن!'), 7000));
+  loadingTimers.push(setTimeout(() => setLoadingMessage('في تأخير بسيط في الرسبون.. السيرفر يمكن كان نايم.'), 14000));
+  loadingTimers.push(setTimeout(() => setLoadingMessage('لسه بنحاول.. لا تطلع من اللوبي.'), 22000));
 
   try {
     const res = await fetch("https://dictionary7-ayes.onrender.com/api/dictionary", {
@@ -908,6 +1715,7 @@ window.fetchSuggestions = async function() {
          list.innerHTML = "<p style='color:var(--danger);text-align:center;font-size:12px;padding:10px;'>فشل في جلب البيانات من السيرفر</p>";
     }
   } finally {
+    loadingTimers.forEach(clearTimeout);
     btn.innerHTML = "<i class='fas fa-search'></i>";
     btn.disabled  = false;
   }
@@ -919,6 +1727,7 @@ function selectSuggestion(ar, pos, ex) {
   document.getElementById('exampleInput').value  = ex;
   const box = document.getElementById('suggestionsBox');
   if (box) box.style.display = 'none';
+  onboardingEvent('suggestionSelected');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -926,6 +1735,7 @@ function selectSuggestion(ar, pos, ex) {
 // ═══════════════════════════════════════════════════════
 function setFilter(f) {
   currentFilter = f;
+  renderLimit = 20; // إعادة التصفير عند تغيير الفلتر
   render();
 }
 
@@ -972,10 +1782,56 @@ function handleLiClick(index, el) {
       el.classList.add('selected-for-move');
     }
   } else {
-    el.classList.toggle('show-example');
+    // حفظ حالة الفتح في مصفوفة الكلمات الأصلية
+    const word = window.words[index];
+    if (word) {
+      word.expanded = !word.expanded;
+      localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+      // تحديث الكلاس مباشرة لتوسيع/إغلاق البطاقة بدون إعادة رسم القائمة
+      el.classList.toggle('show-example', word.expanded);
+    }
   }
 }
 
+function showBackupHelp(type, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const messages = {
+    export: 'التصدير يحفظ نسخة من كلماتك كملف JSON. تقدر تنقله لجهاز ثاني، تحتفظ فيه كنسخة أمان، أو تشاركه مع شخص تثق فيه.',
+    import: 'الاستيراد يقرأ ملف JSON سبق وطلعته من LootLingua، ويدمج كلماته مع قاموسك بدون تكرار الكلمات الموجودة.',
+  };
+
+  const old = document.querySelector('.backup-help-popover');
+  if (old) old.remove();
+
+  const pop = document.createElement('div');
+  pop.className = 'backup-help-popover';
+  pop.textContent = messages[type] || 'هذه الأداة تساعدك تحفظ قاموسك أو ترجعه وقت الحاجة.';
+  document.body.appendChild(pop);
+
+  const btn = event?.currentTarget;
+  const rect = btn?.getBoundingClientRect();
+  if (rect) {
+    const gap = 10;
+    const top = rect.top - pop.offsetHeight - gap;
+    pop.style.top = `${Math.max(12, top)}px`;
+    pop.style.left = `${Math.min(window.innerWidth - pop.offsetWidth - 12, Math.max(12, rect.left + rect.width / 2 - pop.offsetWidth / 2))}px`;
+  }
+
+  const close = (e) => {
+    if (e?.target === btn || pop.contains(e?.target)) return;
+    pop.remove();
+    document.removeEventListener('click', close, true);
+  };
+  setTimeout(() => document.addEventListener('click', close, true), 0);
+  setTimeout(() => {
+    pop.remove();
+    document.removeEventListener('click', close, true);
+  }, 6500);
+}
 // ═══════════════════════════════════════════════════════
 // Export / Import
 // ═══════════════════════════════════════════════════════
@@ -1484,14 +2340,16 @@ function renderStarredWords() {
   }
 
   listEl.innerHTML = starred.map(w => {
+    const ri = window.words.findIndex(x => x.id === w.id);
     const safeId = w.id.replace(/'/g, "\\'");
     const dispWord   = query ? highlightText(w.word, query) : escapeHtml(w.word);
     const dispMeaning = query ? highlightText(w.meaning, query) : escapeHtml(w.meaning);
+    const cls = ['word-card', w.expanded ? 'show-example' : ''].filter(Boolean).join(' ');
     return `
-      <li class="word-card" onclick="this.classList.toggle('show-example')">
-        <div class="word-body" style="flex:1;min-width:0;">
+      <li class="${cls}" data-action="toggle-expand" data-index="${ri}">
+        <div class="word-body" style="flex:1;min-width:0;" data-action="toggle-expand" data-index="${ri}">
           <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
-            <button class="star-btn active" data-tip="صعبة" onclick="toggleStar('${safeId}',event)">
+            <button class="star-btn active" data-tip="صعبة" data-action="star" data-id="${safeId}">
               <i class="fas fa-star"></i>
             </button>
             <div>
@@ -1505,9 +2363,9 @@ function renderStarredWords() {
           ${w.example ? `<div class="example-box"><b>Ex:</b> ${highlightText(w.example, query)}</div>` : ''}
         </div>
         <div class="actions">
-          <button class="icon-circle sound-btn" data-tip="نطق" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
-          <button class="icon-circle edit-btn"  data-tip="تعديل" onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
-          <button class="icon-circle del-btn"   data-tip="حذف" onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
+          <button class="icon-circle sound-btn" data-tip="نطق" data-action="sound" data-id="${safeId}"><i class="fas fa-volume-up"></i></button>
+          <button class="icon-circle edit-btn"  data-tip="تعديل" data-action="edit" data-id="${safeId}"><i class="fas fa-edit"></i></button>
+          <button class="icon-circle del-btn"   data-tip="حذف" data-action="delete" data-id="${safeId}"><i class="fas fa-trash-alt"></i></button>
         </div>
       </li>`;
   }).join('');
@@ -1668,6 +2526,9 @@ function render() {
     });
   }
 
+  // Lazy Loading: عرض مجموعة محددة فقط لضمان سرعة الواجهة
+  const displayWords = isReorderMode ? filtered : filtered.slice(0, renderLimit);
+
   const listEl = document.getElementById('list');
   if (!listEl) return;
 
@@ -1681,21 +2542,22 @@ function render() {
     return;
   }
 
-  listEl.innerHTML = filtered.map(w => {
+  listEl.innerHTML = displayWords.map(w => {
     const ri   = window.words.findIndex(x => x.id === w.id);
     const drag = isReorderMode
       ? `draggable="true" ondragstart="drag(event,${ri})" ondragover="allowDrop(event)" ondrop="drop(event,${ri})"`
       : '';
-    const cls = ['word-card', isReorderMode ? 'reorder-mode-li' : '', selectedIndices.includes(ri) ? 'selected-for-move' : '']
+    const cls = ['word-card', isReorderMode ? 'reorder-mode-li' : '', 
+                 selectedIndices.includes(ri) ? 'selected-for-move' : '', w.expanded ? 'show-example' : '']
       .filter(Boolean).join(' ');
     const safeId = w.id.replace(/'/g, "\\'");
 
     return `
-      <li ${drag} class="${cls}" onclick="handleLiClick(${ri}, this)">
-        <div class="word-body" style="flex:1;min-width:0;">
+      <li ${drag} class="${cls}" data-action="toggle-expand" data-index="${ri}">
+        <div class="word-body" style="flex:1;min-width:0;" data-action="toggle-expand" data-index="${ri}">
           <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
-            <button class="star-btn ${w.starred ? 'active' : ''}" data-tip="صعبة"
-                    onclick="toggleStar('${safeId}',event)">
+            <button class="star-btn ${w.starred ? 'active' : ''}" data-tip="صعبة" 
+                    data-action="star" data-id="${safeId}">
               <i class="fas fa-star"></i>
             </button>
             <div>
@@ -1711,15 +2573,61 @@ function render() {
         ${isReorderMode
           ? '<span style="font-size:20px;color:var(--text-gray);padding:0 8px;flex-shrink:0;">☰</span>'
           : `<div class="actions">
-               <button class="icon-circle sound-btn" data-tip="نطق" onclick="playSound('${safeId}',event)"><i class="fas fa-volume-up"></i></button>
-               <button class="icon-circle edit-btn"  data-tip="تعديل" onclick="editWord('${safeId}',event)"><i class="fas fa-edit"></i></button>
-               <button class="icon-circle del-btn"   data-tip="حذف" onclick="deleteWord('${safeId}',event)"><i class="fas fa-trash-alt"></i></button>
+               <button class="icon-circle sound-btn" data-tip="نطق" data-action="sound" data-id="${safeId}"><i class="fas fa-volume-up"></i></button>
+               <button class="icon-circle edit-btn"  data-tip="تعديل" data-action="edit" data-id="${safeId}"><i class="fas fa-edit"></i></button>
+               <button class="icon-circle del-btn"   data-tip="حذف" data-action="delete" data-id="${safeId}"><i class="fas fa-trash-alt"></i></button>
              </div>`
         }
       </li>`;
   }).join('');
   refreshFeatureUnlockUI();
 }
+
+// ── Centralized Click Handling (Event Delegation) ───────
+document.addEventListener('DOMContentLoaded', () => {
+  const list = document.getElementById('list');
+  if (!list) return;
+
+  list.addEventListener('click', (e) => {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+
+    const action = target.dataset.action;
+    const id     = target.dataset.id;
+    const index  = target.dataset.index;
+
+    // Stop propagation if it's a button action to prevent li toggle
+    if (action !== 'toggle-expand') e.stopPropagation();
+
+    switch (action) {
+      case 'star':   window.toggleStar(id, e); break;
+      case 'sound':  window.playSound(id, e);  break;
+      case 'edit':   window.editWord(id, e);   break;
+      case 'delete': window.deleteWord(id, e); break;
+      case 'toggle-expand': 
+        if (!isReorderMode) handleLiClick(parseInt(index), target.closest('li')); 
+        break;
+    }
+  });
+
+  // تصفير العداد عند كتابة أي شيء في البحث لتبدأ النتائج من الأعلى
+  document.getElementById('searchInput')?.addEventListener('input', () => {
+    renderLimit = 20;
+  });
+});
+
+// ── Infinite Scroll Logic ───────────────────────────────
+window.addEventListener('scroll', () => {
+  if (currentView !== 'personal' || isReorderMode) return;
+
+  // إذا اقترب المستخدم من نهاية الصفحة (500 بكسل مسافة أمان)
+  if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+    if (renderLimit < window.words.length) {
+      renderLimit += 20;
+      render();
+    }
+  }
+}, { passive: true });
 
 // ═══════════════════════════════════════════════════════
 // QUIZ — Flashcard 3D
@@ -1891,7 +2799,9 @@ window.onload = function() {
   renderXPBar();
   renderDailyGoal();
   renderStreak();
+  // mainContentScrollArea و originalMainContentScrollAreaOverflow يتم تهيئتهما في initOnboarding
   render();
+  initOnboarding();
   // استدعيها بعد تأخير 0 عشان تعطي Firebase فرصة
   // لو المستخدم مش مسجل دخول، ستشتغل مباشرة
   setTimeout(() => {
@@ -1955,6 +2865,74 @@ if (typeof window.closeSidebarIfOpen !== 'function') {
   };
 }
 
+(function() {
+  const HIDDEN_CLASS = 'hide-mobile-hamburger';
+  const MOBILE_QUERY = window.matchMedia('(max-width: 768px)');
+  let lastScrollY = window.scrollY || 0;
+  let scrollTimer = null;
+
+  function isMobileViewport() {
+    return MOBILE_QUERY.matches;
+  }
+
+  function setHamburgerVisible(visible) {
+    document.body.classList.toggle(HIDDEN_CLASS, !visible);
+  }
+
+  function updateHamburgerByScroll() {
+    if (!isMobileViewport()) {
+      document.body.classList.remove(HIDDEN_CLASS);
+      return;
+    }
+    if (document.body.classList.contains('sidebar-open')) {
+      document.body.classList.add(HIDDEN_CLASS);
+      return;
+    }
+    const currentY = window.scrollY || 0;
+    const delta = currentY - lastScrollY;
+    if (Math.abs(delta) < 10) {
+      lastScrollY = currentY;
+      return;
+    }
+    if (delta > 0 && currentY > 40) {
+      setHamburgerVisible(false);
+    } else if (delta < 0) {
+      setHamburgerVisible(true);
+    }
+    lastScrollY = currentY;
+  }
+
+  window.updateMobileHamburgerState = function(open) {
+    document.documentElement.classList.toggle('sidebar-open', open);
+    document.body.classList.toggle('sidebar-open', open);
+    if (open) {
+      setHamburgerVisible(false);
+    } else {
+      setHamburgerVisible(true);
+    }
+  };
+
+  window.addEventListener('scroll', () => {
+    if (!isMobileViewport()) return;
+    if (scrollTimer) clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(updateHamburgerByScroll, 80);
+  }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    if (!isMobileViewport()) {
+      document.body.classList.remove(HIDDEN_CLASS);
+    }
+  });
+
+  const origCloseSidebarIfOpen = window.closeSidebarIfOpen;
+  window.closeSidebarIfOpen = function() {
+    if (typeof origCloseSidebarIfOpen === 'function') origCloseSidebarIfOpen();
+    document.documentElement.classList.remove('sidebar-open');
+    document.body.classList.remove('sidebar-open');
+    setHamburgerVisible(true);
+  };
+})();
+
 // ═══════════════════════════════════════════════════════
 // Sidebar Book Icon → Open Icon on Hover
 // ═══════════════════════════════════════════════════════
@@ -1977,7 +2955,91 @@ if (typeof window.closeSidebarIfOpen !== 'function') {
   const origToggle = window.toggleSidebar;
   window.toggleSidebar = function() {
     if (typeof origToggle === 'function') origToggle();
+    window.updateMobileHamburgerState(sidebar.classList.contains('open'));
     const icon = headerIcon();
     if (icon) icon.className = sidebar.classList.contains('open') ? origClass : origClass;
   };
 })();
+
+// ── Back to Top Button ──────────────────────────────────
+(function initBackToTop() {
+  // إضافة التنسيقات الخاصة بالزر داخل الصفحة
+  const style = document.createElement('style');
+  style.textContent = `
+    .back-to-top {
+      position: fixed;
+      bottom: 20px;
+      right: 360px; /* نقلناه لليمين وقربناه من مصفوفة الكلمات */
+      width: 30px;  /* تصغير الحجم ليكون أكثر تناسقاً */
+      height: 30px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--text-on-accent);
+      border: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      z-index: 9000;
+    }
+    .back-to-top.show {
+      opacity: 0.8; /* شفافية بسيطة لكي لا يحجب النص تحت الزر */
+      visibility: visible;
+      bottom: 30px;
+    }
+    .back-to-top:hover {
+      opacity: 1;
+      transform: translateY(-3px);
+      filter: brightness(1.1);
+    }
+    @media (max-width: 768px) {
+      .back-to-top {
+        right: 15px; /* تقريبه أكثر من الحافة في الموبايل */
+        width: 35px;
+        height: 35px;
+      }
+      .back-to-top.show {
+        bottom: 25px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  // إنشاء عنصر الزر
+  const btn = document.createElement('button');
+  btn.className = 'back-to-top';
+  btn.innerHTML = '<i class="fa-solid fa-chevron-up"></i>';
+  btn.setAttribute('aria-label', 'العودة للأعلى');
+  document.body.appendChild(btn);
+
+  // وظيفة النقر للعودة للأعلى
+  btn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // مراقبة التمرير لإظهار/إخفاء الزر
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 400) btn.classList.add('show');
+    else btn.classList.remove('show');
+  }, { passive: true });
+})();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
