@@ -194,20 +194,74 @@
 
   <!-- ══ QUIZ FULL-PAGE VIEW (مخفي افتراضياً) ══ -->
   <div id="quizView" class="quiz-view" style="display:none;">
-    <button class="quiz-exit-btn btn-icon-tip" data-tip="خروج" onclick="loadPersonalDictionary()"><i class="fas fa-arrow-right"></i></button>
-    <!-- Quiz Setup -->
-    <div id="quizViewSetup" class="quiz-view-setup">
-      <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> إعدادات الاختبار</h3>
+    <button type="button" class="quiz-exit-btn btn-icon-tip" data-tip="رجوع للقاموس" onclick="loadPersonalDictionary()"><i class="fas fa-arrow-right"></i></button>
+    <!-- Quiz Modes -->
+    <div id="quizViewSetup" class="quiz-view-setup quiz-modes-view">
+      <h3><i class="fa-solid fa-brain" aria-hidden="true"></i> اختر وضع الاختبار</h3>
       <p class="quiz-available-count" id="quizAvailableCount">الكلمات المتاحة: 0</p>
-      <p>حدد الكلمات اللي حاب تختبرها:</p>
-      <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> كلمات جديدة (آخر 10)</button>
-      <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')"><i class="fa-solid fa-trash" aria-hidden="true"></i> تحدي النسيان (الأكثر خطأ)</button>
-      <button class="setup-btn btn-old"     onclick="startActualQuiz('old')"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> مراجعة الذكريات (أقدم 10)</button>
-      <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')"><i class="fa-solid fa-star" aria-hidden="true"></i> الكلمات الصعبة</button>
-      <button class="setup-btn btn-all"     onclick="startActualQuiz('all')"><i class="fa-solid fa-globe" aria-hidden="true"></i> كل الكلمات (عشوائي)</button>
+      <div class="quiz-modes-grid" aria-label="أوضاع الاختبار">
+        <button type="button" class="quiz-mode-card quiz-mode-flashcards" onclick="openQuizModeSettings('flashcards')">
+          <span class="quiz-mode-icon"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></span>
+          <strong>بطاقات الذاكرة</strong>
+          <span>اقلب البطاقة، اختبر ذاكرتك، وعلّم الكلمة إذا نسيتها.</span>
+        </button>
+        <button type="button" class="quiz-mode-card quiz-mode-time" onclick="openQuizModeSettings('timeAttack')">
+          <span class="quiz-mode-icon"><i class="fa-solid fa-stopwatch" aria-hidden="true"></i></span>
+          <strong>الهروب من النسيان</strong>
+          <span>اختيار من متعدد مع وقت يضغط عليك وقلوب HP تحميك.</span>
+        </button>
+        <button type="button" class="quiz-mode-card quiz-mode-scramble" onclick="openQuizModeSettings('scramble')">
+          <span class="quiz-mode-icon"><i class="fa-solid fa-shuffle" aria-hidden="true"></i></span>
+          <strong>الصندوق المشفر</strong>
+          <span>المعنى بالعربي أمامك، وفكّ حروف الكلمة الإنجليزية.</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Quiz Settings -->
+    <div id="quizSettingsPanel" class="quiz-view-setup quiz-settings-panel" style="display:none;">
+      <button type="button" class="quiz-settings-back" onclick="showQuizModes()"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+      <h3 id="quizSettingsTitle">إعدادات الاختبار</h3>
+      <p id="quizSettingsDesc">اضبط التحدي قبل ما تبدأ.</p>
+      <div id="flashcardPresetOptions" class="flashcard-preset-options" style="display:none;">
+        <button class="setup-btn btn-new"     onclick="startActualQuiz('recent')"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> كلمات جديدة (آخر 10)</button>
+        <button class="setup-btn btn-forgot"  onclick="startActualQuiz('forgotten')"><i class="fa-solid fa-trash" aria-hidden="true"></i> تحدي النسيان (الأكثر خطأ)</button>
+        <button class="setup-btn btn-old"     onclick="startActualQuiz('old')"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> مراجعة الذكريات (أقدم 10)</button>
+        <button class="setup-btn btn-starred" onclick="startActualQuiz('starred')"><i class="fa-solid fa-star" aria-hidden="true"></i> الكلمات الصعبة</button>
+        <button class="setup-btn btn-all"     onclick="startActualQuiz('all')"><i class="fa-solid fa-globe" aria-hidden="true"></i> كل الكلمات (عشوائي)</button>
+      </div>
+      <div id="quizSharedSettings">
+      <div class="quiz-setting-group">
+        <label>عدد الأسئلة</label>
+        <div class="quiz-segmented" role="group" aria-label="عدد الأسئلة">
+          <button type="button" class="active" data-quiz-count="10" onclick="setQuizQuestionCount('10', this)">10</button>
+          <button type="button" data-quiz-count="20" onclick="setQuizQuestionCount('20', this)">20</button>
+          <button type="button" data-quiz-count="all" onclick="setQuizQuestionCount('all', this)">كل الكلمات</button>
+        </div>
+      </div>
+      <div id="timeAttackDirectionGroup" class="quiz-setting-group" style="display:none;">
+        <label>اتجاه السؤال</label>
+        <div class="quiz-segmented" role="group" aria-label="اتجاه السؤال">
+          <button type="button" class="active" data-time-direction="ar-to-en" onclick="setTimeAttackDirection('ar-to-en', this)">المعنى ← الكلمة</button>
+          <button type="button" data-time-direction="en-to-ar" onclick="setTimeAttackDirection('en-to-ar', this)">الكلمة ← المعنى</button>
+        </div>
+      </div>
+      <div id="scrambleDirectionGroup" class="quiz-setting-group" style="display:none;">
+        <label>اتجاه السؤال</label>
+        <div class="quiz-segmented" role="group" aria-label="اتجاه سؤال الشيفرة">
+          <button type="button" class="active" data-scramble-direction="ar-to-en" onclick="setScrambleDirection('ar-to-en', this)">المعنى ← الكلمة</button>
+          <button type="button" data-scramble-direction="en-to-ar" onclick="setScrambleDirection('en-to-ar', this)">الكلمة ← المعنى</button>
+        </div>
+      </div>
+      <p class="quiz-settings-summary" id="quizSettingsSummary">جاهز؟</p>
+      <button type="button" class="quiz-start-btn" onclick="startConfiguredQuiz()">
+        ابدأ الاختبار <i class="fa-solid fa-play" aria-hidden="true"></i>
+      </button>
+      </div>
     </div>
     <!-- Quiz Flashcard -->
     <div id="quizViewCard" style="display:none;">
+      <button type="button" class="quiz-play-exit btn-icon-tip" data-tip="خروج" onclick="showQuizModes()"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
       <div class="quiz-card-meta">
         <span id="quizCardCounter">1 / 10</span>
       </div>
@@ -231,6 +285,36 @@
       <div class="quiz-controls">
         <button class="quiz-btn btn-forget"   onclick="markForgot()">نسيتها <i class="fa-solid fa-trash" aria-hidden="true"></i></button>
         <button class="quiz-btn btn-remember" onclick="markRemember()">تذكرتها <i class="fa-solid fa-check" aria-hidden="true"></i></button>
+      </div>
+    </div>
+    <!-- Quiz Time Attack -->
+    <div id="quizTimeAttackView" class="quiz-play-view" style="display:none;">
+      <button type="button" class="quiz-play-exit btn-icon-tip" data-tip="خروج" onclick="showQuizModes()"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+      <div class="quiz-card-meta">
+        <span id="timeAttackCounter">1 / 10</span>
+        <span id="timeAttackHp">HP 3</span>
+        <span id="timeAttackTimer">15s</span>
+      </div>
+      <div class="quiz-card-bar"><div id="timeAttackProgress"></div></div>
+      <div class="quiz-challenge-card">
+        <span class="quiz-mini-label">اختر الكلمة الإنجليزية</span>
+        <strong id="timeAttackPrompt">المعنى</strong>
+        <div id="timeAttackChoices" class="quiz-choice-grid"></div>
+      </div>
+    </div>
+    <!-- Quiz Scramble -->
+    <div id="quizScrambleView" class="quiz-play-view" style="display:none;">
+      <button type="button" class="quiz-play-exit btn-icon-tip" data-tip="خروج" onclick="showQuizModes()"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+      <div class="quiz-card-meta">
+        <span id="scrambleCounter">1 / 10</span>
+      </div>
+      <div class="quiz-card-bar"><div id="scrambleProgress"></div></div>
+      <div class="quiz-challenge-card">
+        <span class="quiz-mini-label">رتب الحروف حسب المعنى</span>
+        <strong id="scrambleMeaning">المعنى</strong>
+        <div id="scrambleLetters" class="scramble-letters"></div>
+        <input type="text" id="scrambleInput" placeholder="اكتب الكلمة هنا..." dir="ltr" autocomplete="off">
+        <button type="button" class="quiz-start-btn" onclick="submitScrambleAnswer()">تأكيد</button>
       </div>
     </div>
   </div>
@@ -266,7 +350,7 @@
           <span class="world-card-lock-overlay" aria-hidden="true"><i class="fa-solid fa-lock"></i></span>
         </span>
         <strong>الكلمات الصعبة</strong>
-        <span class="world-card-desc">راجع ما يعطيك وجع راس</span>
+        <span class="world-card-desc">شوف الكلمات اللي حددت عليها بنجمة</span>
       </button>
     </div>
   </section>
@@ -280,7 +364,7 @@
     </div>
 
     <div class="treasure-stage" aria-label="الصندوق اليومي">
-      <button id="dailyLootChest" class="treasure-chest-main" type="button" onpointerdown="startLootChestCharge(event)" onpointerup="releaseLootChestCharge(event)" onpointerleave="cancelLootChestCharge(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyLootBox();}" aria-describedby="lootStatusText">
+      <button id="dailyLootChest" class="treasure-chest-main" type="button" onpointerdown="startLootChestCharge(event)" onpointermove="moveLootChestCharge(event)" onpointerup="releaseLootChestCharge(event)" onpointerleave="cancelLootChestCharge(event)" onpointercancel="cancelLootChestCharge(event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDailyLootBox();}" aria-describedby="lootStatusText">
         <span class="chest-glow"></span>
         <span class="chest-shadow"></span>
         <span class="chest-lid"><span class="chest-band chest-band-left"></span><span class="chest-band chest-band-right"></span></span>
@@ -437,6 +521,21 @@
       </section>
       <section class="profile-section profile-settings-section">
         <h3><i class="fa-solid fa-sliders"></i> إعدادات التطبيق</h3>
+        <div class="performance-setting-row">
+          <button type="button" id="performanceModeToggle" class="auth-btn profile-auth-btn profile-settings-btn performance-toggle-btn" onclick="togglePerformanceMode()" aria-pressed="false">
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+            <span>وضع الأداء السريع</span>
+            <small id="performanceModeState">تلقائي</small>
+          </button>
+          <button type="button" class="performance-help-btn" onclick="showPerformanceModeHelp(event)" aria-label="شرح وضع الأداء السريع">
+            <i class="fa-solid fa-question" aria-hidden="true"></i>
+          </button>
+        </div>
+        <button type="button" class="auth-btn profile-auth-btn profile-settings-btn performance-toggle-btn keyboard-shortcuts-btn" onclick="showKeyboardShortcutsModal()">
+          <i class="fa-solid fa-keyboard" aria-hidden="true"></i>
+          <span>اختصارات لوحة المفاتيح</span>
+          <small>دليل سريع</small>
+        </button>
         <button type="button" id="replayOnboardingBtn" class="auth-btn profile-auth-btn profile-settings-btn feature-coming-soon" onclick="handleOnboardingReplayClick(event)" aria-disabled="true" title="الشرح التفاعلي قريباً">
           <i class="fa-solid fa-redo" aria-hidden="true"></i> إعادة الشرح التفاعلي <span class="feature-soon-badge">(قريباً)</span>
         </button>
@@ -522,6 +621,55 @@
     <div class="modal-buttons">
       <button onclick="confirmLogout()" class="btn-confirm">نعم، سجل خروج</button>
       <button onclick="hideModal('logoutModal')" class="btn-cancel">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: شرح وضع الأداء ══ -->
+<div id="performanceModeInfoModal" class="custom-modal" onclick="if (event.target === this) hideModal('performanceModeInfoModal')">
+  <div class="modal-content">
+    <div class="modal-icon"><i class="fa-solid fa-bolt" aria-hidden="true"></i></div>
+    <h2>وضع الأداء السريع</h2>
+    <p>نخفف البلور، الظلال، والحركات الثقيلة عشان التطبيق يصير أسرع على الهاتف. يشتغل تلقائياً للأجهزة الضعيفة، وتقدر تشغله أو تطفيه يدوياً.</p>
+    <div class="modal-buttons">
+      <button type="button" onclick="hideModal('performanceModeInfoModal')" class="btn-confirm">تمام</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: اختصارات لوحة المفاتيح ══ -->
+<div id="keyboardShortcutsModal" class="custom-modal keyboard-shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="keyboardShortcutsTitle" onclick="if (event.target === this) hideModal('keyboardShortcutsModal')">
+  <div class="modal-content keyboard-shortcuts-content" onclick="event.stopPropagation()">
+    <div class="modal-icon keyboard-shortcuts-icon"><i class="fa-solid fa-keyboard" aria-hidden="true"></i></div>
+    <h2 id="keyboardShortcutsTitle">اختصارات لوحة المفاتيح</h2>
+    <div class="shortcut-list" aria-label="قائمة اختصارات لوحة المفاتيح">
+      <div class="shortcut-row">
+        <span class="shortcut-keys"><kbd>Alt</kbd><kbd>→</kbd></span>
+        <span>الانتقال لليمين في الشريط السفلي</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-keys"><kbd>Alt</kbd><kbd>←</kbd></span>
+        <span>الانتقال لليسار في الشريط السفلي</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-keys"><kbd>/</kbd></span>
+        <span>الانتقال مباشرة إلى البحث</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-keys"><kbd>Enter</kbd></span>
+        <span>إضافة الكلمة للقاموس عند عدم تحديد أي حقل</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-keys"><kbd>Enter</kbd></span>
+        <span>البحث عن معنى الكلمة عند تحديد مربع الكلمة الإنجليزية</span>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-keys"><kbd>Esc</kbd></span>
+        <span>مسح البحث أو إغلاق النافذة المفتوحة</span>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button type="button" onclick="hideModal('keyboardShortcutsModal')" class="btn-confirm">تمام</button>
     </div>
   </div>
 </div>
