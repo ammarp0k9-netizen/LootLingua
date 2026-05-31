@@ -1537,6 +1537,11 @@ select option { background: var(--card-bg); color: var(--text-white); }
   display: flex; align-items: center; gap: 8px; justify-content: center;
 }
 .auth-btn:hover { background: var(--hover-bg); }
+.auth-btn:disabled,
+.auth-btn.loading {
+  opacity: 0.72;
+  cursor: wait;
+}
 #logoutBtn { border-color: var(--danger); color: var(--danger); }
 #logoutBtn:hover { background: var(--danger-soft); }
 
@@ -1616,6 +1621,38 @@ ul { list-style: none; padding: 0; margin: 0; }
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 .word-card:hover { transform: translateX(-2px); }
+
+.word-render-loading {
+  position: fixed;
+  left: 50%;
+  bottom: 82px;
+  z-index: 8999;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+  color: var(--text-white);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-50%, 10px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease;
+}
+.word-render-loading.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+.word-render-loading i {
+  color: var(--accent);
+}
 
 /* للثيمات الفاتحة - ظل أوضح للبطاقات مع تباين */
 [data-theme="ocean"] .word-card,
@@ -2127,6 +2164,57 @@ ul { list-style: none; padding: 0; margin: 0; }
 .modal-content h2 { margin: 0 0 8px; font-size: 18px; color: var(--text-white); }
 .modal-content p  { color: var(--text-gray); font-size: 14px; margin: 0 0 18px; }
 .modal-buttons    { display: flex; gap: 12px; justify-content: center; }
+.guest-migration-content {
+  max-width: 440px;
+  border-color: color-mix(in srgb, var(--star) 42%, var(--border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--card-bg) 92%, var(--star)), var(--card-bg));
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42), 0 0 32px color-mix(in srgb, var(--star) 18%, transparent);
+}
+.guest-migration-icon {
+  color: var(--star);
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--star) 55%, transparent));
+}
+.guest-migration-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+.guest-migration-stat {
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-bg) 86%, transparent);
+  color: var(--text-white);
+  font-size: 12px;
+  font-weight: 900;
+}
+.guest-migration-stat small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-gray);
+  font-size: 10px;
+}
+.guest-migration-confirm {
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 44%, var(--border));
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface-bg));
+  color: var(--text-white);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: start;
+}
+.guest-migration-confirm[style*="display: block"] {
+  display: flex !important;
+}
+.guest-migration-actions {
+  flex-wrap: wrap;
+}
 
 /* ── Feature unlocks (sidebar) ───────────────────────── */
 .nav-link.feature-locked {
@@ -5184,9 +5272,10 @@ body.view-has-back .page-header { margin-bottom: 4px; }
 .performance-setting-row {
   display: grid;
   grid-template-columns: 1fr 34px;
-  align-items: center;
-  gap: 8px;
+  align-items: start;
+  gap: 10px;
 }
+.performance-setting-head,
 .performance-toggle-btn {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -5194,6 +5283,93 @@ body.view-has-back .page-header { margin-bottom: 4px; }
   gap: 10px;
   text-align: start;
   min-width: 0;
+}
+.performance-level-setting {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-bg) 88%, transparent);
+}
+.performance-setting-head {
+  grid-column: 1 / -1;
+  color: var(--text-white);
+  font-weight: 900;
+}
+.performance-setting-head i {
+  color: var(--accent);
+}
+.performance-setting-head small {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+  justify-self: end;
+}
+.performance-slider-card {
+  min-width: 0;
+  padding: 4px 2px 0;
+}
+.performance-level-labels {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 8px;
+  color: var(--text-gray);
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+  direction: ltr;
+}
+.performance-level-slider {
+  --perf-progress: 33.333%;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  direction: ltr;
+}
+.performance-level-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 0% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    radial-gradient(circle at 33.333% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    radial-gradient(circle at 66.666% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    radial-gradient(circle at 100% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    linear-gradient(90deg, var(--accent) 0 var(--perf-progress), color-mix(in srgb, var(--text-gray) 28%, transparent) var(--perf-progress) 100%);
+}
+.performance-level-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text-gray) 28%, transparent);
+}
+.performance-level-slider::-moz-range-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.performance-level-slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-bg);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.performance-level-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-bg);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .performance-help-btn {
   width: 34px;
@@ -5211,19 +5387,6 @@ body.view-has-back .page-header { margin-bottom: 4px; }
   color: var(--accent);
   background: var(--accent-soft);
   transform: translateY(-1px);
-}
-.performance-toggle-btn small {
-  color: var(--text-gray);
-  font-size: 11px;
-  font-weight: 800;
-}
-.performance-toggle-btn.active {
-  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
-  background: color-mix(in srgb, var(--success) 16%, var(--surface-bg));
-}
-.performance-toggle-btn.active i,
-.performance-toggle-btn.active small {
-  color: var(--success);
 }
 .keyboard-shortcuts-btn {
   text-align: start;
@@ -5296,13 +5459,49 @@ body.view-has-back .page-header { margin-bottom: 4px; }
   }
 }
 
-/* Fast performance mode for low-end/mobile devices */
+/* Smart performance levels */
+body.perf-balanced,
+body.perf-stable,
+body.perf-turbo,
 body.low-end-device {
   --legend-glass-bg: var(--card-bg);
   --legend-glass-border: var(--border);
   --legend-glass-blur: none;
-  --legend-glass-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
 }
+body.perf-balanced { --legend-glass-shadow: 0 4px 14px rgba(0, 0, 0, 0.22); }
+body.perf-stable,
+body.perf-turbo,
+body.low-end-device { --legend-glass-shadow: none; }
+
+body.perf-balanced *,
+body.perf-balanced *::before,
+body.perf-balanced *::after,
+body.perf-stable *,
+body.perf-stable *::before,
+body.perf-stable *::after,
+body.low-end-device *,
+body.low-end-device *::before,
+body.low-end-device *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.perf-balanced *,
+body.perf-balanced *::before,
+body.perf-balanced *::after {
+  animation-duration: 0.5s !important;
+  transition-duration: 0.1s !important;
+}
+body.perf-stable *,
+body.perf-stable *::before,
+body.perf-stable *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.12s !important;
+  scroll-behavior: auto !important;
+}
+body.perf-turbo *,
+body.perf-turbo *::before,
+body.perf-turbo *::after,
 body.low-end-device *,
 body.low-end-device *::before,
 body.low-end-device *::after {
@@ -5313,6 +5512,72 @@ body.low-end-device *::after {
   transition-duration: 0.001ms !important;
   scroll-behavior: auto !important;
 }
+body.perf-balanced .legend-top-bar,
+body.perf-balanced .sidebar,
+body.perf-balanced .legend-dock,
+body.perf-balanced .treasure-dock,
+body.perf-balanced .profile-modal-sheet,
+body.perf-balanced .notif-popover,
+body.perf-balanced .modal-content,
+body.perf-balanced .stats-box,
+body.perf-balanced .card-box,
+body.perf-balanced .word-card,
+body.perf-balanced .game-card,
+body.perf-balanced .game-search-bar,
+body.perf-balanced .game-search-inner,
+body.perf-balanced .game-gamer-ai-wrap,
+body.perf-balanced .gamer-ai-result,
+body.perf-balanced .treasure-card,
+body.perf-balanced .treasure-stage,
+body.perf-balanced .quiz-card,
+body.perf-balanced .world-card,
+body.perf-balanced .backup-zone,
+body.perf-balanced .onboarding-box,
+body.perf-balanced .onboarding-tooltip,
+body.perf-stable .legend-top-bar,
+body.perf-stable .sidebar,
+body.perf-stable .legend-dock,
+body.perf-stable .treasure-dock,
+body.perf-stable .profile-modal-sheet,
+body.perf-stable .notif-popover,
+body.perf-stable .modal-content,
+body.perf-stable .stats-box,
+body.perf-stable .card-box,
+body.perf-stable .word-card,
+body.perf-stable .game-card,
+body.perf-stable .game-search-bar,
+body.perf-stable .game-search-inner,
+body.perf-stable .game-gamer-ai-wrap,
+body.perf-stable .gamer-ai-result,
+body.perf-stable .treasure-card,
+body.perf-stable .treasure-stage,
+body.perf-stable .quiz-card,
+body.perf-stable .world-card,
+body.perf-stable .backup-zone,
+body.perf-stable .onboarding-box,
+body.perf-stable .onboarding-tooltip,
+body.perf-turbo .legend-top-bar,
+body.perf-turbo .sidebar,
+body.perf-turbo .legend-dock,
+body.perf-turbo .treasure-dock,
+body.perf-turbo .profile-modal-sheet,
+body.perf-turbo .notif-popover,
+body.perf-turbo .modal-content,
+body.perf-turbo .stats-box,
+body.perf-turbo .card-box,
+body.perf-turbo .word-card,
+body.perf-turbo .game-card,
+body.perf-turbo .game-search-bar,
+body.perf-turbo .game-search-inner,
+body.perf-turbo .game-gamer-ai-wrap,
+body.perf-turbo .gamer-ai-result,
+body.perf-turbo .treasure-card,
+body.perf-turbo .treasure-stage,
+body.perf-turbo .quiz-card,
+body.perf-turbo .world-card,
+body.perf-turbo .backup-zone,
+body.perf-turbo .onboarding-box,
+body.perf-turbo .onboarding-tooltip,
 body.low-end-device .legend-top-bar,
 body.low-end-device .sidebar,
 body.low-end-device .legend-dock,
@@ -5338,6 +5603,67 @@ body.low-end-device .onboarding-tooltip {
   background: var(--card-bg) !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22) !important;
 }
+body.perf-stable .legend-top-bar,
+body.perf-stable .sidebar,
+body.perf-stable .legend-dock,
+body.perf-stable .treasure-dock,
+body.perf-stable .profile-modal-sheet,
+body.perf-stable .notif-popover,
+body.perf-stable .modal-content,
+body.perf-stable .stats-box,
+body.perf-stable .card-box,
+body.perf-stable .word-card,
+body.perf-stable .game-card,
+body.perf-stable .game-search-bar,
+body.perf-stable .game-search-inner,
+body.perf-stable .game-gamer-ai-wrap,
+body.perf-stable .gamer-ai-result,
+body.perf-stable .treasure-card,
+body.perf-stable .treasure-stage,
+body.perf-stable .quiz-card,
+body.perf-stable .world-card,
+body.perf-stable .backup-zone,
+body.perf-stable .onboarding-box,
+body.perf-stable .onboarding-tooltip,
+body.perf-turbo .legend-top-bar,
+body.perf-turbo .sidebar,
+body.perf-turbo .legend-dock,
+body.perf-turbo .treasure-dock,
+body.perf-turbo .profile-modal-sheet,
+body.perf-turbo .notif-popover,
+body.perf-turbo .modal-content,
+body.perf-turbo .stats-box,
+body.perf-turbo .card-box,
+body.perf-turbo .word-card,
+body.perf-turbo .game-card,
+body.perf-turbo .game-search-bar,
+body.perf-turbo .game-search-inner,
+body.perf-turbo .game-gamer-ai-wrap,
+body.perf-turbo .gamer-ai-result,
+body.perf-turbo .treasure-card,
+body.perf-turbo .treasure-stage,
+body.perf-turbo .quiz-card,
+body.perf-turbo .world-card,
+body.perf-turbo .backup-zone,
+body.perf-turbo .onboarding-box,
+body.perf-turbo .onboarding-tooltip {
+  box-shadow: none !important;
+}
+body.perf-balanced .profile-modal-backdrop,
+body.perf-balanced .custom-modal,
+body.perf-balanced .stats-overlay,
+body.perf-balanced .overlay,
+body.perf-balanced .onboarding-backdrop,
+body.perf-stable .profile-modal-backdrop,
+body.perf-stable .custom-modal,
+body.perf-stable .stats-overlay,
+body.perf-stable .overlay,
+body.perf-stable .onboarding-backdrop,
+body.perf-turbo .profile-modal-backdrop,
+body.perf-turbo .custom-modal,
+body.perf-turbo .stats-overlay,
+body.perf-turbo .overlay,
+body.perf-turbo .onboarding-backdrop,
 body.low-end-device .profile-modal-backdrop,
 body.low-end-device .custom-modal,
 body.low-end-device .stats-overlay,
@@ -5345,6 +5671,20 @@ body.low-end-device .overlay,
 body.low-end-device .onboarding-backdrop {
   background: rgba(0, 0, 0, 0.62) !important;
 }
+body.perf-stable .treasure-chest-main,
+body.perf-stable .daily-quest-item,
+body.perf-stable .profile-stat-chip,
+body.perf-stable .theme-option,
+body.perf-stable .stat-card,
+body.perf-stable .xp-panel,
+body.perf-stable .notif-item,
+body.perf-turbo .treasure-chest-main,
+body.perf-turbo .daily-quest-item,
+body.perf-turbo .profile-stat-chip,
+body.perf-turbo .theme-option,
+body.perf-turbo .stat-card,
+body.perf-turbo .xp-panel,
+body.perf-turbo .notif-item,
 body.low-end-device .treasure-chest-main,
 body.low-end-device .daily-quest-item,
 body.low-end-device .profile-stat-chip,
@@ -5354,6 +5694,20 @@ body.low-end-device .xp-panel,
 body.low-end-device .notif-item {
   box-shadow: none !important;
 }
+body.perf-stable .treasure-chest-main.is-charging .chest-lid,
+body.perf-stable .treasure-chest-main.is-charging .chest-body,
+body.perf-stable .chest-glow,
+body.perf-stable .notif-bell-ring,
+body.perf-stable .search-lock-overlay i,
+body.perf-stable .xp-badge,
+body.perf-stable .confetti,
+body.perf-turbo .treasure-chest-main.is-charging .chest-lid,
+body.perf-turbo .treasure-chest-main.is-charging .chest-body,
+body.perf-turbo .chest-glow,
+body.perf-turbo .notif-bell-ring,
+body.perf-turbo .search-lock-overlay i,
+body.perf-turbo .xp-badge,
+body.perf-turbo .confetti,
 body.low-end-device .treasure-chest-main.is-charging .chest-lid,
 body.low-end-device .treasure-chest-main.is-charging .chest-body,
 body.low-end-device .chest-glow,
@@ -5364,12 +5718,20 @@ body.low-end-device .confetti {
   animation: none !important;
   filter: none !important;
 }
+body.perf-stable.game-bg-active::before,
+body.perf-turbo.game-bg-active::before,
 body.low-end-device.game-bg-active::before {
   background-image: none !important;
   background: var(--main-bg) !important;
   filter: none !important;
   opacity: 0 !important;
 }
+body.perf-stable.game-bg-active .game-card,
+body.perf-stable.game-bg-active .game-search-bar,
+body.perf-stable.game-bg-active .game-search-inner,
+body.perf-turbo.game-bg-active .game-card,
+body.perf-turbo.game-bg-active .game-search-bar,
+body.perf-turbo.game-bg-active .game-search-inner,
 body.low-end-device.game-bg-active .game-card,
 body.low-end-device.game-bg-active .game-search-bar,
 body.low-end-device.game-bg-active .game-search-inner {
@@ -5377,6 +5739,10 @@ body.low-end-device.game-bg-active .game-search-inner {
   box-shadow: none !important;
   border-color: var(--border) !important;
 }
+body.perf-stable .game-icon,
+body.perf-stable .game-card img,
+body.perf-turbo .game-icon,
+body.perf-turbo .game-card img,
 body.low-end-device .game-icon,
 body.low-end-device .game-card img {
   filter: none !important;
@@ -5757,6 +6123,11 @@ body.onboarding-active .onboarding-active-target {
 
 /* على اللمس: النيمتاج يظهر بالضغط المطوّل فقط */
 @media (pointer: coarse) {
+  body.legend-dock-visible .main-content,
+  body.treasure-dock-visible .main-content {
+    touch-action: pan-y;
+  }
+
   [data-tip]::after,
   .btn-icon-tip::after,
   .star-btn[data-tip]::after,
