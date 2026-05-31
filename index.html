@@ -521,12 +521,20 @@
       </section>
       <section class="profile-section profile-settings-section">
         <h3><i class="fa-solid fa-sliders"></i> إعدادات التطبيق</h3>
-        <div class="performance-setting-row">
-          <button type="button" id="performanceModeToggle" class="auth-btn profile-auth-btn profile-settings-btn performance-toggle-btn" onclick="togglePerformanceMode()" aria-pressed="false">
-            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
-            <span>وضع الأداء السريع</span>
-            <small id="performanceModeState">تلقائي</small>
-          </button>
+        <div class="performance-setting-row performance-level-setting">
+          <div class="performance-setting-head">
+            <span><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> الأداء</span>
+            <small id="performanceModeState">متوازن</small>
+          </div>
+          <div class="performance-slider-card">
+            <div class="performance-level-labels" aria-hidden="true">
+              <span>أقصى جرافيك</span>
+              <span>متوازن</span>
+              <span>أداء مستقر</span>
+              <span>تربو</span>
+            </div>
+            <input type="range" id="performanceLevelSlider" class="performance-level-slider" min="0" max="3" step="1" value="1" oninput="setPerformanceLevel(this.value)" aria-label="مستوى الأداء">
+          </div>
           <button type="button" class="performance-help-btn" onclick="showPerformanceModeHelp(event)" aria-label="شرح وضع الأداء السريع">
             <i class="fa-solid fa-question" aria-hidden="true"></i>
           </button>
@@ -625,12 +633,30 @@
   </div>
 </div>
 
+<!-- ══ MODAL: نقل بيانات الضيف ══ -->
+<div id="guestMigrationModal" class="custom-modal guest-migration-modal" role="dialog" aria-modal="true" aria-labelledby="guestMigrationTitle">
+  <div class="modal-content guest-migration-content" onclick="event.stopPropagation()">
+    <div class="modal-icon guest-migration-icon"><i class="fa-solid fa-gem" aria-hidden="true"></i></div>
+    <h2 id="guestMigrationTitle">لوت مخفي!</h2>
+    <p id="guestMigrationMessage">يا بطل! لقينا كلمات مخبأة في جهازك.. بدك تنقلهم لحسابك الأسطوري الجديد عشان ما يضيعوا؟</p>
+    <div id="guestMigrationStats" class="guest-migration-stats" aria-live="polite"></div>
+    <div id="guestMigrationConfirm" class="guest-migration-confirm" style="display:none;">
+      <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+      <span>متأكد؟ إذا بدأت من جديد رح نحذف لوت الضيف من هذا الجهاز.</span>
+    </div>
+    <div class="modal-buttons guest-migration-actions">
+      <button type="button" id="guestMigrationAcceptBtn" class="btn-confirm" onclick="confirmGuestMigration()">نعم، انقل اللوت!</button>
+      <button type="button" id="guestMigrationDeclineBtn" class="btn-cancel" onclick="declineGuestMigration()">لا، ابدأ من جديد</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: شرح وضع الأداء ══ -->
 <div id="performanceModeInfoModal" class="custom-modal" onclick="if (event.target === this) hideModal('performanceModeInfoModal')">
   <div class="modal-content">
     <div class="modal-icon"><i class="fa-solid fa-bolt" aria-hidden="true"></i></div>
-    <h2>وضع الأداء السريع</h2>
-    <p>نخفف البلور، الظلال، والحركات الثقيلة عشان التطبيق يصير أسرع على الهاتف. يشتغل تلقائياً للأجهزة الضعيفة، وتقدر تشغله أو تطفيه يدوياً.</p>
+    <h2>الأداء</h2>
+    <p>اختر مستوى التأثيرات حسب جهازك: أقصى جرافيك يشغّل كل المؤثرات، متوازن يخفف البلور والحركة، أداء مستقر يبقي الانتقالات الأساسية، وتربو يوقف المؤثرات الثقيلة بالكامل.</p>
     <div class="modal-buttons">
       <button type="button" onclick="hideModal('performanceModeInfoModal')" class="btn-confirm">تمام</button>
     </div>
@@ -678,7 +704,7 @@
 <script type="module">
   import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
-    getAuth, signInWithPopup, signOut,
+    getAuth, signInWithPopup, signInWithRedirect, signOut,
     GoogleAuthProvider, onAuthStateChanged, getRedirectResult
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import {
@@ -702,14 +728,64 @@
   const db   = getFirestore(app);
   window.db = db;
   window.auth = auth;
+  let wordsUnsubscribe = null;
+  let suppressNextGuestLoad = false;
+  const LOGIN_REDIRECT_PENDING_KEY = 'lootlinguaLoginRedirectPending';
 
-  window.addEventListener("load", async () => {
-    try { await getRedirectResult(auth); } catch (e) { console.error(e.message); }
-  });
+  function isIOSDevice() {
+    const ua = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    return /iPad|iPhone|iPod/i.test(ua) ||
+      (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function setLoginLoading(isLoading, message = 'جاري توجيهك لتسجيل الدخول...') {
+    const btn = document.getElementById('loginBtn');
+    if (!btn) return;
+    if (!btn.dataset.defaultHtml) btn.dataset.defaultHtml = btn.innerHTML;
+    btn.disabled = !!isLoading;
+    btn.classList.toggle('loading', !!isLoading);
+    if (isLoading) {
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> ${message}`;
+    } else {
+      btn.innerHTML = btn.dataset.defaultHtml;
+    }
+  }
+
+  async function handleLoginRedirectResult() {
+    if (sessionStorage.getItem(LOGIN_REDIRECT_PENDING_KEY)) {
+      setLoginLoading(true, 'جاري إكمال تسجيل الدخول...');
+    }
+    try {
+      const result = await getRedirectResult(auth);
+      if (result?.user && typeof showToast === 'function') {
+        showToast('تم تسجيل الدخول بنجاح', 'success', 3200);
+      }
+    } catch (e) {
+      console.error(e.code || 'auth/redirect-error', e.message);
+      if (typeof showToast === 'function') {
+        showToast('صار خطأ أثناء تسجيل الدخول. جرّب مرة ثانية.', 'danger', 4200);
+      }
+    } finally {
+      sessionStorage.removeItem(LOGIN_REDIRECT_PENDING_KEY);
+      setLoginLoading(false);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', handleLoginRedirectResult, { once: true });
+  } else {
+    handleLoginRedirectResult();
+  }
 
   onAuthStateChanged(auth, (user) => {
+    if (wordsUnsubscribe) {
+      wordsUnsubscribe();
+      wordsUnsubscribe = null;
+    }
     document.getElementById('logoutBtn').style.display = user ? 'block' : 'none';
     document.getElementById('loginBtn').style.display  = user ? 'none'  : 'block';
+    if (user) setLoginLoading(false);
     if (typeof window.refreshGuestSearchLocks === 'function') {
       window.refreshGuestSearchLocks();
     }
@@ -717,33 +793,66 @@
       window.setLootlinguaDisplayName(user.displayName);
     }
     if (user) {
-      window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || [];
+      suppressNextGuestLoad = false;
+      if (typeof window.prepareGuestMigrationForUser === 'function') {
+        window.prepareGuestMigrationForUser(user);
+      }
+      if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
+      else window.words = [];
       if (typeof window.render === 'function') window.render();
       loadWordsFromCloud(user);
     } else {
-      window.words = JSON.parse(localStorage.getItem('lootlinguaDict')) || [];
-      render();
+      if (suppressNextGuestLoad) {
+        suppressNextGuestLoad = false;
+        if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
+        else {
+          window.words = [];
+          if (typeof render === 'function') render();
+        }
+      } else if (typeof window.loadGuestDictionaryState === 'function') {
+        window.loadGuestDictionaryState();
+      } else if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
+      else {
+        window.words = [];
+        if (typeof render === 'function') render();
+      }
     }
   });
 
   window.login = async function() {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+    setLoginLoading(true, isIOSDevice() ? 'جاري توجيهك لتسجيل الدخول...' : 'جاري فتح تسجيل الدخول...');
     try {
+      if (isIOSDevice()) {
+        sessionStorage.setItem(LOGIN_REDIRECT_PENDING_KEY, '1');
+        await signInWithRedirect(auth, provider);
+        return;
+      }
       await signInWithPopup(auth, provider);
+      setLoginLoading(false);
     } catch (e) {
       console.error(e.code, e.message);
+      sessionStorage.removeItem(LOGIN_REDIRECT_PENDING_KEY);
+      setLoginLoading(false);
       if (e.code === 'auth/popup-blocked') alert("الـ popup اتعطل من المتصفح. جرب تسمح لـ popups للموقع.");
     }
   };
 
   window.confirmLogout = function() {
-    signOut(auth).then(() => hideModal('logoutModal'));
+    suppressNextGuestLoad = true;
+    if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
+    signOut(auth).then(() => {
+      if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
+      hideModal('logoutModal');
+    });
   };
 
   function loadWordsFromCloud(user) {
+    const listenerUid = user.uid;
     const q = query(collection(db, "users", user.uid, "words"), orderBy("createdAt", "desc"));
-    onSnapshot(q, (snapshot) => {
+    wordsUnsubscribe = onSnapshot(q, (snapshot) => {
+      if (auth.currentUser?.uid !== listenerUid) return;
       const cloudWords = snapshot.docs.map(d => ({
         id:          d.id,
         word:        d.data().text   || d.data().word || '',
@@ -756,53 +865,10 @@
         createdAt:   d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null)
       }));
 
-      // دمج ذكي: منع التكرار بالـ ID أو بنص الكلمة
-      const localWords = window.words || [];
-      const localById = {};
-      const localByText = {};
-      localWords.forEach(w => {
-        localById[w.id] = w;
-        const key = (w.word || '').toLowerCase().trim();
-        if (key) localByText[key] = localByText[key] || w;
-      });
-
-      const merged = [];
-      const seenIds = new Set();
-      const seenTexts = new Set();
-
-      // 1) أضف كلمات السحابة مع دمج القيم المحلية
-      cloudWords.forEach(cw => {
-        const lw = localById[cw.id] || localByText[(cw.word || '').toLowerCase().trim()];
-        const word = lw ? {
-          ...cw,
-          forgetCount: Math.max(cw.forgetCount || 0, lw.forgetCount || 0),
-          starred:     cw.starred || lw.starred,
-          xpValue:     Math.max(cw.xpValue || 0, lw.xpValue || 0),
-        } : cw;
-        merged.push(word);
-        seenIds.add(cw.id);
-        seenTexts.add((cw.word || '').toLowerCase().trim());
-      });
-
-      // 2) أضف كلمات محلية مش موجودة بالسحابة (وارفعها)
-      localWords.forEach(w => {
-        const textKey = (w.word || '').toLowerCase().trim();
-        if (seenIds.has(w.id) || (textKey && seenTexts.has(textKey))) return;
-        merged.push(w);
-        seenIds.add(w.id);
-        seenTexts.add(textKey);
-        // ارفع الكلمة المحلية للسحابة
-        if (window.saveWordToCloud) {
-          window.saveWordToCloud(w.word, w.category, w.meaning, w.example).then(realId => {
-            if (realId) {
-              const idx = window.words.findIndex(x => x.id === w.id);
-              if (idx !== -1) { window.words[idx].id = realId; localStorage.setItem('lootlinguaDict', JSON.stringify(window.words)); }
-            }
-          });
-        }
-      });
-
-      window.words = merged;
+      window.words = cloudWords;
+      if (typeof window.writeWordsToStorage === "function") {
+        window.writeWordsToStorage(cloudWords, "normal", listenerUid);
+      }
       saveAndRender();
     }, (error) => {
       console.warn("loadWordsFromCloud:", error.code || error.message, error);
@@ -819,6 +885,7 @@
       const ref = await addDoc(collection(db, "users", user.uid, "words"), {
         text: wordText, category: wordCategory,
         meaning, example, starred: false, forgetCount: 0,
+        userId: user.uid,
         xpValue: 3,
         createdAt: new Date()
       });
@@ -829,7 +896,7 @@
   window.updateWordInCloud = async function(docId, data) {
     const user = auth.currentUser;
     if (!user || !docId) return;
-    const update = {};
+    const update = { userId: user.uid };
     if ('word'        in data) update.text        = data.word;
     if ('meaning'     in data) update.meaning     = data.meaning;
     if ('example'     in data) update.example     = data.example;
@@ -973,20 +1040,20 @@ import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/fireb
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // استخدم التطبيق الموجود فقط بدون إعادة تعريف إذا كان معرف مسبقًا
-let app  = getApps()[0];
-let db   = getFirestore(app);
-let auth = getAuth(app);
+let profileApp  = getApps()[0];
+let profileDb   = getFirestore(profileApp);
+let profileAuth = getAuth(profileApp);
 
 let _saveProfileDebounce = null;
 async function performProfileSave() {
-  const user = auth.currentUser;
+  const user = profileAuth.currentUser;
   if (!user) return;
   const get = window.getLootlinguaProfilePayload;
   if (typeof get !== "function") return;
   const base = get();
   const data = { ...base, updatedAt: new Date() };
   try {
-    await setDoc(doc(db, "users", user.uid, "meta", "profile"), data, { merge: true });
+    await setDoc(doc(profileDb, "users", user.uid, "meta", "profile"), data, { merge: true });
   } catch (e) { console.warn("saveProfile:", e.message); }
 }
 
@@ -1006,8 +1073,11 @@ window.loadProfileFromCloud = async function(user) {
   try {
     for (let w = 0; w < 30 && typeof window.getLootlinguaProfilePayload !== "function"; w++)
       await new Promise((r) => setTimeout(r, 40));
-    const snap = await getDoc(doc(db, "users", user.uid, "meta", "profile"));
-    if (!snap.exists()) return;
+    const snap = await getDoc(doc(profileDb, "users", user.uid, "meta", "profile"));
+    if (!snap.exists()) {
+      if (window._saveProfileToCloudNow) await window._saveProfileToCloudNow();
+      return;
+    }
     const d = snap.data();
     if (typeof window.mergeLootlinguaProfileFromCloud === "function")
       window.mergeLootlinguaProfileFromCloud(d);
@@ -1017,9 +1087,12 @@ window.loadProfileFromCloud = async function(user) {
 };
 
 // ── شوف إذا المستخدم مسجل دخول وحمّل الـ profile ──
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(profileAuth, (user) => {
   if (user && window.loadProfileFromCloud) {
-    window.loadProfileFromCloud(user).then(() => {
+    const waitForGuestDecision = typeof window.prepareGuestMigrationForUser === "function"
+      ? window.prepareGuestMigrationForUser(user)
+      : Promise.resolve();
+    waitForGuestDecision.then(() => window.loadProfileFromCloud(user)).then(() => {
       window._profileLoaded = true;
       if (window.checkAndUpdateStreak) window.checkAndUpdateStreak();
     });
