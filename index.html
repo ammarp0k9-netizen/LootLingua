@@ -804,6 +804,11 @@
 
       window.words = merged;
       saveAndRender();
+    }, (error) => {
+      console.warn("loadWordsFromCloud:", error.code || error.message, error);
+      if (error.code === "permission-denied" && typeof showToast === "function") {
+        showToast("قواعد Firebase لا تسمح بقراءة كلماتك حالياً. راجع Firestore Rules.");
+      }
     });
   }
 
