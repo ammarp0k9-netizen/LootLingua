@@ -506,6 +506,35 @@ if (document.readyState === 'loading') {
 const LEGACY_DICTIONARY_KEY = 'lootlinguaDict';
 const WORDS_NORMAL_PREFIX = 'words_normal_';
 const WORDS_GAMER_PREFIX = 'words_gamer_';
+const GUEST_MIGRATION_HANDLED_KEY = 'lootlinguaGuestMigrationHandled';
+const GUEST_DATA_DIRTY_KEY = 'lootlinguaGuestDataDirty';
+
+function hasSignedInUser() {
+  return Boolean(window.auth?.currentUser);
+}
+
+function markGuestDataDirty() {
+  if (hasSignedInUser()) return;
+  localStorage.setItem(GUEST_DATA_DIRTY_KEY, '1');
+  localStorage.removeItem(GUEST_MIGRATION_HANDLED_KEY);
+}
+
+function markGuestMigrationHandled(user, status) {
+  localStorage.setItem(GUEST_MIGRATION_HANDLED_KEY, JSON.stringify({
+    status,
+    uid: user?.uid || '',
+    at: Date.now()
+  }));
+  localStorage.removeItem(GUEST_DATA_DIRTY_KEY);
+}
+
+function hasHandledGuestMigration() {
+  return Boolean(localStorage.getItem(GUEST_MIGRATION_HANDLED_KEY));
+}
+
+function hasDirtyGuestData() {
+  return localStorage.getItem(GUEST_DATA_DIRTY_KEY) === '1';
+}
 
 function getStorageUserId(uid) {
   return uid || window.auth?.currentUser?.uid || 'guest';
@@ -530,6 +559,9 @@ function readWordsFromStorage(type = 'normal', uid) {
 
 function writeWordsToStorage(words = window.words, type = 'normal', uid) {
   localStorage.setItem(getWordsStorageKey(type, uid), JSON.stringify(Array.isArray(words) ? words : []));
+  if (getStorageUserId(uid) === 'guest' && Array.isArray(words) && words.length > 0) {
+    markGuestDataDirty();
+  }
 }
 
 window.getWordsStorageKey = getWordsStorageKey;
@@ -578,7 +610,7 @@ const WORD_RENDER_FAST_MODE = true;
 const WORD_DOM_WINDOW_SIZE = 48;
 const WORD_DOM_BUFFER = 8;
 const WORD_DOM_EDGE_BUFFER = 8;
-const WORD_RENDER_TRANSITION_MS = 120;
+const WORD_RENDER_TRANSITION_MS = 48;
 let wordVirtualState = {
   key: '',
   start: 0,
@@ -591,6 +623,7 @@ let wordVirtualState = {
   transitionTargetY: null,
   transitionPinnedY: null,
   transitionTimer: null,
+  loadingTimer: null,
   programmaticScroll: false
 };
 let currentQuizMistakes = 0;
@@ -2103,11 +2136,15 @@ window.prepareGuestMigrationForUser = function(user) {
 
   const words = getGuestMigrationWords();
   const profile = getGuestProgressSnapshot();
-  const shouldPrompt = words.length > 0 || hasGuestProgress(profile);
+  const hasGuestData = words.length > 0 || hasGuestProgress(profile);
+  const shouldPrompt = hasGuestData && (hasDirtyGuestData() || !hasHandledGuestMigration());
   window.__guestMigrationUid = user.uid;
   window.__guestMigrationSummary = { words, profile, user };
 
   if (!shouldPrompt) {
+    if (hasGuestData && hasHandledGuestMigration() && !hasDirtyGuestData()) {
+      clearGuestWordsStorage();
+    }
     window.__guestMigrationPromise = Promise.resolve('none');
     return window.__guestMigrationPromise;
   }
@@ -2159,6 +2196,7 @@ window.confirmGuestMigration = async function() {
 
     writeWordsToStorage(window.words, 'normal', user.uid);
     clearGuestWordsStorage();
+    markGuestMigrationHandled(user, 'accepted');
     saveAndRender();
     hideModal('guestMigrationModal');
     showToast(uploaded > 0 ? `تم نقل ${uploaded} كلمات لحسابك` : 'ما في كلمات جديدة للنقل، وتم حفظ تقدمك', 'success', 4200);
@@ -2188,6 +2226,7 @@ window.declineGuestMigration = function() {
   }
   clearGuestWordsStorage();
   resetGuestProgressState();
+  markGuestMigrationHandled(window.auth?.currentUser, 'declined');
   hideModal('guestMigrationModal');
   showToast('تم تجاهل بيانات الضيف وبدينا صفحة جديدة.', 'info', 3600);
   window.__resolveGuestMigration?.('declined');
@@ -2433,6 +2472,7 @@ function updateXP(amount) {
   const oldRank = getRank(userXP);
   userXP = Math.max(0, userXP + amount);
   saveInt('userXP', userXP);
+  if (!hasSignedInUser()) markGuestDataDirty();
   if (window.saveProfileToCloud) window.saveProfileToCloud();
   renderXPBar();
   if (amount > 0 && getRank(userXP).label !== oldRank.label)
@@ -2567,6 +2607,7 @@ function incrementDailyCount() {
   const map   = loadJSON('activityMap', {});
   map[today]  = (map[today] || 0) + 1;
   saveJSON('activityMap', map);
+  if (!hasSignedInUser()) markGuestDataDirty();
   if (window.saveProfileToCloud) window.saveProfileToCloud();
   if (typeof updateDailyQuestsBadge === 'function') updateDailyQuestsBadge();
   renderDailyGoal();
@@ -2579,6 +2620,7 @@ function decrementDailyCount() {
   if (map[today] && map[today] > 0) {
     map[today]--;
     saveJSON('activityMap', map);
+    if (!hasSignedInUser()) markGuestDataDirty();
     if (window.saveProfileToCloud) window.saveProfileToCloud();
     renderDailyGoal();
   }
@@ -3755,6 +3797,7 @@ function getLootState() {
 
 function saveLootState(state) {
   saveJSON(LOOT_STATE_KEY, state);
+  if (!hasSignedInUser()) markGuestDataDirty();
 }
 
 function getTitleState() {
@@ -3804,10 +3847,12 @@ function getStreakFreezeCount() {
 
 function saveStreakFreezeCount(count) {
   saveInt(STREAK_FREEZE_KEY, Math.max(0, Number(count) || 0));
+  if (!hasSignedInUser()) markGuestDataDirty();
 }
 
 function recordGameDictionaryAdd() {
   saveInt(GAME_DICT_ADDS_KEY, loadInt(GAME_DICT_ADDS_KEY, 0) + 1);
+  if (!hasSignedInUser()) markGuestDataDirty();
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
   if (window.saveProfileToCloud) window.saveProfileToCloud();
 }
@@ -5108,6 +5153,7 @@ function showWordRenderLoading(show) {
 
 function cancelWordWindowTransition() {
   clearTimeout(wordVirtualState.transitionTimer);
+  clearTimeout(wordVirtualState.loadingTimer);
   wordVirtualState.isTransitioning = false;
   wordVirtualState.transitionTargetY = null;
   wordVirtualState.transitionPinnedY = null;
@@ -5125,6 +5171,7 @@ function setWordProgrammaticScroll(top) {
 function finishWordWindowTransition(targetY) {
   clearTimeout(wordVirtualState.transitionTimer);
   wordVirtualState.transitionTimer = setTimeout(() => {
+    clearTimeout(wordVirtualState.loadingTimer);
     setWordProgrammaticScroll(targetY);
     wordVirtualState.isTransitioning = false;
     wordVirtualState.transitionTargetY = null;
@@ -5138,7 +5185,8 @@ function requestWordWindowTransition(targetY, pinnedY) {
   wordVirtualState.isTransitioning = true;
   wordVirtualState.transitionTargetY = Math.max(0, targetY);
   wordVirtualState.transitionPinnedY = Math.max(0, pinnedY);
-  showWordRenderLoading(true);
+  clearTimeout(wordVirtualState.loadingTimer);
+  wordVirtualState.loadingTimer = setTimeout(() => showWordRenderLoading(true), 90);
   setWordProgrammaticScroll(wordVirtualState.transitionPinnedY);
   requestAnimationFrame(() => {
     render({
@@ -5249,12 +5297,11 @@ function render(options = {}) {
     Math.round(range.topSpacer),
     Math.round(range.bottomSpacer),
     isReorderMode ? 'reorder' : 'normal',
-    selectedIndices.join(','),
-    options.forceWindowRefresh ? 'force' : ''
+    selectedIndices.join(',')
   ].join('|');
 
   let didRenderWindow = false;
-  if (htmlKey !== wordVirtualState.lastHtmlKey || listWasCleared) {
+  if (options.forceWindowRefresh || htmlKey !== wordVirtualState.lastHtmlKey || listWasCleared) {
     const topSpacer = range.topSpacer
       ? `<li class="virtual-list-spacer" aria-hidden="true" style="height:${Math.round(range.topSpacer)}px"></li>`
       : '';
@@ -5343,9 +5390,19 @@ function shouldRenderWordWindowForScroll() {
   const { firstVisible, lastVisible } = state;
 
   return (
-    firstVisible < wordVirtualState.start + WORD_DOM_BUFFER ||
-    lastVisible > wordVirtualState.end - WORD_DOM_EDGE_BUFFER
+    (wordVirtualState.start > 0 && firstVisible < wordVirtualState.start + WORD_DOM_BUFFER) ||
+    (wordVirtualState.end < wordVirtualState.total && lastVisible > wordVirtualState.end - WORD_DOM_EDGE_BUFFER)
   );
+}
+
+function getWordWindowBoundaryState(listEl) {
+  const state = getWordScrollWindowState(listEl);
+  if (!state || wordVirtualState.end <= wordVirtualState.start) return null;
+  const aboveWindow = wordVirtualState.start > 0 && state.firstVisible < wordVirtualState.start;
+  const belowWindow = wordVirtualState.end < wordVirtualState.total && state.lastVisible > wordVirtualState.end;
+  const nearTop = wordVirtualState.start > 0 && state.firstVisible < wordVirtualState.start + WORD_DOM_BUFFER;
+  const nearBottom = wordVirtualState.end < wordVirtualState.total && state.lastVisible > wordVirtualState.end - WORD_DOM_EDGE_BUFFER;
+  return { ...state, aboveWindow, belowWindow, nearTop, nearBottom };
 }
 
 window.addEventListener('scroll', () => {
@@ -5353,17 +5410,20 @@ window.addEventListener('scroll', () => {
   if (wordVirtualState.programmaticScroll) return;
   if (wordVirtualState.isTransitioning) {
     const pinnedY = wordVirtualState.transitionPinnedY ?? window.scrollY;
+    if (Math.abs(window.scrollY - pinnedY) > 4) {
+      wordVirtualState.transitionTargetY = window.scrollY;
+    }
     setWordProgrammaticScroll(pinnedY);
     return;
   }
   if (!shouldRenderWordWindowForScroll()) return;
   const listEl = document.getElementById('list');
-  const state = getWordScrollWindowState(listEl);
-  if (state && wordVirtualState.end > wordVirtualState.start) {
-    const goingUp = state.firstVisible < wordVirtualState.start + WORD_DOM_BUFFER;
+  const state = getWordWindowBoundaryState(listEl);
+  if (state && (state.aboveWindow || state.belowWindow)) {
+    const goingUp = state.aboveWindow;
     const safeFirst = goingUp
-      ? Math.max(0, wordVirtualState.start + WORD_DOM_BUFFER)
-      : Math.max(0, wordVirtualState.end - WORD_DOM_EDGE_BUFFER - state.visibleRows);
+      ? Math.max(0, wordVirtualState.start)
+      : Math.max(0, wordVirtualState.end - state.visibleRows);
     const pinnedY = state.listTop + (safeFirst * state.rowH);
     if (requestWordWindowTransition(window.scrollY, pinnedY)) return;
   }
@@ -5658,6 +5718,7 @@ function finishQuizRun() {
   stopTimeAttackTimer();
   if (currentQuizMistakes === 0 && currentQuizWords.length > 0) {
     saveInt('lootlinguaPerfectQuizzes', loadInt('lootlinguaPerfectQuizzes', 0) + 1);
+    if (!hasSignedInUser()) markGuestDataDirty();
     markDailyQuestFlag('perfectQuiz');
     if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
   }
