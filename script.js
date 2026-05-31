@@ -2,60 +2,82 @@
 // ═══════════════════════════════════════════════════════
 const PERFORMANCE_MODE_KEY = 'lootlinguaPerformanceMode';
 const PERFORMANCE_MODE_NOTICE_KEY = 'lootlinguaPerformanceModeNoticeSeen';
+const PERFORMANCE_LEVELS = ['ultra', 'balanced', 'stable', 'turbo'];
+const PERFORMANCE_LEVEL_LABELS = {
+  ultra: 'أقصى جرافيك',
+  balanced: 'متوازن',
+  stable: 'أداء مستقر',
+  turbo: 'تربو',
+};
 
-function isAutoLowEndDevice() {
+function detectPerformanceLevel() {
   const cores = navigator.hardwareConcurrency || 0;
   const memory = navigator.deviceMemory || 0;
   const isMobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone/i.test(navigator.userAgent || '');
-  return (cores > 0 && cores < 4) || (memory > 0 && memory <= 4) || isMobile;
+  if ((cores && cores <= 2) || (memory && memory <= 2)) return 'turbo';
+  if (isMobile || (cores && cores < 4) || (memory && memory <= 4)) return 'stable';
+  if ((cores && cores >= 8) && (!memory || memory >= 8)) return 'ultra';
+  return 'balanced';
 }
 
 function getPerformanceModePreference() {
-  return localStorage.getItem(PERFORMANCE_MODE_KEY);
-}
-
-function shouldUsePerformanceMode() {
-  const pref = getPerformanceModePreference();
-  if (pref === 'on') return true;
-  if (pref === 'off') return false;
-  return isAutoLowEndDevice();
+  const pref = localStorage.getItem(PERFORMANCE_MODE_KEY);
+  if (PERFORMANCE_LEVELS.includes(pref)) return pref;
+  if (pref === 'on') {
+    localStorage.setItem(PERFORMANCE_MODE_KEY, 'turbo');
+    return 'turbo';
+  }
+  if (pref === 'off') {
+    localStorage.setItem(PERFORMANCE_MODE_KEY, 'ultra');
+    return 'ultra';
+  }
+  const autoLevel = detectPerformanceLevel();
+  localStorage.setItem(PERFORMANCE_MODE_KEY, autoLevel);
+  return autoLevel;
 }
 
 function syncPerformanceModeToggle() {
-  const btn = document.getElementById('performanceModeToggle');
+  const slider = document.getElementById('performanceLevelSlider');
   const text = document.getElementById('performanceModeState');
-  const enabled = document.body.classList.contains('low-end-device');
-  const pref = getPerformanceModePreference();
-  if (btn) {
-    btn.classList.toggle('active', enabled);
-    btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    btn.title = enabled ? 'وضع الأداء السريع مفعل' : 'وضع الأداء السريع متوقف';
+  const level = getPerformanceModePreference();
+  const index = Math.max(0, PERFORMANCE_LEVELS.indexOf(level));
+  if (slider) {
+    slider.value = String(index);
+    slider.setAttribute('aria-valuetext', PERFORMANCE_LEVEL_LABELS[level]);
+    slider.style.setProperty('--perf-progress', `${(index / (PERFORMANCE_LEVELS.length - 1)) * 100}%`);
   }
   if (text) {
-    text.textContent = enabled
-      ? (pref === 'on' ? 'مفعل يدوياً' : 'مفعل تلقائياً')
-      : 'متوقف';
+    text.textContent = PERFORMANCE_LEVEL_LABELS[level];
   }
 }
 
 function applyPerformanceMode() {
-  const pref = getPerformanceModePreference();
-  const autoEnabled = pref === null && isAutoLowEndDevice();
-  document.body.classList.toggle('low-end-device', shouldUsePerformanceMode());
+  const hadPreference = localStorage.getItem(PERFORMANCE_MODE_KEY) !== null;
+  const level = getPerformanceModePreference();
+  document.body.classList.remove('low-end-device', ...PERFORMANCE_LEVELS.map(l => `perf-${l}`));
+  document.body.classList.add(`perf-${level}`);
+  document.body.classList.toggle('low-end-device', level === 'turbo');
   syncPerformanceModeToggle();
-  if (autoEnabled && !localStorage.getItem(PERFORMANCE_MODE_NOTICE_KEY)) {
+  if (!hadPreference && level !== 'ultra' && !localStorage.getItem(PERFORMANCE_MODE_NOTICE_KEY)) {
     localStorage.setItem(PERFORMANCE_MODE_NOTICE_KEY, '1');
     setTimeout(() => {
       if (typeof showToast === 'function') {
-        showToast('فعلنا وضع الأداء السريع لسلاسة أفضل. تقدر تطفيه من صورة ملفك الشخصي > الإعدادات.', 'info', 5600);
+        showToast(`اخترنا مستوى الأداء ${PERFORMANCE_LEVEL_LABELS[level]} تلقائياً. تقدر تغيّره من الإعدادات.`, 'info', 5600);
       }
     }, 900);
   }
 }
 
+window.setPerformanceLevel = function(value) {
+  const index = Math.min(PERFORMANCE_LEVELS.length - 1, Math.max(0, Number(value) || 0));
+  localStorage.setItem(PERFORMANCE_MODE_KEY, PERFORMANCE_LEVELS[index]);
+  applyPerformanceMode();
+};
+
 window.togglePerformanceMode = function() {
-  const enabled = document.body.classList.contains('low-end-device');
-  localStorage.setItem(PERFORMANCE_MODE_KEY, enabled ? 'off' : 'on');
+  const current = getPerformanceModePreference();
+  const next = current === 'turbo' ? 'balanced' : 'turbo';
+  localStorage.setItem(PERFORMANCE_MODE_KEY, next);
   applyPerformanceMode();
 };
 
@@ -481,7 +503,64 @@ if (document.readyState === 'loading') {
 // ═══════════════════════════════════════════════════════
 // State
 // ═══════════════════════════════════════════════════════
-window.words     = JSON.parse(localStorage.getItem('lootlinguaDict')) || [];
+const LEGACY_DICTIONARY_KEY = 'lootlinguaDict';
+const WORDS_NORMAL_PREFIX = 'words_normal_';
+const WORDS_GAMER_PREFIX = 'words_gamer_';
+
+function getStorageUserId(uid) {
+  return uid || window.auth?.currentUser?.uid || 'guest';
+}
+
+function getWordsStorageKey(type = 'normal', uid) {
+  const prefix = type === 'gamer' ? WORDS_GAMER_PREFIX : WORDS_NORMAL_PREFIX;
+  return prefix + getStorageUserId(uid);
+}
+
+function readWordsFromStorage(type = 'normal', uid) {
+  const key = getWordsStorageKey(type, uid);
+  const legacy = !uid && getStorageUserId(uid) === 'guest' ? localStorage.getItem(LEGACY_DICTIONARY_KEY) : null;
+  try {
+    const raw = localStorage.getItem(key) ?? legacy;
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeWordsToStorage(words = window.words, type = 'normal', uid) {
+  localStorage.setItem(getWordsStorageKey(type, uid), JSON.stringify(Array.isArray(words) ? words : []));
+}
+
+window.getWordsStorageKey = getWordsStorageKey;
+window.readWordsFromStorage = readWordsFromStorage;
+window.writeWordsToStorage = writeWordsToStorage;
+window.replaceWordsForCurrentUser = function(words, type = 'normal', uid) {
+  window.words = Array.isArray(words) ? words : [];
+  writeWordsToStorage(window.words, type, uid);
+};
+
+window.clearDictionaryState = function({ renderView = true } = {}) {
+  window.words = [];
+  editId = null;
+  pendingDeleteId = null;
+  selectedIndices = [];
+  isReorderMode = false;
+  renderLimit = 20;
+  if (renderView && typeof render === 'function') render();
+};
+
+window.loadGuestDictionaryState = function({ renderView = true } = {}) {
+  window.words = readWordsFromStorage('normal', 'guest');
+  editId = null;
+  pendingDeleteId = null;
+  selectedIndices = [];
+  isReorderMode = false;
+  renderLimit = 20;
+  if (renderView && typeof render === 'function') render();
+};
+
+window.words     = readWordsFromStorage('normal');
 let currentFilter    = 'all';
 let editId           = null;
 let isReorderMode    = false;
@@ -499,6 +578,7 @@ const WORD_RENDER_FAST_MODE = true;
 const WORD_DOM_WINDOW_SIZE = 48;
 const WORD_DOM_BUFFER = 8;
 const WORD_DOM_EDGE_BUFFER = 8;
+const WORD_RENDER_TRANSITION_MS = 120;
 let wordVirtualState = {
   key: '',
   start: 0,
@@ -506,7 +586,12 @@ let wordVirtualState = {
   rowHeight: 126,
   listTop: 0,
   lastHtmlKey: '',
-  total: 0
+  total: 0,
+  isTransitioning: false,
+  transitionTargetY: null,
+  transitionPinnedY: null,
+  transitionTimer: null,
+  programmaticScroll: false
 };
 let currentQuizMistakes = 0;
 
@@ -1913,6 +1998,201 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   }
 };
 
+function normalizeMigrationWordKey(word) {
+  return String(word?.word || word?.text || '').toLowerCase().trim();
+}
+
+function getGuestMigrationWords() {
+  const normal = readWordsFromStorage('normal', 'guest');
+  const gamer = readWordsFromStorage('gamer', 'guest');
+  const seen = new Set();
+  return [...normal, ...gamer].filter((word) => {
+    const key = normalizeMigrationWordKey(word);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getGuestProgressSnapshot() {
+  return window.getLootlinguaProfilePayload ? window.getLootlinguaProfilePayload() : {};
+}
+
+function getGuestProgressSummary(profile) {
+  const titles = Array.isArray(profile?.titlesState?.unlocked) ? profile.titlesState.unlocked.length : 0;
+  const chests = Number(profile?.dailyLootState?.totalOpens) || 0;
+  const stats = [];
+  if ((Number(profile?.userXP) || 0) > 0) stats.push({ label: `${profile.userXP} XP`, hint: 'خبرة مخزنة' });
+  if ((Number(profile?.dailyStreak) || 0) > 0) stats.push({ label: `${profile.dailyStreak} يوم`, hint: 'سلسلة يومية' });
+  if (titles > 0) stats.push({ label: `${titles} ألقاب`, hint: 'إنجازات مفتوحة' });
+  if (chests > 0) stats.push({ label: `${chests} صناديق`, hint: 'لوت يومي' });
+  if ((Number(profile?.streakFreezes) || 0) > 0) stats.push({ label: `${profile.streakFreezes} تجميد`, hint: 'حماية الستريك' });
+  return stats;
+}
+
+function hasGuestProgress(profile) {
+  return getGuestProgressSummary(profile).length > 0 ||
+    (Array.isArray(profile?.addedGameWords) && profile.addedGameWords.length > 0) ||
+    (Array.isArray(profile?.extraChests) && profile.extraChests.length > 0);
+}
+
+function clearGuestWordsStorage() {
+  localStorage.removeItem(getWordsStorageKey('normal', 'guest'));
+  localStorage.removeItem(getWordsStorageKey('gamer', 'guest'));
+  localStorage.removeItem(LEGACY_DICTIONARY_KEY);
+}
+
+function resetGuestProgressState() {
+  userXP = 0;
+  dailyStreak = 0;
+  lastActivity = '';
+  [
+    'userXP',
+    'dailyStreak',
+    'lastActivityDate',
+    'activityMap',
+    'addedGameWords',
+    'lootlinguaDailyLootState',
+    'lootlinguaTitlesState',
+    'lootlinguaStreakFreezes',
+    'lootlinguaFreezeSaves',
+    'lootlinguaGameDictAdds',
+    'lootlinguaPerfectQuizzes',
+    'lootlinguaExtraChests',
+  ].forEach((key) => localStorage.removeItem(key));
+  if (typeof renderStreak === 'function') renderStreak();
+  if (typeof renderDailyGoal === 'function') renderDailyGoal();
+  if (typeof renderXPBar === 'function') renderXPBar();
+  if (typeof refreshFeatureUnlockUI === 'function') refreshFeatureUnlockUI();
+}
+
+function renderGuestMigrationModal(summary) {
+  const wordCount = summary.words.length;
+  const progressStats = getGuestProgressSummary(summary.profile);
+  const msg = document.getElementById('guestMigrationMessage');
+  const stats = document.getElementById('guestMigrationStats');
+  const confirm = document.getElementById('guestMigrationConfirm');
+  const decline = document.getElementById('guestMigrationDeclineBtn');
+  const accept = document.getElementById('guestMigrationAcceptBtn');
+  if (msg) {
+    const progressText = progressStats.length ? ' ولقينا كمان XP وتقدم وألقاب مخزنة' : '';
+    msg.textContent = `يا بطل! لقينا ${wordCount} كلمات مخبأة في جهازك${progressText}.. بدك تنقلهم لحسابك الأسطوري الجديد عشان ما يضيعوا؟`;
+  }
+  if (stats) {
+    const allStats = [{ label: `${wordCount} كلمات`, hint: 'قاموس الضيف' }, ...progressStats];
+    stats.innerHTML = allStats.map((item) => `<div class="guest-migration-stat">${item.label}<small>${item.hint}</small></div>`).join('');
+  }
+  if (confirm) confirm.style.display = 'none';
+  if (decline) {
+    decline.dataset.confirmed = '0';
+    decline.textContent = 'لا، ابدأ من جديد';
+    decline.disabled = false;
+  }
+  if (accept) {
+    accept.disabled = false;
+    accept.textContent = 'نعم، انقل اللوت!';
+  }
+  showModal('guestMigrationModal');
+}
+
+window.prepareGuestMigrationForUser = function(user) {
+  if (!user) return Promise.resolve('guest');
+  if (window.__guestMigrationPromise && window.__guestMigrationUid === user.uid) {
+    return window.__guestMigrationPromise;
+  }
+
+  const words = getGuestMigrationWords();
+  const profile = getGuestProgressSnapshot();
+  const shouldPrompt = words.length > 0 || hasGuestProgress(profile);
+  window.__guestMigrationUid = user.uid;
+  window.__guestMigrationSummary = { words, profile, user };
+
+  if (!shouldPrompt) {
+    window.__guestMigrationPromise = Promise.resolve('none');
+    return window.__guestMigrationPromise;
+  }
+
+  window.__guestMigrationPromise = new Promise((resolve) => {
+    window.__resolveGuestMigration = resolve;
+  });
+  renderGuestMigrationModal(window.__guestMigrationSummary);
+  return window.__guestMigrationPromise;
+};
+
+window.confirmGuestMigration = async function() {
+  const summary = window.__guestMigrationSummary;
+  const user = summary?.user || window.auth?.currentUser;
+  if (!summary || !user) return;
+
+  const accept = document.getElementById('guestMigrationAcceptBtn');
+  const decline = document.getElementById('guestMigrationDeclineBtn');
+  if (accept) {
+    accept.disabled = true;
+    accept.textContent = 'جاري نقل اللوت...';
+  }
+  if (decline) decline.disabled = true;
+
+  try {
+    const existing = new Set((window.words || []).map((word) => normalizeMigrationWordKey(word)).filter(Boolean));
+    const toMove = summary.words.filter((word) => {
+      const key = normalizeMigrationWordKey(word);
+      if (!key || existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
+
+    let uploaded = 0;
+    for (const word of toMove) {
+      const realId = window.saveWordToCloud
+        ? await window.saveWordToCloud(word.word || word.text, word.category || 'عام', word.meaning || '', word.example || '')
+        : null;
+      if (!realId) throw new Error('cloud-upload-failed');
+      window.words.unshift({
+        ...word,
+        id: realId,
+        word: word.word || word.text || '',
+        category: word.category || 'عام',
+        userId: user.uid,
+      });
+      uploaded++;
+    }
+
+    writeWordsToStorage(window.words, 'normal', user.uid);
+    clearGuestWordsStorage();
+    saveAndRender();
+    hideModal('guestMigrationModal');
+    showToast(uploaded > 0 ? `تم نقل ${uploaded} كلمات لحسابك` : 'ما في كلمات جديدة للنقل، وتم حفظ تقدمك', 'success', 4200);
+    window.__resolveGuestMigration?.('accepted');
+  } catch (err) {
+    console.error('guestMigration:', err);
+    if (accept) {
+      accept.disabled = false;
+      accept.textContent = 'نعم، انقل اللوت!';
+    }
+    if (decline) decline.disabled = false;
+    showToast('ما قدرنا ننقل اللوت الآن. خليناه محفوظ على الجهاز.', 'danger', 4600);
+  }
+};
+
+window.declineGuestMigration = function() {
+  const decline = document.getElementById('guestMigrationDeclineBtn');
+  const confirm = document.getElementById('guestMigrationConfirm');
+  if (decline?.dataset.confirmed !== '1') {
+    if (decline) {
+      decline.dataset.confirmed = '1';
+      decline.textContent = 'متأكد، احذف لوت الضيف';
+    }
+    if (confirm) confirm.style.display = 'block';
+    showToast('اضغط تأكيد مرة ثانية إذا بدك تبدأ من جديد بدون نقل.', 'warning', 4200);
+    return;
+  }
+  clearGuestWordsStorage();
+  resetGuestProgressState();
+  hideModal('guestMigrationModal');
+  showToast('تم تجاهل بيانات الضيف وبدينا صفحة جديدة.', 'info', 3600);
+  window.__resolveGuestMigration?.('declined');
+};
+
 function beginViewSwitch() {
   document.body.classList.add('view-transitioning');
   requestAnimationFrame(() => {
@@ -2420,7 +2700,7 @@ function renderStatsNumbers() {
 // Save & Render helpers
 // ═══════════════════════════════════════════════════════
 function persistDictionary() {
-  localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  writeWordsToStorage(window.words, 'normal');
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(false);
   refreshFeatureUnlockUI();
 }
@@ -2553,7 +2833,7 @@ window.deleteWord = function(id, event) {
       document.querySelector('#deleteModal .xp-delete-warn')?.remove();
       
       // تحديث البيانات في الخلفية ورسم القائمة من جديد (بعد اكتمال الأنيميشن)
-      localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+      persistDictionary();
       if (currentView === 'starred') renderStarredWords();
       else render();
     }, 300);
@@ -2574,7 +2854,7 @@ window.toggleStar = function(id, event) {
   word.starred = !word.starred;
 
   // تحديث البيانات في الخلفية بصمت
-  localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  persistDictionary();
   if (window.updateWordInCloud) window.updateWordInCloud(id, { starred: word.starred });
 
   // تحديث شكل النجمة مباشرة في الـ DOM لتجنب الرمشة
@@ -3263,7 +3543,7 @@ function toggleReorderMode() {
   const btn = document.getElementById('reorderBtn');
   btn.classList.toggle('active-tool', isReorderMode);
   btn.innerHTML = isReorderMode ? '💾 حفظ' : '<i class="fas fa-sort-amount-down"></i>';
-  if (!isReorderMode) localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  if (!isReorderMode) persistDictionary();
   render();
 }
 
@@ -3282,7 +3562,7 @@ function drop(ev, dropIndex) {
   dragged.forEach(i => { if (i < dropIndex) target--; });
   window.words.splice(Math.max(target, 0), 0, ...items);
   window.words.forEach((w, i) => { w.order = i; });
-  localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+  persistDictionary();
   selectedIndices = [];
   render();
 }
@@ -3301,7 +3581,7 @@ function handleLiClick(index, el) {
     const word = window.words[index];
     if (word) {
       word.expanded = !word.expanded;
-      localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+      persistDictionary();
       // تحديث الكلاس مباشرة لتوسيع/إغلاق البطاقة بدون إعادة رسم القائمة
       el.classList.toggle('show-example', word.expanded);
     }
@@ -3372,7 +3652,7 @@ window.importData = async function(event) {
         return seen.has(key) ? false : seen.set(key, true);
       });
       saveAndRender();
-      if (window.saveWordToCloud) {
+      if (window.auth?.currentUser && window.saveWordToCloud) {
         for (const item of imported)
           await window.saveWordToCloud(item.word || item.text, item.category, item.meaning, item.example);
         showToast("تم الاستيراد والرفع للسحابة");
@@ -4101,9 +4381,41 @@ let appSwipeStartX = null;
 let appSwipeStartY = null;
 let appSwipeTracking = false;
 let appSwipeHorizontal = false;
+let appSwipeTargetView = null;
 
 function isMobileSwipeDevice() {
   return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function isAppSwipeNavigationAvailable() {
+  const dock = document.getElementById('legendDock');
+  if (!dock || getComputedStyle(dock).display === 'none') return false;
+  return document.body.classList.contains('legend-dock-visible') ||
+    document.body.classList.contains('treasure-dock-visible');
+}
+
+function isSwipeBlockedTarget(target) {
+  if (!target?.closest) return false;
+  return Boolean(target.closest([
+    'input',
+    'textarea',
+    'select',
+    '.legend-dock',
+    '.legend-top-bar',
+    '.custom-modal',
+    '.profile-modal.open',
+    '.sidebar.open',
+    '.onboarding-box',
+    '.onboarding-tooltip',
+    '.notif-hub',
+    '.daily-quests-sheet.open',
+    '.sound-btn',
+    '.edit-btn',
+    '.del-btn',
+    '.star-btn',
+    '.btn-add-mine',
+    '.performance-level-slider'
+  ].join(', ')));
 }
 
 function getSwipeTargetView(direction) {
@@ -4135,20 +4447,29 @@ function goToSwipeTarget(viewKey) {
   else if (viewKey === 'quiz') loadQuizView();
 }
 
+function resetAppSwipeState() {
+  appSwipeStartX = null;
+  appSwipeStartY = null;
+  appSwipeTracking = false;
+  appSwipeHorizontal = false;
+  appSwipeTargetView = null;
+}
+
 function initTreasureSwipeNavigation() {
   if (window.__treasureSwipeReady) return;
   window.__treasureSwipeReady = true;
   document.addEventListener('touchstart', (event) => {
     if (!isMobileSwipeDevice()) return;
     if (event.touches?.length !== 1) return;
-    if (!document.body.classList.contains('treasure-dock-visible')) return;
-    if (event.target.closest('input, textarea, select, button, a, .custom-modal, .profile-modal.open, .sidebar.open, .onboarding-box, .onboarding-tooltip')) return;
+    if (!isAppSwipeNavigationAvailable()) return;
+    if (isSwipeBlockedTarget(event.target)) return;
     const t = event.touches && event.touches[0];
     if (!t) return;
     appSwipeStartX = t.clientX;
     appSwipeStartY = t.clientY;
     appSwipeTracking = true;
     appSwipeHorizontal = false;
+    appSwipeTargetView = null;
   }, { passive: true });
   document.addEventListener('touchmove', (event) => {
     if (!appSwipeTracking || appSwipeStartX == null || appSwipeStartY == null) return;
@@ -4157,41 +4478,35 @@ function initTreasureSwipeNavigation() {
     const dx = t.clientX - appSwipeStartX;
     const dy = t.clientY - appSwipeStartY;
     if (!appSwipeHorizontal && Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx) * 1.15) {
-      appSwipeTracking = false;
-      appSwipeStartX = null;
-      appSwipeStartY = null;
+      resetAppSwipeState();
       return;
     }
     if (!appSwipeHorizontal && Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.25) {
       appSwipeHorizontal = true;
+      appSwipeTargetView = getSwipeTargetView(dx < 0 ? 'right-to-left' : 'left-to-right');
     }
-  }, { passive: true });
+    if (appSwipeHorizontal) {
+      const direction = dx < 0 ? 'right-to-left' : 'left-to-right';
+      appSwipeTargetView = getSwipeTargetView(direction);
+      if (appSwipeTargetView) event.preventDefault();
+    }
+  }, { passive: false });
   document.addEventListener('touchend', (event) => {
     if (!appSwipeTracking || appSwipeStartX == null || appSwipeStartY == null) return;
     const t = event.changedTouches && event.changedTouches[0];
     if (!t) {
-      appSwipeStartX = null;
-      appSwipeStartY = null;
-      appSwipeTracking = false;
-      appSwipeHorizontal = false;
+      resetAppSwipeState();
       return;
     }
     const dx = t.clientX - appSwipeStartX;
     const dy = t.clientY - appSwipeStartY;
-    appSwipeStartX = null;
-    appSwipeStartY = null;
-    appSwipeTracking = false;
     const wasHorizontal = appSwipeHorizontal;
-    appSwipeHorizontal = false;
-    if (!wasHorizontal || Math.abs(dx) < 58 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
-    goToSwipeTarget(getSwipeTargetView(dx < 0 ? 'right-to-left' : 'left-to-right'));
+    const targetView = appSwipeTargetView || getSwipeTargetView(dx < 0 ? 'right-to-left' : 'left-to-right');
+    resetAppSwipeState();
+    if (!wasHorizontal || Math.abs(dx) < 46 || Math.abs(dx) < Math.abs(dy) * 1.15) return;
+    goToSwipeTarget(targetView);
   }, { passive: true });
-  document.addEventListener('touchcancel', () => {
-    appSwipeStartX = null;
-    appSwipeStartY = null;
-    appSwipeTracking = false;
-    appSwipeHorizontal = false;
-  }, { passive: true });
+  document.addEventListener('touchcancel', resetAppSwipeState, { passive: true });
 }
 
 initTreasureSwipeNavigation();
@@ -4607,7 +4922,8 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
 
   if (btnEl) { btnEl.textContent='...'; btnEl.disabled=true; }
 
-  if (window.saveWordToCloud) {
+  const canUseCloud = Boolean(window.auth?.currentUser && window.saveWordToCloud);
+  if (canUseCloud) {
     const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example||'');
     if (realId) {
       window.words.unshift({id:realId,word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain});
@@ -4618,8 +4934,13 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
       checkAndUpdateStreak(); incrementDailyCount(); recordGameDictionaryAdd();
       if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
     } else {
-      showToast('سجل دخول أولاً عشان تحفظ اللوت');
-      if (btnEl) { btnEl.textContent='➕'; btnEl.disabled=false; }
+      const nw={id:Date.now().toString(),word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain};
+      window.words.unshift(nw);
+      saveAndRender();
+      showToast('تمت الإضافة محلياً');
+      updateXP(xpGain); showXPBadge(xpGain,null,false);
+      checkAndUpdateStreak(); incrementDailyCount(); recordGameDictionaryAdd();
+      if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
     }
   } else {
     const nw={id:Date.now().toString(),word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain};
@@ -4755,7 +5076,93 @@ function updateWordRowHeight(listEl) {
   });
 }
 
-function render() {
+function getWordRenderMetrics(listEl) {
+  if (!listEl || !wordVirtualState.total) return null;
+  const rowH = Math.max(86, wordVirtualState.rowHeight || 126);
+  const listTop = wordVirtualState.listTop || (listEl.getBoundingClientRect().top + window.scrollY);
+  const visibleRows = Math.ceil(window.innerHeight / rowH);
+  return { rowH, listTop, visibleRows };
+}
+
+function getWordScrollWindowState(listEl, scrollY = window.scrollY) {
+  const metrics = getWordRenderMetrics(listEl);
+  if (!metrics) return null;
+  const firstVisible = Math.max(0, Math.floor(Math.max(0, scrollY - metrics.listTop) / metrics.rowH));
+  const lastVisible = firstVisible + metrics.visibleRows;
+  return { ...metrics, firstVisible, lastVisible };
+}
+
+function showWordRenderLoading(show) {
+  let loader = document.getElementById('wordRenderLoading');
+  if (!loader && show) {
+    loader = document.createElement('div');
+    loader.id = 'wordRenderLoading';
+    loader.className = 'word-render-loading';
+    loader.setAttribute('role', 'status');
+    loader.setAttribute('aria-live', 'polite');
+    loader.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>جاري تجهيز الكلمات...</span>';
+    document.body.appendChild(loader);
+  }
+  if (loader) loader.classList.toggle('show', !!show);
+}
+
+function cancelWordWindowTransition() {
+  clearTimeout(wordVirtualState.transitionTimer);
+  wordVirtualState.isTransitioning = false;
+  wordVirtualState.transitionTargetY = null;
+  wordVirtualState.transitionPinnedY = null;
+  showWordRenderLoading(false);
+}
+
+function setWordProgrammaticScroll(top) {
+  wordVirtualState.programmaticScroll = true;
+  window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+  requestAnimationFrame(() => {
+    wordVirtualState.programmaticScroll = false;
+  });
+}
+
+function finishWordWindowTransition(targetY) {
+  clearTimeout(wordVirtualState.transitionTimer);
+  wordVirtualState.transitionTimer = setTimeout(() => {
+    setWordProgrammaticScroll(targetY);
+    wordVirtualState.isTransitioning = false;
+    wordVirtualState.transitionTargetY = null;
+    wordVirtualState.transitionPinnedY = null;
+    showWordRenderLoading(false);
+  }, WORD_RENDER_TRANSITION_MS);
+}
+
+function requestWordWindowTransition(targetY, pinnedY) {
+  if (wordVirtualState.isTransitioning) return true;
+  wordVirtualState.isTransitioning = true;
+  wordVirtualState.transitionTargetY = Math.max(0, targetY);
+  wordVirtualState.transitionPinnedY = Math.max(0, pinnedY);
+  showWordRenderLoading(true);
+  setWordProgrammaticScroll(wordVirtualState.transitionPinnedY);
+  requestAnimationFrame(() => {
+    render({
+      scrollYOverride: wordVirtualState.transitionTargetY,
+      forceWindowRefresh: true
+    });
+    requestAnimationFrame(() => finishWordWindowTransition(wordVirtualState.transitionTargetY || 0));
+  });
+  return true;
+}
+
+function prepareWordWindowForTopJump() {
+  if (currentView !== 'personal' || isReorderMode) return;
+  const listEl = document.getElementById('list');
+  if (!listEl || !WORD_RENDER_FAST_MODE) return;
+  showWordRenderLoading(true);
+  render({ scrollYOverride: 0, forceWindowRefresh: true });
+  requestAnimationFrame(() => {
+    setWordProgrammaticScroll(0);
+    setTimeout(() => showWordRenderLoading(false), WORD_RENDER_TRANSITION_MS);
+  });
+}
+
+function render(options = {}) {
   // لو مش على القاموس الشخصي ما نرندر
   if (currentView !== 'personal') {
     refreshFeatureUnlockUI();
@@ -4804,6 +5211,7 @@ function render() {
   const renderKey = getWordRenderKey(query, searchType, filtered);
   const resetWindow = renderKey !== wordVirtualState.key || renderLimit <= 20 || listWasCleared;
   if (resetWindow) {
+    if (!options.forceWindowRefresh) cancelWordWindowTransition();
     wordVirtualState.key = renderKey;
     wordVirtualState.listTop = 0;
     wordVirtualState.start = 0;
@@ -4813,6 +5221,7 @@ function render() {
   }
 
   if (filtered.length === 0) {
+    cancelWordWindowTransition();
     wordVirtualState.lastHtmlKey = '';
     listEl.innerHTML = `
       <li style="list-style:none;text-align:center;padding:40px 20px;color:var(--text-gray);">
@@ -4827,7 +5236,11 @@ function render() {
     listWasCleared && viewScrollY && typeof viewScrollY.personal === 'number'
       ? viewScrollY.personal
       : undefined;
-  const range = getWordWindowRange(filtered.length, listEl, resetWindow, restoredPersonalScroll);
+  const scrollYOverride =
+    typeof options.scrollYOverride === 'number'
+      ? options.scrollYOverride
+      : restoredPersonalScroll;
+  const range = getWordWindowRange(filtered.length, listEl, resetWindow, scrollYOverride);
   const displayWords = filtered.slice(range.start, range.end);
   const htmlKey = [
     renderKey,
@@ -4836,7 +5249,8 @@ function render() {
     Math.round(range.topSpacer),
     Math.round(range.bottomSpacer),
     isReorderMode ? 'reorder' : 'normal',
-    selectedIndices.join(',')
+    selectedIndices.join(','),
+    options.forceWindowRefresh ? 'force' : ''
   ].join('|');
 
   let didRenderWindow = false;
@@ -4924,11 +5338,9 @@ function shouldRenderWordWindowForScroll() {
   if (!listEl.querySelector('.word-card')) return true;
   if (!WORD_RENDER_FAST_MODE || !wordVirtualState.total || wordVirtualState.total <= WORD_DOM_WINDOW_SIZE) return false;
 
-  const rowH = Math.max(86, wordVirtualState.rowHeight || 126);
-  const listTop = wordVirtualState.listTop || (listEl.getBoundingClientRect().top + window.scrollY);
-  const firstVisible = Math.max(0, Math.floor(Math.max(0, window.scrollY - listTop) / rowH));
-  const visibleRows = Math.ceil(window.innerHeight / rowH);
-  const lastVisible = firstVisible + visibleRows;
+  const state = getWordScrollWindowState(listEl);
+  if (!state) return false;
+  const { firstVisible, lastVisible } = state;
 
   return (
     firstVisible < wordVirtualState.start + WORD_DOM_BUFFER ||
@@ -4938,7 +5350,23 @@ function shouldRenderWordWindowForScroll() {
 
 window.addEventListener('scroll', () => {
   if (currentView !== 'personal' || isReorderMode) return;
+  if (wordVirtualState.programmaticScroll) return;
+  if (wordVirtualState.isTransitioning) {
+    const pinnedY = wordVirtualState.transitionPinnedY ?? window.scrollY;
+    setWordProgrammaticScroll(pinnedY);
+    return;
+  }
   if (!shouldRenderWordWindowForScroll()) return;
+  const listEl = document.getElementById('list');
+  const state = getWordScrollWindowState(listEl);
+  if (state && wordVirtualState.end > wordVirtualState.start) {
+    const goingUp = state.firstVisible < wordVirtualState.start + WORD_DOM_BUFFER;
+    const safeFirst = goingUp
+      ? Math.max(0, wordVirtualState.start + WORD_DOM_BUFFER)
+      : Math.max(0, wordVirtualState.end - WORD_DOM_EDGE_BUFFER - state.visibleRows);
+    const pinnedY = state.listTop + (safeFirst * state.rowH);
+    if (requestWordWindowTransition(window.scrollY, pinnedY)) return;
+  }
   if (wordRenderScrollRaf) return;
   wordRenderScrollRaf = requestAnimationFrame(() => {
     wordRenderScrollRaf = null;
@@ -5190,7 +5618,7 @@ function updateQuizForgetState(w, nextForget) {
   const updatedWord = { ...w, forgetCount: nextForget };
   currentQuizWords[quizIndex] = updatedWord;
   if (!w.isGameQuizWord) {
-    localStorage.setItem('lootlinguaDict', JSON.stringify(window.words));
+    persistDictionary();
     if (window.updateWordInCloud) window.updateWordInCloud(w.id, { forgetCount: nextForget });
   }
   return { updatedWord, prevForget };
@@ -5742,7 +6170,10 @@ if (typeof window.closeSidebarIfOpen !== 'function') {
   document.body.appendChild(btn);
 
   // وظيفة النقر للعودة للأعلى
-  btn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+  btn.onclick = () => {
+    prepareWordWindowForTopJump();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
 
   // مراقبة التمرير لإظهار/إخفاء الزر
   window.addEventListener('scroll', () => {
