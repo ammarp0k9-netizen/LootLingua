@@ -659,14 +659,36 @@ let wordVirtualState = {
 let currentQuizMistakes = 0;
 let isInitialLoad = true;
 window.isInitialLoad = true;
-window.beginInitialFeatureLoad = function() {
+window.__initialFeatureLoadPending = new Set();
+window.__suppressUnlockNotices = true;
+window.beginInitialFeatureLoad = function(parts = []) {
   isInitialLoad = true;
   window.isInitialLoad = true;
+  window.__suppressUnlockNotices = true;
+  window.__initialFeatureLoadPending = new Set(Array.isArray(parts) ? parts : []);
 };
 window.finishInitialFeatureLoad = function() {
   isInitialLoad = false;
   window.isInitialLoad = false;
+  window.__suppressUnlockNotices = false;
+  window.__initialFeatureLoadPending?.clear?.();
 };
+window.markInitialFeatureLoadPartDone = function(part) {
+  if (part && window.__initialFeatureLoadPending instanceof Set) {
+    window.__initialFeatureLoadPending.delete(part);
+  }
+  if (!(window.__initialFeatureLoadPending instanceof Set) || window.__initialFeatureLoadPending.size === 0) {
+    setTimeout(() => {
+      if (!(window.__initialFeatureLoadPending instanceof Set) || window.__initialFeatureLoadPending.size === 0) {
+        window.finishInitialFeatureLoad();
+      }
+    }, 250);
+  }
+};
+
+function shouldSuppressUnlockNotices() {
+  return isInitialLoad === true || window.__suppressUnlockNotices === true || window.__applyingCloudProfile === true;
+}
 
 // ── MOBILE LONG-PRESS TOOLTIP (تفويض — يعمل مع الكروت المُعاد رسمها) ──
 (function initTouchTooltips() {
@@ -982,7 +1004,7 @@ function syncNavLockUi() {
 
   const prev = window.__navLockPrev;
   const pulseIds = [];
-  const suppressUnlockNotice = isInitialLoad === true;
+  const suppressUnlockNotice = shouldSuppressUnlockNotices();
   if (!suppressUnlockNotice && window.__navLockAnimSeeded && prev) {
     for (const id of Object.keys(currentLocks)) {
       if (prev[id] === true && currentLocks[id] === false) pulseIds.push(id);
@@ -2233,6 +2255,9 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   // Track if we loaded from cloud to avoid double checkAndUpdateStreak
   window._profileLoaded = true;
   if (!d) return;
+  const wasApplyingCloudProfile = window.__applyingCloudProfile === true;
+  window.__applyingCloudProfile = true;
+  try {
   if (d.userXP !== undefined && d.userXP !== null) {
     const cloud = Number(d.userXP) || 0;
     userXP = Math.max(cloud, userXP);
@@ -2336,6 +2361,9 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
       document.getElementById('statsPanel')?.style.display !== 'none') {
     renderStatsNumbers();
     renderHeatmap();
+  }
+  } finally {
+    window.__applyingCloudProfile = wasApplyingCloudProfile;
   }
 };
 
@@ -2699,6 +2727,7 @@ function refreshThemeLockUI() {
   const current = {};
   const newlyUnlocked = [];
   const newlyLocked = [];
+  const suppressUnlockNotice = shouldSuppressUnlockNotices();
   let activeThemeLocked = false;
   const activeTheme = localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'lootlingua';
 
@@ -2723,7 +2752,9 @@ function refreshThemeLockUI() {
 
     const unlockKey = themeSeenKey('unlocked', theme);
     if (window.__themeLockSeeded && previous?.[theme] === true && unlocked && !localStorage.getItem(unlockKey)) {
-      newlyUnlocked.push(theme);
+      if (!suppressUnlockNotice) newlyUnlocked.push(theme);
+      localStorage.setItem(unlockKey, '1');
+    } else if (unlocked && suppressUnlockNotice) {
       localStorage.setItem(unlockKey, '1');
     }
 
@@ -2743,7 +2774,7 @@ function refreshThemeLockUI() {
     document.querySelectorAll('.theme-option').forEach(opt => {
       opt.classList.toggle('active', opt.dataset.theme === 'lootlingua');
     });
-    if (window.__themeLockSeeded) {
+    if (window.__themeLockSeeded && !suppressUnlockNotice) {
       setTimeout(() => showToast('الثيم هذا رجع للخزنة مؤقتًا. ارجع ارفع مستواك وبتفتحه من جديد.', 'warning', 5600), 600);
     }
   }
