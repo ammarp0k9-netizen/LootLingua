@@ -7,7 +7,10 @@
         var params = new URLSearchParams(l.search);
         var path = (params.get('p') || '/dictionary').replace(/~and~/g, '&');
         var query = params.get('q');
-        var target = l.pathname.replace(/\/$/, '') + path + (query ? '?' + query.replace(/~and~/g, '&') : '') + l.hash;
+        var base = l.pathname.replace(/\/$/, '');
+        if (path === '/' && query && query.indexOf('p=') === 0) query = '';
+        var target = (path === '/' && base ? base : base + path) +
+          (query ? '?' + query.replace(/~and~/g, '&') : '') + l.hash;
         window.history.replaceState(null, null, target);
         return;
       }
