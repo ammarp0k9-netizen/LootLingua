@@ -349,12 +349,17 @@ const DAILY_QUEST_DEFS = [
 ];
 
 function getDailyQuestState() {
-  const key = 'lootlinguaDailyQuests_' + todayStr();
-  return loadJSON(key, { claimed: {}, flags: {} });
+  return loadJSON(getDailyQuestStorageKey(), { claimed: {}, flags: {} });
+}
+
+function getDailyQuestStorageKey(date = todayStr()) {
+  return 'lootlinguaDailyQuests_' + date;
 }
 
 function saveDailyQuestState(state) {
-  saveJSON('lootlinguaDailyQuests_' + todayStr(), state);
+  saveJSON(getDailyQuestStorageKey(), state);
+  if (!hasSignedInUser()) markGuestDataDirty();
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
 }
 
 function isDailyQuestDone(id) {
@@ -1095,6 +1100,7 @@ window.setTheme = function(theme, skipLockCheck = false) {
   });
   refreshThemeLockUI();
   if (!skipLockCheck && theme !== previousTheme) showThemeUseMessageOnce(theme);
+  if (!skipLockCheck && window.saveProfileToCloud) window.saveProfileToCloud();
   return true;
 };
 
@@ -2153,20 +2159,74 @@ function todayStr()    { return new Date().toISOString().slice(0,10); }
 
 // بيانات الملف الشخصي للسحابة (وحدات ES تتصل بهذا بدل `let` من السكربت العادي)
 window.getLootlinguaProfilePayload = function() {
+  const dailyQuestDate = todayStr();
   return {
     userXP,
     dailyStreak,
+    maxStreak:        loadInt('lootlinguaMaxStreak', dailyStreak),
     lastActivityDate: lastActivity,
     activityMap:      loadJSON('activityMap', {}),
+    theme:            localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'lootlingua',
+    displayName:      localStorage.getItem('lootlinguaDisplayName') || '',
     addedGameWords:   loadJSON('addedGameWords', []),
     dailyLootState:   typeof getLootState === 'function' ? getLootState() : loadJSON('lootlinguaDailyLootState', {}),
     titlesState:      typeof getTitleState === 'function' ? getTitleState() : loadJSON('lootlinguaTitlesState', {}),
+    dailyQuestDate,
+    dailyQuestState:  loadJSON(getDailyQuestStorageKey(dailyQuestDate), { claimed: {}, flags: {} }),
     streakFreezes:    loadInt('lootlinguaStreakFreezes', 0),
     freezeSaves:      loadInt('lootlinguaFreezeSaves', 0),
     gameDictAdds:     loadInt('lootlinguaGameDictAdds', 0),
     perfectQuizzes:   loadInt('lootlinguaPerfectQuizzes', 0),
     extraChests:      loadJSON('lootlinguaExtraChests', []),
   };
+};
+
+function clearDailyQuestStorage() {
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith('lootlinguaDailyQuests_')) localStorage.removeItem(key);
+  });
+}
+
+window.resetLootlinguaProfileState = function(options = {}) {
+  const { clearDisplayName = true, resetTheme = true } = options;
+  userXP = 0;
+  dailyStreak = 0;
+  lastActivity = '';
+  [
+    'userXP',
+    'dailyStreak',
+    'lootlinguaMaxStreak',
+    'lastActivityDate',
+    'activityMap',
+    'addedGameWords',
+    'lootlinguaDailyLootState',
+    'lootlinguaTitlesState',
+    'lootlinguaStreakFreezes',
+    'lootlinguaFreezeSaves',
+    'lootlinguaGameDictAdds',
+    'lootlinguaPerfectQuizzes',
+    'lootlinguaExtraChests',
+  ].forEach((key) => localStorage.removeItem(key));
+  clearDailyQuestStorage();
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith('lootlingua:used:theme:') || key.startsWith('lootlingua:unlocked:theme:')) {
+      localStorage.removeItem(key);
+    }
+  });
+  if (clearDisplayName) localStorage.removeItem('lootlinguaDisplayName');
+  if (resetTheme) {
+    localStorage.setItem('theme', 'lootlingua');
+    if (typeof setTheme === 'function') setTheme('lootlingua', true);
+    else document.documentElement.setAttribute('data-theme', 'lootlingua');
+  }
+  if (typeof renderStreak === 'function') renderStreak();
+  if (typeof renderDailyGoal === 'function') renderDailyGoal();
+  if (typeof renderXPBar === 'function') renderXPBar();
+  if (typeof syncHeroAvatar === 'function') syncHeroAvatar();
+  if (typeof renderProfileModalStats === 'function') renderProfileModalStats();
+  if (typeof updateDailyQuestsBadge === 'function') updateDailyQuestsBadge();
+  if (typeof refreshFeatureUnlockUI === 'function') refreshFeatureUnlockUI();
+  if (typeof renderTreasureRoom === 'function' && currentView === 'treasure') renderTreasureRoom();
 };
 
 window.mergeLootlinguaProfileFromCloud = function(d) {
@@ -2181,6 +2241,9 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   if (d.dailyStreak !== undefined) {
     dailyStreak = Math.max(Number(d.dailyStreak) || 0, dailyStreak);
     saveInt('dailyStreak', dailyStreak);
+  }
+  if (d.maxStreak !== undefined) {
+    saveInt('lootlinguaMaxStreak', Math.max(loadInt('lootlinguaMaxStreak', 0), Number(d.maxStreak) || 0));
   }
   if (d.lastActivityDate) {
     // خُّد الأحدث بين المحلي والسحابة
@@ -2210,11 +2273,12 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
       if (!byRewardKey.has(key)) byRewardKey.set(key, r);
     });
     const mergedLoot = {
-      ...cloudLoot,
       ...localLoot,
+      ...cloudLoot,
       lastOpenAt: Math.max(Number(cloudLoot.lastOpenAt) || 0, Number(localLoot.lastOpenAt) || 0),
       totalOpens: Math.max(Number(cloudLoot.totalOpens) || 0, Number(localLoot.totalOpens) || 0),
       streak: Math.max(Number(cloudLoot.streak) || 0, Number(localLoot.streak) || 0),
+      freezesEarned: Math.max(Number(cloudLoot.freezesEarned) || 0, Number(localLoot.freezesEarned) || 0),
       lastOpenDay: [cloudLoot.lastOpenDay || '', localLoot.lastOpenDay || ''].sort().pop() || '',
       rewards: [...byRewardKey.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 12),
     };
@@ -2247,10 +2311,26 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
     });
     saveJSON('lootlinguaExtraChests', mergedExtra);
   }
+  if (d.dailyQuestDate === todayStr() && d.dailyQuestState && typeof d.dailyQuestState === 'object') {
+    const localQuest = loadJSON(getDailyQuestStorageKey(), { claimed: {}, flags: {} });
+    saveJSON(getDailyQuestStorageKey(), {
+      claimed: { ...(d.dailyQuestState.claimed || {}), ...(localQuest.claimed || {}) },
+      flags: { ...(d.dailyQuestState.flags || {}), ...(localQuest.flags || {}) },
+    });
+  }
+  if (d.displayName) localStorage.setItem('lootlinguaDisplayName', d.displayName);
+  if (d.theme) {
+    const nextTheme = isThemeComingSoon(d.theme) || !isThemeUnlocked(d.theme) ? 'lootlingua' : d.theme;
+    if (typeof setTheme === 'function') setTheme(nextTheme, true);
+  } else if (typeof refreshThemeLockUI === 'function') {
+    refreshThemeLockUI();
+  }
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(false);
   renderStreak();
   renderDailyGoal();
   renderXPBar();
+  syncHeroAvatar();
+  updateDailyQuestsBadge();
   refreshFeatureUnlockUI();
   if (typeof renderStatsNumbers === 'function' &&
       document.getElementById('statsPanel')?.style.display !== 'none') {
@@ -2304,27 +2384,9 @@ function clearGuestWordsStorage() {
 }
 
 function resetGuestProgressState() {
-  userXP = 0;
-  dailyStreak = 0;
-  lastActivity = '';
-  [
-    'userXP',
-    'dailyStreak',
-    'lastActivityDate',
-    'activityMap',
-    'addedGameWords',
-    'lootlinguaDailyLootState',
-    'lootlinguaTitlesState',
-    'lootlinguaStreakFreezes',
-    'lootlinguaFreezeSaves',
-    'lootlinguaGameDictAdds',
-    'lootlinguaPerfectQuizzes',
-    'lootlinguaExtraChests',
-  ].forEach((key) => localStorage.removeItem(key));
-  if (typeof renderStreak === 'function') renderStreak();
-  if (typeof renderDailyGoal === 'function') renderDailyGoal();
-  if (typeof renderXPBar === 'function') renderXPBar();
-  if (typeof refreshFeatureUnlockUI === 'function') refreshFeatureUnlockUI();
+  if (typeof window.resetLootlinguaProfileState === 'function') {
+    window.resetLootlinguaProfileState({ clearDisplayName: false, resetTheme: true });
+  }
 }
 
 function renderGuestMigrationModal(summary) {
@@ -2424,6 +2486,7 @@ window.confirmGuestMigration = async function() {
 
     writeWordsToStorage(window.words, 'normal', user.uid);
     clearGuestWordsStorage();
+    window.__acceptedGuestProfileMigration = { uid: user.uid, profile: summary.profile };
     markGuestMigrationHandled(user, 'accepted');
     saveAndRender();
     hideModal('guestMigrationModal');
@@ -4029,6 +4092,7 @@ function getLootState() {
 function saveLootState(state) {
   saveJSON(LOOT_STATE_KEY, state);
   if (!hasSignedInUser()) markGuestDataDirty();
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
 }
 
 function getTitleState() {
@@ -4037,6 +4101,7 @@ function getTitleState() {
 
 function saveTitleState(state) {
   saveJSON(TITLE_STATE_KEY, state);
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
 }
 
 function formatLootTime(ms) {
@@ -4079,6 +4144,7 @@ function getStreakFreezeCount() {
 function saveStreakFreezeCount(count) {
   saveInt(STREAK_FREEZE_KEY, Math.max(0, Number(count) || 0));
   if (!hasSignedInUser()) markGuestDataDirty();
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
 }
 
 function recordGameDictionaryAdd() {
@@ -5958,6 +6024,7 @@ function finishQuizRun() {
     if (!hasSignedInUser()) markGuestDataDirty();
     markDailyQuestFlag('perfectQuiz');
     if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
+    if (window.saveProfileToCloud) window.saveProfileToCloud();
   }
   showToast(currentQuizMistakes === 0 ? 'اختبار كامل بدون ولا غلطة!' : 'أبدعت! 👏', 'success', 3200);
   setTimeout(closeQuiz, 600);
