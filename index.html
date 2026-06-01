@@ -482,7 +482,7 @@
           <div class="profile-stat-chip"><span id="profileStatWords">0</span><small>كلمة محفوظة</small></div>
           <div class="profile-stat-chip"><span id="profileStatStreak">0</span><small>أكبر سلسلة</small></div>
         </div>
-        <button type="button" class="profile-link-btn" onclick="closeProfileModal(); openStatsPanel();">عرض الإحصائيات الكاملة</button>
+        <button type="button" class="profile-link-btn" onclick="closeProfileModal(true); openStatsPanel();">عرض الإحصائيات الكاملة</button>
       </section>
       <section class="profile-section">
         <h3><i class="fa-solid fa-palette"></i> الثيمات</h3>
@@ -809,12 +809,17 @@
           window.words = [];
           if (typeof render === 'function') render();
         }
+        if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
       } else if (typeof window.loadGuestDictionaryState === 'function') {
         window.loadGuestDictionaryState();
-      } else if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
-      else {
+        if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
+      } else if (typeof window.clearDictionaryState === 'function') {
+        window.clearDictionaryState();
+        if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
+      } else {
         window.words = [];
         if (typeof render === 'function') render();
+        if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
       }
     }
   });
@@ -870,6 +875,7 @@
         window.writeWordsToStorage(cloudWords, "normal", listenerUid);
       }
       saveAndRender();
+      if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
     }, (error) => {
       console.warn("loadWordsFromCloud:", error.code || error.message, error);
       if (error.code === "permission-denied" && typeof showToast === "function") {
