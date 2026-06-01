@@ -1110,32 +1110,33 @@ function loadTheme() {
 // Modal & Toast
 // ═══════════════════════════════════════════════════════
 const APP_VIEW_ROUTES = {
-  personal: 'القاموس',
-  treasure: 'الكنز',
-  worlds: 'العوالم',
-  minecraft: 'ماينكرافت',
-  pubg: 'ببجي',
-  starred: 'الكلمات-الصعبة',
-  quiz: 'الاختبار',
+  personal: 'dictionary',
+  treasure: 'treasure',
+  worlds: 'worlds',
+  minecraft: 'minecraft',
+  pubg: 'pubg',
+  starred: 'hard-words',
+  quiz: 'quiz',
 };
 const APP_MODAL_ROUTES = {
-  deleteModal: 'حذف-كلمة',
-  unlockExplainModal: 'ميزة-مقفلة',
-  logoutModal: 'تسجيل-الخروج',
-  guestMigrationModal: 'نقل-لوت-الضيف',
-  performanceModeInfoModal: 'الأداء',
-  keyboardShortcutsModal: 'اختصارات-لوحة-المفاتيح',
-  welcomeModal: 'مرحبا',
+  deleteModal: 'delete-word',
+  unlockExplainModal: 'locked-feature',
+  logoutModal: 'logout',
+  guestMigrationModal: 'guest-loot-transfer',
+  performanceModeInfoModal: 'performance',
+  keyboardShortcutsModal: 'keyboard-shortcuts',
+  welcomeModal: 'welcome',
 };
 const APP_OVERLAY_ROUTES = {
-  profile: 'الملف',
-  stats: 'الإحصائيات',
-  quests: 'مهام-اليوم',
-  notifications: 'الإشعارات',
+  profile: 'profile',
+  stats: 'stats',
+  quests: 'daily-quests',
+  notifications: 'notifications',
 };
 const APP_ROUTE_TO_VIEW = Object.fromEntries(Object.entries(APP_VIEW_ROUTES).map(([k, v]) => [v, k]));
 const APP_ROUTE_TO_MODAL = Object.fromEntries(Object.entries(APP_MODAL_ROUTES).map(([k, v]) => [v, k]));
 const APP_ROUTE_TO_OVERLAY = Object.fromEntries(Object.entries(APP_OVERLAY_ROUTES).map(([k, v]) => [v, k]));
+const APP_BASE_PATH = '/LootLingua';
 let appRouteSyncing = false;
 let appRoutingReady = false;
 
@@ -1145,11 +1146,17 @@ function getAppRoutePath(kind, key) {
     : kind === 'overlay'
       ? APP_OVERLAY_ROUTES[key]
       : APP_VIEW_ROUTES[key || 'personal'];
-  return '/' + (slug || APP_VIEW_ROUTES.personal);
+  return APP_BASE_PATH + '/' + (slug || APP_VIEW_ROUTES.personal);
 }
 
 function parseAppRoute() {
-  const slug = decodeURIComponent((location.pathname || '').replace(/^\/+|\/+$/g, ''));
+  let pathname = decodeURIComponent(location.pathname || '');
+  if (pathname === APP_BASE_PATH || pathname === APP_BASE_PATH + '/') {
+    pathname = '';
+  } else if (pathname.startsWith(APP_BASE_PATH + '/')) {
+    pathname = pathname.slice(APP_BASE_PATH.length);
+  }
+  const slug = pathname.replace(/^\/+|\/+$/g, '');
   if (!slug) return { kind: 'view', key: 'personal' };
   if (APP_ROUTE_TO_VIEW[slug]) return { kind: 'view', key: APP_ROUTE_TO_VIEW[slug] };
   if (APP_ROUTE_TO_MODAL[slug]) return { kind: 'modal', key: APP_ROUTE_TO_MODAL[slug] };
@@ -1237,7 +1244,7 @@ function applyAppRoute(route = parseAppRoute()) {
   appRouteSyncing = false;
 }
 
-function initAppRouting() {
+function handleInitialRouting() {
   if (appRoutingReady) return;
   const route = parseAppRoute();
   appRoutingReady = true;
@@ -6231,7 +6238,7 @@ window.onload = function() {
   render();
   updateDailyQuestsBadge();
   initOnboarding();
-  initAppRouting();
+  handleInitialRouting();
   // استدعيها بعد تأخير 0 عشان تعطي Firebase فرصة
   // لو المستخدم مش مسجل دخول، ستشتغل مباشرة
   setTimeout(() => {
