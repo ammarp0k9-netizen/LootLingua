@@ -812,6 +812,11 @@
       window.setLootlinguaDisplayName(user.displayName);
     }
     if (user) {
+      if (typeof window.beginInitialFeatureLoad === "function") {
+        window.beginInitialFeatureLoad(["words", "profile"]);
+      } else {
+        window.__suppressUnlockNotices = true;
+      }
       suppressNextGuestLoad = false;
       if (typeof window.prepareGuestMigrationForUser === 'function') {
         window.prepareGuestMigrationForUser(user);
@@ -900,12 +905,14 @@
         window.writeWordsToStorage(cloudWords, "normal", listenerUid);
       }
       saveAndRender();
-      if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
+      if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("words");
+      else if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
     }, (error) => {
       console.warn("loadWordsFromCloud:", error.code || error.message, error);
       if (error.code === "permission-denied" && typeof showToast === "function") {
         showToast("قواعد Firebase لا تسمح بقراءة كلماتك حالياً. راجع Firestore Rules.");
       }
+      if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("words");
     });
   }
 
@@ -1101,6 +1108,7 @@ window._saveProfileToCloudNow = function() {
 
 // ── loadProfileFromCloud ────────────────────────────
 window.loadProfileFromCloud = async function(user) {
+  window.__applyingCloudProfile = true;
   try {
     for (let w = 0; w < 30 && typeof window.getLootlinguaProfilePayload !== "function"; w++)
       await new Promise((r) => setTimeout(r, 40));
@@ -1131,6 +1139,10 @@ window.loadProfileFromCloud = async function(user) {
     if (window._saveProfileToCloudNow)
       await window._saveProfileToCloudNow();
   } catch (e) { console.warn("loadProfile:", e.message); }
+  finally {
+    window.__applyingCloudProfile = false;
+    if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("profile");
+  }
 };
 
 // ── شوف إذا المستخدم مسجل دخول وحمّل الـ profile ──
