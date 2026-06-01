@@ -863,11 +863,17 @@
     }
   };
 
-  window.confirmLogout = function() {
+  window.confirmLogout = async function() {
     suppressNextGuestLoad = true;
+    if (typeof window._saveProfileToCloudNow === 'function') {
+      try { await window._saveProfileToCloudNow(); } catch (e) { console.warn('save-before-logout:', e); }
+    }
     if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
     signOut(auth).then(() => {
       if (typeof window.clearDictionaryState === 'function') window.clearDictionaryState();
+      if (typeof window.resetLootlinguaProfileState === 'function') {
+        window.resetLootlinguaProfileState({ clearDisplayName: true, resetTheme: true });
+      }
       hideModal('logoutModal');
     });
   };
@@ -1098,14 +1104,30 @@ window.loadProfileFromCloud = async function(user) {
   try {
     for (let w = 0; w < 30 && typeof window.getLootlinguaProfilePayload !== "function"; w++)
       await new Promise((r) => setTimeout(r, 40));
+    if (typeof window.resetLootlinguaProfileState === "function") {
+      window.resetLootlinguaProfileState({ clearDisplayName: true, resetTheme: true });
+    }
+    if (user.displayName && typeof window.setLootlinguaDisplayName === "function") {
+      window.setLootlinguaDisplayName(user.displayName);
+    }
     const snap = await getDoc(doc(profileDb, "users", user.uid, "meta", "profile"));
     if (!snap.exists()) {
+      const accepted = window.__acceptedGuestProfileMigration;
+      if (accepted?.uid === user.uid && accepted.profile && typeof window.mergeLootlinguaProfileFromCloud === "function") {
+        window.mergeLootlinguaProfileFromCloud(accepted.profile);
+        window.__acceptedGuestProfileMigration = null;
+      }
       if (window._saveProfileToCloudNow) await window._saveProfileToCloudNow();
       return;
     }
     const d = snap.data();
     if (typeof window.mergeLootlinguaProfileFromCloud === "function")
       window.mergeLootlinguaProfileFromCloud(d);
+    const accepted = window.__acceptedGuestProfileMigration;
+    if (accepted?.uid === user.uid && accepted.profile && typeof window.mergeLootlinguaProfileFromCloud === "function") {
+      window.mergeLootlinguaProfileFromCloud(accepted.profile);
+      window.__acceptedGuestProfileMigration = null;
+    }
     if (window._saveProfileToCloudNow)
       await window._saveProfileToCloudNow();
   } catch (e) { console.warn("loadProfile:", e.message); }
