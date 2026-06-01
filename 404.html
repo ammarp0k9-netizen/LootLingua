@@ -4,8 +4,10 @@
     <meta charset="utf-8">
     <title>LootLingua</title>
     <script type="text/javascript">
-      var segmentCount = 1; // لأن الرابط على جيت هاب يحتوي على /LootLingua/
       var l = window.location;
+      var isGithubProjectPage = l.hostname.endsWith('github.io') &&
+        l.pathname.split('/')[1] === 'LootLingua';
+      var segmentCount = isGithubProjectPage ? 1 : 0;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
         l.pathname.split('/').slice(0, 1 + segmentCount).join('/') + '/?p=/' +
