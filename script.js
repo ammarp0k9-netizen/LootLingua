@@ -197,6 +197,10 @@ function toggleNotificationsPanel(ev) {
   const hub = document.getElementById('notifHub');
   if (!panel) return;
   const opening = !panel.classList.contains('open');
+  if (!opening) {
+    closeNotificationsPanel();
+    return;
+  }
   if (opening) closeDailyQuestsSheet(true);
   panel.classList.toggle('open', opening);
   panel.style.display = opening ? 'block' : 'none';
@@ -207,6 +211,7 @@ function toggleNotificationsPanel(ev) {
     updateNotificationsBadge();
     renderNotificationsPanel();
     requestAnimationFrame(positionNotifPopover);
+    setAppRoute('overlay', 'notifications');
   }
 }
 
@@ -214,21 +219,25 @@ window.addEventListener('resize', () => {
   if (document.getElementById('notificationsPanel')?.classList.contains('open')) positionNotifPopover();
 });
 
-function closeNotificationsPanel() {
-  const panel = document.getElementById('notificationsPanel');
-  const btn = document.getElementById('notifBtn');
-  const hub = document.getElementById('notifHub');
-  if (!panel) return;
-  panel.classList.remove('open');
-  panel.style.display = 'none';
-  panel.style.position = '';
-  panel.style.top = '';
-  panel.style.right = '';
-  panel.style.left = '';
-  panel.style.width = '';
-  panel.style.transform = '';
-  btn?.setAttribute('aria-expanded', 'false');
-  hub?.classList.remove('notif-open');
+function closeNotificationsPanel(silent) {
+  const close = () => {
+    const panel = document.getElementById('notificationsPanel');
+    const btn = document.getElementById('notifBtn');
+    const hub = document.getElementById('notifHub');
+    if (!panel) return;
+    panel.classList.remove('open');
+    panel.style.display = 'none';
+    panel.style.position = '';
+    panel.style.top = '';
+    panel.style.right = '';
+    panel.style.left = '';
+    panel.style.width = '';
+    panel.style.transform = '';
+    btn?.setAttribute('aria-expanded', 'false');
+    hub?.classList.remove('notif-open');
+  };
+  if (silent) close();
+  else closeRouteEntry('overlay', 'notifications', close);
 }
 
 document.addEventListener('click', (e) => {
@@ -245,24 +254,31 @@ window.toggleProfileModal = function() {
   const modal = document.getElementById('profileModal');
   if (!modal) return;
   const open = !modal.classList.contains('open');
+  if (!open) {
+    closeProfileModal();
+    return;
+  }
   modal.classList.toggle('open', open);
   modal.setAttribute('aria-hidden', open ? 'false' : 'true');
   document.body.classList.toggle('profile-modal-open', open);
-  if (open) {
-    syncHeroAvatar();
-    renderProfileModalStats();
-    renderXPBar();
-    refreshFeatureUnlockUI();
-    closeSidebarIfOpen();
-  }
+  syncHeroAvatar();
+  renderProfileModalStats();
+  renderXPBar();
+  refreshFeatureUnlockUI();
+  closeSidebarIfOpen();
+  setAppRoute('overlay', 'profile');
 };
 
-window.closeProfileModal = function() {
-  const modal = document.getElementById('profileModal');
-  if (!modal) return;
-  modal.classList.remove('open');
-  modal.setAttribute('aria-hidden', 'true');
-  document.body.classList.remove('profile-modal-open');
+window.closeProfileModal = function(silent) {
+  const close = () => {
+    const modal = document.getElementById('profileModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('profile-modal-open');
+  };
+  if (silent) close();
+  else closeRouteEntry('overlay', 'profile', close);
 };
 
 function syncHeroAvatar() {
@@ -381,25 +397,34 @@ window.toggleDailyQuestsSheet = function() {
   const btn = document.getElementById('dailyQuestsBtn');
   if (!sheet) return;
   const opening = !sheet.classList.contains('open');
-  if (opening) closeNotificationsPanel();
+  if (!opening) {
+    closeDailyQuestsSheet();
+    return;
+  }
+  if (opening) closeNotificationsPanel(true);
   sheet.classList.toggle('open', opening);
   backdrop?.classList.toggle('open', opening);
   sheet.setAttribute('aria-hidden', opening ? 'false' : 'true');
   btn?.setAttribute('aria-expanded', opening ? 'true' : 'false');
   document.body.classList.toggle('daily-quests-open', opening);
   if (opening) renderDailyQuests();
+  setAppRoute('overlay', 'quests');
 };
 
 window.closeDailyQuestsSheet = function(silent) {
-  const sheet = document.getElementById('dailyQuestsSheet');
-  const backdrop = document.getElementById('dailyQuestsBackdrop');
-  const btn = document.getElementById('dailyQuestsBtn');
-  if (!sheet) return;
-  sheet.classList.remove('open');
-  backdrop?.classList.remove('open');
-  sheet.setAttribute('aria-hidden', 'true');
-  btn?.setAttribute('aria-expanded', 'false');
-  document.body.classList.remove('daily-quests-open');
+  const close = () => {
+    const sheet = document.getElementById('dailyQuestsSheet');
+    const backdrop = document.getElementById('dailyQuestsBackdrop');
+    const btn = document.getElementById('dailyQuestsBtn');
+    if (!sheet) return;
+    sheet.classList.remove('open');
+    backdrop?.classList.remove('open');
+    sheet.setAttribute('aria-hidden', 'true');
+    btn?.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('daily-quests-open');
+  };
+  if (silent) close();
+  else closeRouteEntry('overlay', 'quests', close);
 };
 
 function updateDailyQuestsBadge() {
@@ -627,6 +652,16 @@ let wordVirtualState = {
   programmaticScroll: false
 };
 let currentQuizMistakes = 0;
+let isInitialLoad = true;
+window.isInitialLoad = true;
+window.beginInitialFeatureLoad = function() {
+  isInitialLoad = true;
+  window.isInitialLoad = true;
+};
+window.finishInitialFeatureLoad = function() {
+  isInitialLoad = false;
+  window.isInitialLoad = false;
+};
 
 // ── MOBILE LONG-PRESS TOOLTIP (تفويض — يعمل مع الكروت المُعاد رسمها) ──
 (function initTouchTooltips() {
@@ -942,7 +977,8 @@ function syncNavLockUi() {
 
   const prev = window.__navLockPrev;
   const pulseIds = [];
-  if (window.__navLockAnimSeeded && prev) {
+  const suppressUnlockNotice = isInitialLoad === true;
+  if (!suppressUnlockNotice && window.__navLockAnimSeeded && prev) {
     for (const id of Object.keys(currentLocks)) {
       if (prev[id] === true && currentLocks[id] === false) pulseIds.push(id);
     }
@@ -1073,8 +1109,179 @@ function loadTheme() {
 // ═══════════════════════════════════════════════════════
 // Modal & Toast
 // ═══════════════════════════════════════════════════════
-function showModal(id) { document.getElementById(id).style.display = 'flex'; }
-function hideModal(id) { document.getElementById(id).style.display = 'none'; }
+const APP_VIEW_ROUTES = {
+  personal: 'القاموس',
+  treasure: 'الكنز',
+  worlds: 'العوالم',
+  minecraft: 'ماينكرافت',
+  pubg: 'ببجي',
+  starred: 'الكلمات-الصعبة',
+  quiz: 'الاختبار',
+};
+const APP_MODAL_ROUTES = {
+  deleteModal: 'حذف-كلمة',
+  unlockExplainModal: 'ميزة-مقفلة',
+  logoutModal: 'تسجيل-الخروج',
+  guestMigrationModal: 'نقل-لوت-الضيف',
+  performanceModeInfoModal: 'الأداء',
+  keyboardShortcutsModal: 'اختصارات-لوحة-المفاتيح',
+  welcomeModal: 'مرحبا',
+};
+const APP_OVERLAY_ROUTES = {
+  profile: 'الملف',
+  stats: 'الإحصائيات',
+  quests: 'مهام-اليوم',
+  notifications: 'الإشعارات',
+};
+const APP_ROUTE_TO_VIEW = Object.fromEntries(Object.entries(APP_VIEW_ROUTES).map(([k, v]) => [v, k]));
+const APP_ROUTE_TO_MODAL = Object.fromEntries(Object.entries(APP_MODAL_ROUTES).map(([k, v]) => [v, k]));
+const APP_ROUTE_TO_OVERLAY = Object.fromEntries(Object.entries(APP_OVERLAY_ROUTES).map(([k, v]) => [v, k]));
+let appRouteSyncing = false;
+let appRoutingReady = false;
+
+function getAppRoutePath(kind, key) {
+  const slug = kind === 'modal'
+    ? APP_MODAL_ROUTES[key]
+    : kind === 'overlay'
+      ? APP_OVERLAY_ROUTES[key]
+      : APP_VIEW_ROUTES[key || 'personal'];
+  return '/' + (slug || APP_VIEW_ROUTES.personal);
+}
+
+function parseAppRoute() {
+  const slug = decodeURIComponent((location.pathname || '').replace(/^\/+|\/+$/g, ''));
+  if (!slug) return { kind: 'view', key: 'personal' };
+  if (APP_ROUTE_TO_VIEW[slug]) return { kind: 'view', key: APP_ROUTE_TO_VIEW[slug] };
+  if (APP_ROUTE_TO_MODAL[slug]) return { kind: 'modal', key: APP_ROUTE_TO_MODAL[slug] };
+  if (APP_ROUTE_TO_OVERLAY[slug]) return { kind: 'overlay', key: APP_ROUTE_TO_OVERLAY[slug] };
+  return { kind: 'view', key: 'personal' };
+}
+
+function setAppRoute(kind, key, options = {}) {
+  if (!appRoutingReady || appRouteSyncing) return;
+  const path = getAppRoutePath(kind, key);
+  const state = { lootlingua: true, kind, key, source: options.source || (options.replace ? 'replace' : 'push') };
+  try {
+    if (location.pathname === path) {
+      history.replaceState({ ...state, source: history.state?.source || state.source }, '', path);
+      return;
+    }
+    history[options.replace ? 'replaceState' : 'pushState'](state, '', path);
+  } catch (err) {
+    console.warn('route:', err.message);
+  }
+}
+
+function setAppViewRoute(viewKey, options = {}) {
+  setAppRoute('view', viewKey, options);
+}
+
+function closeRouteOverlays() {
+  document.querySelectorAll('.custom-modal').forEach(modal => {
+    modal.style.display = 'none';
+  });
+  const profile = document.getElementById('profileModal');
+  if (profile) {
+    profile.classList.remove('open');
+    profile.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('profile-modal-open');
+  }
+  const stats = document.getElementById('statsPanel');
+  if (stats) {
+    stats.classList.remove('show');
+    stats.style.display = 'none';
+  }
+  if (typeof closeDailyQuestsSheet === 'function') closeDailyQuestsSheet(true);
+  if (typeof closeNotificationsPanel === 'function') closeNotificationsPanel(true);
+}
+
+function openRouteOverlay(kind, key) {
+  if (kind === 'modal') {
+    const modal = document.getElementById(key);
+    if (modal) modal.style.display = 'flex';
+    return;
+  }
+  if (key === 'profile') {
+    const modal = document.getElementById('profileModal');
+    if (modal && !modal.classList.contains('open')) toggleProfileModal();
+  } else if (key === 'stats') {
+    openStatsPanel();
+  } else if (key === 'quests') {
+    const sheet = document.getElementById('dailyQuestsSheet');
+    if (sheet && !sheet.classList.contains('open')) toggleDailyQuestsSheet();
+  } else if (key === 'notifications') {
+    const panel = document.getElementById('notificationsPanel');
+    if (panel && !panel.classList.contains('open')) toggleNotificationsPanel();
+  }
+}
+
+function openRouteView(viewKey) {
+  if (viewKey === 'treasure') loadTreasureView();
+  else if (viewKey === 'worlds') loadWorldsView();
+  else if (viewKey === 'minecraft') loadGameDictionary('minecraft');
+  else if (viewKey === 'pubg') loadGameDictionary('pubg');
+  else if (viewKey === 'starred') loadStarredView();
+  else if (viewKey === 'quiz') loadQuizView();
+  else loadPersonalDictionary();
+}
+
+function applyAppRoute(route = parseAppRoute()) {
+  appRouteSyncing = true;
+  closeRouteOverlays();
+  if (route.kind === 'view') {
+    openRouteView(route.key);
+  } else {
+    openRouteView(currentView || 'personal');
+    openRouteOverlay(route.kind, route.key);
+  }
+  appRouteSyncing = false;
+}
+
+function initAppRouting() {
+  if (appRoutingReady) return;
+  const route = parseAppRoute();
+  appRoutingReady = true;
+  try {
+    history.replaceState({ lootlingua: true, ...route, source: 'initial' }, '', getAppRoutePath(route.kind, route.key));
+  } catch (err) {
+    console.warn('route:', err.message);
+  }
+  applyAppRoute(route);
+}
+
+window.addEventListener('popstate', () => {
+  if (!appRoutingReady) return;
+  applyAppRoute(parseAppRoute());
+});
+
+function closeRouteEntry(kind, key, fallbackClose) {
+  if (!appRouteSyncing && history.state?.lootlingua && history.state.kind === kind && history.state.key === key) {
+    if (history.state.source === 'push') {
+      history.back();
+      return;
+    }
+    fallbackClose();
+    setAppViewRoute(currentView || 'personal', { replace: true, source: 'close' });
+    return;
+  }
+  fallbackClose();
+}
+
+function showModal(id) {
+  const modal = document.getElementById(id);
+  if (!modal) return;
+  modal.style.display = 'flex';
+  if (APP_MODAL_ROUTES[id]) setAppRoute('modal', id);
+}
+
+function hideModal(id) {
+  const close = () => {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+  };
+  if (APP_MODAL_ROUTES[id]) closeRouteEntry('modal', id, close);
+  else close();
+}
 
 function showToast(msg, type = 'info', duration = 2500) {
   const t = document.getElementById('toastMessage');
@@ -2700,10 +2907,13 @@ function openStatsPanel() {
   const p=document.getElementById('statsPanel'); if(!p)return;
   p.style.display='flex'; setTimeout(()=>p.classList.add('show'),10);
   renderHeatmap(); renderStatsNumbers();
+  setAppRoute('overlay', 'stats');
 }
 function closeStatsPanel() {
-  const p=document.getElementById('statsPanel'); if(!p)return;
-  p.classList.remove('show'); setTimeout(()=>p.style.display='none',300);
+  closeRouteEntry('overlay', 'stats', () => {
+    const p=document.getElementById('statsPanel'); if(!p)return;
+    p.classList.remove('show'); setTimeout(()=>p.style.display='none',300);
+  });
 }
 function renderHeatmap() {
   const container=document.getElementById('heatmapGrid'); if(!container)return;
@@ -4600,6 +4810,7 @@ window.loadGameDictionary = function(gameKey) {
   renderGameWords(currentGameWords);
   restoreViewScroll(gameKey);
   refreshFeatureUnlockUI();
+  setAppViewRoute(gameKey);
 };
 
 function renderGameWords(words) {
@@ -4743,6 +4954,7 @@ window.loadWorldsView = function() {
     '<i class="fa-solid fa-earth-americas" aria-hidden="true"></i> عوالم الأساطير';
   restoreViewScroll('worlds');
   refreshFeatureUnlockUI();
+  setAppViewRoute('worlds');
 };
 
 // ── Treasure Full-Page View ──
@@ -4772,6 +4984,7 @@ window.loadTreasureView = function() {
   document.querySelector('.page-header h1').innerHTML = '<i class="fa-solid fa-gem" aria-hidden="true"></i> صفحة الكنز';
   window.scrollTo({ top: 0, behavior: 'smooth' });
   refreshFeatureUnlockUI();
+  setAppViewRoute('treasure');
 };
 
 // ── Starred Words View ──
@@ -4807,6 +5020,7 @@ window.loadStarredView = function() {
   renderStarredWords();
   restoreViewScroll('starred');
   refreshFeatureUnlockUI();
+  setAppViewRoute('starred');
 };
 
 function renderStarredWords() {
@@ -4906,6 +5120,7 @@ window.loadQuizView = function() {
 
   restoreViewScroll('quiz');
   refreshFeatureUnlockUI();
+  setAppViewRoute('quiz');
 };
 
 window.loadPersonalDictionary = function() {
@@ -4952,6 +5167,7 @@ window.loadPersonalDictionary = function() {
   updateDailyQuestsBadge();
   restoreViewScroll('personal');
   refreshFeatureUnlockUI();
+  setAppViewRoute('personal');
 };
 
 window.addFromGame = async function(text, meaning, example, btnEl) {
@@ -6015,6 +6231,7 @@ window.onload = function() {
   render();
   updateDailyQuestsBadge();
   initOnboarding();
+  initAppRouting();
   // استدعيها بعد تأخير 0 عشان تعطي Firebase فرصة
   // لو المستخدم مش مسجل دخول، ستشتغل مباشرة
   setTimeout(() => {
