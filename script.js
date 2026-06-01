@@ -1136,9 +1136,16 @@ const APP_OVERLAY_ROUTES = {
 const APP_ROUTE_TO_VIEW = Object.fromEntries(Object.entries(APP_VIEW_ROUTES).map(([k, v]) => [v, k]));
 const APP_ROUTE_TO_MODAL = Object.fromEntries(Object.entries(APP_MODAL_ROUTES).map(([k, v]) => [v, k]));
 const APP_ROUTE_TO_OVERLAY = Object.fromEntries(Object.entries(APP_OVERLAY_ROUTES).map(([k, v]) => [v, k]));
-const APP_BASE_PATH = '/LootLingua';
+const APP_PROJECT_BASE_PATH = '/LootLingua';
 let appRouteSyncing = false;
 let appRoutingReady = false;
+
+function getAppBasePath() {
+  const pathname = location.pathname || '/';
+  const isGithubPages = location.hostname.endsWith('github.io');
+  const isProjectPath = pathname === APP_PROJECT_BASE_PATH || pathname.startsWith(APP_PROJECT_BASE_PATH + '/');
+  return isGithubPages || isProjectPath ? APP_PROJECT_BASE_PATH : '';
+}
 
 function getAppRoutePath(kind, key) {
   const slug = kind === 'modal'
@@ -1146,15 +1153,16 @@ function getAppRoutePath(kind, key) {
     : kind === 'overlay'
       ? APP_OVERLAY_ROUTES[key]
       : APP_VIEW_ROUTES[key || 'personal'];
-  return APP_BASE_PATH + '/' + (slug || APP_VIEW_ROUTES.personal);
+  return getAppBasePath() + '/' + (slug || APP_VIEW_ROUTES.personal);
 }
 
 function parseAppRoute() {
+  const basePath = getAppBasePath();
   let pathname = decodeURIComponent(location.pathname || '');
-  if (pathname === APP_BASE_PATH || pathname === APP_BASE_PATH + '/') {
+  if (basePath && (pathname === basePath || pathname === basePath + '/')) {
     pathname = '';
-  } else if (pathname.startsWith(APP_BASE_PATH + '/')) {
-    pathname = pathname.slice(APP_BASE_PATH.length);
+  } else if (basePath && pathname.startsWith(basePath + '/')) {
+    pathname = pathname.slice(basePath.length);
   }
   const slug = pathname.replace(/^\/+|\/+$/g, '');
   if (!slug) return { kind: 'view', key: 'personal' };
@@ -1249,7 +1257,13 @@ function handleInitialRouting() {
   const route = parseAppRoute();
   appRoutingReady = true;
   try {
-    history.replaceState({ lootlingua: true, ...route, source: 'initial' }, '', getAppRoutePath(route.kind, route.key));
+    const path = getAppRoutePath(route.kind, route.key);
+    const state = { lootlingua: true, ...route, source: 'initial' };
+    if (location.pathname === path) {
+      history.replaceState(state, '', location.href);
+    } else {
+      history.replaceState(state, '', path);
+    }
   } catch (err) {
     console.warn('route:', err.message);
   }
