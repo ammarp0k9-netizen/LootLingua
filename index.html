@@ -22,8 +22,28 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-C06S6C7JYT"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-C06S6C7JYT');
+  </script>
+
+  <title>LootLingua | قاموس إنجليزي عربي للألعاب</title>
+  <meta name="description" content="LootLingua قاموس إنجليزي عربي مع قواميس Minecraft وPUBG، كويزات، XP، مستويات، وصندوق كنز يومي لتعلم الكلمات.">
+  <meta name="keywords" content="LootLingua, قاموس إنجليزي عربي, قاموس ألعاب, Minecraft dictionary, PUBG terms, تعلم الإنجليزية, كلمات إنجليزية, كويزات, XP, مستويات, صندوق كنز">
+  <meta name="author" content="LootLingua">
+  <meta name="robots" content="index, follow">
+  <meta property="og:title" content="LootLingua | قاموس إنجليزي عربي للألعاب">
+  <meta property="og:description" content="قاموس إنجليزي عربي مع قواميس Minecraft وPUBG، كويزات، XP، مستويات، وصندوق كنز يومي.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lootlingua.vercel.app/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="LootLingua | قاموس إنجليزي عربي للألعاب">
+  <meta name="twitter:description" content="تعلم الكلمات الإنجليزية عبر قاموس ألعاب، كويزات، XP، مستويات، وصندوق كنز يومي.">
   <!-- Dictionary API on Render: POST /api/dictionary (عادي) + POST /api/gamer-dictionary (جيمر→جيمر). Backend: dictionary-server/index.js -->
-  <title>LootLingua | قاموس الأساطير</title>
   <link rel="icon" type="image/png" href="ammar1.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="style.css">
@@ -442,6 +462,10 @@
     </div>
     <input type="file" id="importFile" style="display:none;" onchange="importData(event)">
   </div>
+
+  <footer class="site-footer" aria-label="روابط الموقع">
+    <a href="privacy.html">سياسة الخصوصية</a>
+  </footer>
 </main>
 
 <!-- ── Legend Dock (4 تبويبات) ── -->
