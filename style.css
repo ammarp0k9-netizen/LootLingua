@@ -1771,6 +1771,27 @@ ul { list-style: none; padding: 0; margin: 0; }
 }
 .btn-backup:hover { background: var(--card-bg); color: var(--text-white); }
 
+.site-footer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 18px 0 8px;
+  color: var(--text-gray);
+  font-size: 13px;
+}
+
+.site-footer a {
+  color: var(--text-gray);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.site-footer a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* Overlay */
 .overlay {
   position: fixed; top: 0; left: 0;
