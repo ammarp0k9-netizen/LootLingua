@@ -155,31 +155,39 @@
   <!-- بطاقة الإضافة (تُخفى عند قواميس الألعاب) -->
   <div class="card-box" id="personalControls">
     <div id="normalSearchZone" class="search-zone" data-search-type="normal">
-      <div class="search-zone-inner" style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
-        <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai btn-icon-tip" data-tip="بحث ذكي"><i class="fas fa-search"></i></button>
+      <div class="search-zone-inner dictionary-search-row">
+        <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai dictionary-search-btn" data-tip="بحث ذكي">ابحث عن معنى</button>
         <input type="text" id="wordInput" placeholder="الكلمة بالإنجليزي (مثال: Sword)" dir="ltr">
       </div>
       <button type="button" class="search-lock-overlay" aria-label="البحث مقفل — سجّل دخولك" tabindex="-1">
         <i class="fa-solid fa-lock" aria-hidden="true"></i>
       </button>
     </div>
+    <button type="button" id="addFormToggle" class="add-form-toggle" onclick="toggleAddFormExpanded()" aria-expanded="false" aria-controls="addFormAdvancedFields">
+      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+      <span class="sr-only">إظهار الحقول الإضافية</span>
+    </button>
     <div id="onboardingExampleChips" class="onboarding-examples" style="display:none;"></div>
     <div id="suggestionsBox">
       <p style="font-size:13px; color:var(--accent); font-weight:bold; margin:0; padding:10px 14px 4px;">اختر المعنى الأنسب:</p>
       <div id="suggestionsList"></div>
     </div>
-    <input type="text" id="meaningInput" placeholder="المعنى بالعربي" style="margin-bottom:10px;">
-    <textarea id="exampleInput" placeholder="جملة مثال (اختياري)" rows="2" style="margin-bottom:10px;"></textarea>
-    <select id="categoryInput" style="margin-bottom:14px;">
-      <option value="عام">عام</option>
-      <option value="فعل">فعل</option>
-      <option value="اسم">اسم</option>
-      <option value="صفة">صفة</option>
-      <option value="أداة">أداة</option>
-      <option value="ظرف">ظرف</option>
-      <option value="جمل">جمل شائعة</option>
-    </select>
-    <button class="btn-main" id="addBtn" onclick="addWord()">إضافة للقاموس</button>
+    <div id="addFormAdvancedFields" class="add-form-advanced" aria-hidden="true">
+      <div class="add-form-advanced-inner">
+        <input type="text" id="meaningInput" placeholder="المعنى بالعربي">
+        <textarea id="exampleInput" placeholder="جملة مثال (اختياري)" rows="2"></textarea>
+        <select id="categoryInput">
+          <option value="عام">عام</option>
+          <option value="فعل">فعل</option>
+          <option value="اسم">اسم</option>
+          <option value="صفة">صفة</option>
+          <option value="أداة">أداة</option>
+          <option value="ظرف">ظرف</option>
+          <option value="جمل">جمل شائعة</option>
+        </select>
+        <button class="btn-main" id="addBtn" onclick="addWord()">إضافة للقاموس</button>
+      </div>
+    </div>
   </div>
 
   <!-- ── مربع بحث قواميس الألعاب (مخفي افتراضياً) ── -->
