@@ -51,6 +51,99 @@ function syncPerformanceModeToggle() {
   }
 }
 
+function getPerformanceSliderPercent(slider, clientX) {
+  const rect = slider.getBoundingClientRect();
+  if (!rect.width) return 0;
+  return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+}
+
+function setPerformanceSliderHover(slider, clientX) {
+  const pct = getPerformanceSliderPercent(slider, clientX) * 100;
+  slider.style.setProperty('--perf-hover', `${pct}%`);
+}
+
+function previewPerformanceLevelFromPointer(slider, clientX) {
+  const pct = getPerformanceSliderPercent(slider, clientX);
+  const max = Number(slider.max) || PERFORMANCE_LEVELS.length - 1;
+  const min = Number(slider.min) || 0;
+  const value = min + pct * (max - min);
+  slider.value = String(value);
+  slider.style.setProperty('--perf-progress', `${pct * 100}%`);
+}
+
+function snapPerformanceLevelFromPointer(slider, clientX) {
+  const pct = getPerformanceSliderPercent(slider, clientX);
+  const max = Number(slider.max) || PERFORMANCE_LEVELS.length - 1;
+  const min = Number(slider.min) || 0;
+  const value = Math.round(min + pct * (max - min));
+  setPerformanceLevel(value);
+}
+
+function initPerformanceSliderInteraction() {
+  const slider = document.getElementById('performanceLevelSlider');
+  if (!slider || slider.dataset.pointerReady === '1') return;
+  slider.dataset.pointerReady = '1';
+
+  let dragging = false;
+
+  slider.addEventListener('pointerenter', (e) => {
+    slider.classList.add('is-hovering');
+    setPerformanceSliderHover(slider, e.clientX);
+  });
+
+  slider.addEventListener('pointermove', (e) => {
+    setPerformanceSliderHover(slider, e.clientX);
+    if (dragging) {
+      e.preventDefault();
+      previewPerformanceLevelFromPointer(slider, e.clientX);
+    }
+  });
+
+  slider.addEventListener('pointerleave', () => {
+    if (!dragging) slider.classList.remove('is-hovering');
+  });
+
+  slider.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    dragging = true;
+    slider.classList.add('is-hovering', 'is-dragging');
+    slider.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    setPerformanceSliderHover(slider, e.clientX);
+    previewPerformanceLevelFromPointer(slider, e.clientX);
+  });
+
+  slider.addEventListener('pointerup', (e) => {
+    dragging = false;
+    slider.classList.remove('is-dragging');
+    slider.releasePointerCapture?.(e.pointerId);
+    snapPerformanceLevelFromPointer(slider, e.clientX);
+  });
+
+  slider.addEventListener('pointercancel', (e) => {
+    dragging = false;
+    slider.classList.remove('is-dragging', 'is-hovering');
+    slider.releasePointerCapture?.(e.pointerId);
+    syncPerformanceModeToggle();
+  });
+
+  slider.addEventListener('input', () => {
+    const max = Number(slider.max) || PERFORMANCE_LEVELS.length - 1;
+    const min = Number(slider.min) || 0;
+    const raw = Math.min(max, Math.max(min, Number(slider.value) || 0));
+    slider.style.setProperty('--perf-progress', `${((raw - min) / (max - min)) * 100}%`);
+  });
+
+  slider.addEventListener('change', () => {
+    setPerformanceLevel(slider.value);
+  });
+}
+
+function initPerformanceControls() {
+  applyPerformanceMode();
+  initPerformanceSliderInteraction();
+}
+
 function applyPerformanceMode() {
   const hadPreference = localStorage.getItem(PERFORMANCE_MODE_KEY) !== null;
   const level = getPerformanceModePreference();
@@ -69,7 +162,7 @@ function applyPerformanceMode() {
 }
 
 window.setPerformanceLevel = function(value) {
-  const index = Math.min(PERFORMANCE_LEVELS.length - 1, Math.max(0, Number(value) || 0));
+  const index = Math.round(Math.min(PERFORMANCE_LEVELS.length - 1, Math.max(0, Number(value) || 0)));
   localStorage.setItem(PERFORMANCE_MODE_KEY, PERFORMANCE_LEVELS[index]);
   applyPerformanceMode();
 };
@@ -90,9 +183,9 @@ window.showPerformanceModeHelp = function(event) {
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', applyPerformanceMode);
+  document.addEventListener('DOMContentLoaded', initPerformanceControls);
 } else {
-  applyPerformanceMode();
+  initPerformanceControls();
 }
 
 // إشعارات عصرية
@@ -538,6 +631,22 @@ const WORDS_NORMAL_PREFIX = 'words_normal_';
 const WORDS_GAMER_PREFIX = 'words_gamer_';
 const GUEST_MIGRATION_HANDLED_KEY = 'lootlinguaGuestMigrationHandled';
 const GUEST_DATA_DIRTY_KEY = 'lootlinguaGuestDataDirty';
+const GUEST_PROFILE_DIRTY_KEYS = new Set([
+  'userXP',
+  'dailyStreak',
+  'lootlinguaMaxStreak',
+  'lastActivityDate',
+  'activityMap',
+  'addedGameWords',
+  'lootlinguaDailyLootState',
+  'lootlinguaTitlesState',
+  'lootlinguaStreakFreezes',
+  'lootlinguaFreezeSaves',
+  'lootlinguaGameDictAdds',
+  'lootlinguaPerfectQuizzes',
+  'lootlinguaExtraChests',
+]);
+const GUEST_PROFILE_DIRTY_PREFIXES = ['lootlinguaDailyQuests_'];
 
 function hasSignedInUser() {
   return Boolean(window.auth?.currentUser);
@@ -547,6 +656,13 @@ function markGuestDataDirty() {
   if (hasSignedInUser()) return;
   localStorage.setItem(GUEST_DATA_DIRTY_KEY, '1');
   localStorage.removeItem(GUEST_MIGRATION_HANDLED_KEY);
+}
+
+function markGuestProfileDataDirty(key) {
+  if (window.__applyingCloudProfile || hasSignedInUser()) return;
+  if (GUEST_PROFILE_DIRTY_KEYS.has(key) || GUEST_PROFILE_DIRTY_PREFIXES.some(prefix => key.startsWith(prefix))) {
+    markGuestDataDirty();
+  }
 }
 
 function markGuestMigrationHandled(user, status) {
@@ -2174,9 +2290,15 @@ function showFinishTooltip(text) {
 // PERSISTENCE HELPERS
 // ═══════════════════════════════════════════════════════
 function loadInt(k,d)  { const v=parseInt(localStorage.getItem(k)); return isNaN(v)?d:v; }
-function saveInt(k,v)  { localStorage.setItem(k,String(v)); }
+function saveInt(k,v)  {
+  localStorage.setItem(k,String(v));
+  markGuestProfileDataDirty(k);
+}
 function loadJSON(k,d) { try{const r=JSON.parse(localStorage.getItem(k));return r??d;}catch{return d;} }
-function saveJSON(k,v) { localStorage.setItem(k,JSON.stringify(v)); }
+function saveJSON(k,v) {
+  localStorage.setItem(k,JSON.stringify(v));
+  markGuestProfileDataDirty(k);
+}
 function todayStr()    { return new Date().toISOString().slice(0,10); }
 
 // بيانات الملف الشخصي للسحابة (وحدات ES تتصل بهذا بدل `let` من السكربت العادي)
@@ -2460,6 +2582,9 @@ window.prepareGuestMigrationForUser = function(user) {
   window.__guestMigrationSummary = { words, profile, user };
 
   if (!shouldPrompt) {
+    if (hasGuestProgress(profile)) {
+      window.__acceptedGuestProfileMigration = { uid: user.uid, profile };
+    }
     if (hasGuestData && hasHandledGuestMigration() && !hasDirtyGuestData()) {
       clearGuestWordsStorage();
     }
@@ -4181,6 +4306,7 @@ function getTitleState() {
 
 function saveTitleState(state) {
   saveJSON(TITLE_STATE_KEY, state);
+  if (!hasSignedInUser()) markGuestDataDirty();
   if (window.saveProfileToCloud) window.saveProfileToCloud();
 }
 
