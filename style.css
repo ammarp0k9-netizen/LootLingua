@@ -1203,9 +1203,11 @@ select option { background: var(--card-bg); color: var(--text-white); }
   padding: 10px 12px;
   border-radius: 10px;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 800;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
   line-height: 1.2;
+  letter-spacing: 0;
 }
 
 #personalControls.is-expanded .dictionary-search-row #wordInput {
@@ -1269,7 +1271,7 @@ select option { background: var(--card-bg); color: var(--text-white); }
 .add-form-advanced-inner {
   display: grid;
   gap: 10px;
-  padding-top: 2px;
+  padding: 2px 4px 4px;
 }
 
 .add-form-advanced-inner #categoryInput {
@@ -1279,6 +1281,7 @@ select option { background: var(--card-bg); color: var(--text-white); }
 #personalControls.is-expanded .add-form-advanced {
   max-height: 360px;
   opacity: 1;
+  overflow: visible;
   transform: translateY(0);
   pointer-events: auto;
 }
@@ -1308,7 +1311,7 @@ select option { background: var(--card-bg); color: var(--text-white); }
     flex-basis: 36%;
     min-width: 112px;
     padding-inline: 8px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .search-zone[data-search-type="normal"] .search-lock-overlay {
@@ -1325,7 +1328,7 @@ select option { background: var(--card-bg); color: var(--text-white); }
 #suggestionsBox {
   display: none; border: 1px solid var(--border);
   border-radius: 12px; background: var(--card-bg);
-  margin-bottom: 10px; overflow: hidden;
+  margin: 4px 0 10px; overflow: visible;
 }
 #suggestionsBox > p { margin: 0; }
 
@@ -1679,7 +1682,7 @@ select option { background: var(--card-bg); color: var(--text-white); }
 .btn-ai {
   background: var(--accent); color: var(--text-on-accent); border: none;
   border-radius: 10px; width: 46px; height: 46px; flex-shrink: 0;
-  cursor: pointer; font-size: 16px; transition: 0.2s;
+  cursor: pointer; font-family: inherit; font-size: 16px; transition: 0.2s;
 }
 .btn-ai:hover { background: var(--accent2); }
 
@@ -5496,6 +5499,8 @@ body.view-has-back .page-header { margin-bottom: 4px; }
 }
 .performance-level-slider {
   --perf-progress: 33.333%;
+  --perf-hover: 33.333%;
+  --perf-hover-opacity: 0;
   width: 100%;
   height: 28px;
   margin: 0;
@@ -5510,6 +5515,16 @@ body.view-has-back .page-header { margin-bottom: 4px; }
   border-radius: 999px;
   border: 1px solid var(--border);
   background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 42%, transparent) 0 var(--perf-hover), transparent var(--perf-hover) 100%),
+    radial-gradient(circle at 0% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    radial-gradient(circle at 33.333% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    radial-gradient(circle at 66.666% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    radial-gradient(circle at 100% 50%, var(--surface-bg) 0 5px, transparent 6px),
+    linear-gradient(90deg, var(--accent) 0 var(--perf-progress), color-mix(in srgb, var(--text-gray) 28%, transparent) var(--perf-progress) 100%);
+  background-blend-mode: normal;
+}
+.performance-level-slider:not(.is-hovering):not(.is-dragging)::-webkit-slider-runnable-track {
+  background:
     radial-gradient(circle at 0% 50%, var(--surface-bg) 0 5px, transparent 6px),
     radial-gradient(circle at 33.333% 50%, var(--surface-bg) 0 5px, transparent 6px),
     radial-gradient(circle at 66.666% 50%, var(--surface-bg) 0 5px, transparent 6px),
@@ -5520,6 +5535,11 @@ body.view-has-back .page-header { margin-bottom: 4px; }
   height: 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 42%, transparent) 0 var(--perf-hover), transparent var(--perf-hover) 100%),
+    color-mix(in srgb, var(--text-gray) 28%, transparent);
+}
+.performance-level-slider:not(.is-hovering):not(.is-dragging)::-moz-range-track {
   background: color-mix(in srgb, var(--text-gray) 28%, transparent);
 }
 .performance-level-slider::-moz-range-progress {
