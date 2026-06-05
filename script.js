@@ -3091,6 +3091,52 @@ function clearInputs() {
   if (box) box.style.display = 'none';
 }
 
+let isExpanded = false;
+window.isExpanded = isExpanded;
+
+function syncAddFormExpanded() {
+  const form = document.getElementById('personalControls');
+  const advanced = document.getElementById('addFormAdvancedFields');
+  const toggle = document.getElementById('addFormToggle');
+  const searchBtn = document.getElementById('searchBtn');
+
+  if (form) form.classList.toggle('is-expanded', isExpanded);
+  if (advanced) {
+    advanced.setAttribute('aria-hidden', String(!isExpanded));
+    advanced.inert = !isExpanded;
+  }
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', String(isExpanded));
+    const icon = toggle.querySelector('i[aria-hidden="true"]');
+    const label = toggle.querySelector('.sr-only');
+    if (icon) {
+      icon.classList.toggle('fa-chevron-down', !isExpanded);
+      icon.classList.toggle('fa-chevron-up', isExpanded);
+    }
+    if (label) label.textContent = isExpanded ? 'إخفاء الحقول الإضافية' : 'إظهار الحقول الإضافية';
+  }
+  if (searchBtn && !searchBtn.disabled) {
+    searchBtn.textContent = 'ابحث عن معنى';
+  }
+}
+
+function setAddFormExpanded(expanded) {
+  isExpanded = Boolean(expanded);
+  window.isExpanded = isExpanded;
+  syncAddFormExpanded();
+}
+
+window.setAddFormExpanded = setAddFormExpanded;
+window.toggleAddFormExpanded = function() {
+  setAddFormExpanded(!isExpanded);
+};
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => setAddFormExpanded(false));
+} else {
+  setAddFormExpanded(false);
+}
+
 // ═══════════════════════════════════════════════════════
 // Add / Edit Word
 // ═══════════════════════════════════════════════════════
@@ -3136,6 +3182,7 @@ window.addWord = async function() {
   }
 
   clearInputs();
+  setAddFormExpanded(false);
   btn.disabled = false;
   saveAndRender();
 };
@@ -3153,6 +3200,7 @@ window.editWord = function(id, event) {
   document.getElementById('meaningInput').value  = item.meaning;
   document.getElementById('exampleInput').value  = item.example || '';
   document.getElementById('categoryInput').value = item.category;
+  setAddFormExpanded(true);
   editId = id;
   const btn = document.getElementById('addBtn');
   btn.innerHTML = 'تحديث الكلمة <i class="fa-solid fa-floppy-disk"></i>';
@@ -3318,7 +3366,7 @@ window.refreshGuestSearchLocks = function() {
 };
 
 function showGuestTrialBlocked() {
-  pushNotification('استنفدت تجربتك المجانية يا بطل! سجل دخولك لفتح قوة الذكاء الاصطناعي بلا حدود 🚀', 'warning');
+  pushNotification('عذراً يا بطل! ميزة البحث مخصصة للأساطير المسجلين فقط. سجل الآن مجاناً!', 'warning');
   const modal = document.getElementById('profileModal');
   if (typeof window.toggleProfileModal === 'function' && modal && !modal.classList.contains('open')) {
     window.toggleProfileModal();
@@ -3815,8 +3863,8 @@ window.fetchSuggestions = async function() {
     }
   } finally {
     loadingTimers.forEach(clearTimeout);
-    btn.innerHTML = "<i class='fas fa-search'></i>";
     btn.disabled  = false;
+    syncAddFormExpanded();
   }
 };
 
@@ -3824,6 +3872,7 @@ function selectSuggestion(ar, pos, ex) {
   document.getElementById('meaningInput').value  = ar;
   document.getElementById('categoryInput').value = pos;
   document.getElementById('exampleInput').value  = ex;
+  setAddFormExpanded(true);
   const box = document.getElementById('suggestionsBox');
   if (box) box.style.display = 'none';
   clearGamerSuggestionsUI();
