@@ -1172,6 +1172,155 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent); box-sha
 textarea { resize: vertical; }
 select option { background: var(--card-bg); color: var(--text-white); }
 
+/* ── Collapsible Add Word Form ─────────────────────── */
+#personalControls {
+  --search-input-collapsed: 70%;
+  --search-button-collapsed: 30%;
+}
+
+#personalControls:not(.is-expanded) {
+  padding-bottom: 12px;
+}
+
+.dictionary-search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dictionary-search-row #wordInput {
+  flex: 0 1 var(--search-input-collapsed);
+  min-width: 0;
+}
+
+.dictionary-search-row #searchBtn.dictionary-search-btn {
+  flex: 0 0 var(--search-button-collapsed);
+  width: auto;
+  min-width: 132px;
+  height: auto;
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+#personalControls.is-expanded .dictionary-search-row #wordInput {
+  flex-basis: 78%;
+}
+
+#personalControls.is-expanded .dictionary-search-row #searchBtn.dictionary-search-btn {
+  flex-basis: 22%;
+}
+
+.add-form-toggle {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  margin: 0 0 8px;
+  padding: 2px 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-gray);
+  opacity: 0.42;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+#personalControls:not(.is-expanded) .add-form-toggle {
+  height: 18px;
+  margin-bottom: 0;
+  padding: 0;
+}
+
+.add-form-toggle:hover,
+.add-form-toggle:focus-visible {
+  color: var(--accent);
+  opacity: 0.82;
+}
+
+.add-form-toggle i[aria-hidden="true"] {
+  display: block;
+  font-size: 13px;
+  transform: translateY(-1px);
+}
+
+#personalControls.is-expanded .add-form-toggle i[aria-hidden="true"] {
+  transform: translateY(1px);
+}
+
+.add-form-advanced {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition:
+    max-height 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.22s ease,
+    transform 0.28s ease;
+}
+
+.add-form-advanced-inner {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.add-form-advanced-inner #categoryInput {
+  margin-bottom: 4px;
+}
+
+#personalControls.is-expanded .add-form-advanced {
+  max-height: 360px;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 520px) {
+  .dictionary-search-row {
+    gap: 7px;
+  }
+
+  .dictionary-search-row #wordInput {
+    flex-basis: 64%;
+  }
+
+  .dictionary-search-row #searchBtn.dictionary-search-btn {
+    flex-basis: 36%;
+    min-width: 112px;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .search-zone[data-search-type="normal"] .search-lock-overlay {
+    width: max(112px, 36%);
+  }
+
+  #personalControls.is-expanded .dictionary-search-row #wordInput,
+  #personalControls.is-expanded .dictionary-search-row #searchBtn.dictionary-search-btn {
+    flex-basis: auto;
+  }
+}
+
 /* ── Suggestions Box ──────────────────────── */
 #suggestionsBox {
   display: none; border: 1px solid var(--border);
@@ -1346,9 +1495,14 @@ select option { background: var(--card-bg); color: var(--text-white); }
 }
 .search-zone[data-search-type="normal"] .search-lock-overlay {
   inset: 0 0 auto auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: max(132px, var(--search-button-collapsed));
+  height: 46px;
+  border-radius: 10px;
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+}
+#personalControls.is-expanded .search-zone[data-search-type="normal"] .search-lock-overlay {
+  width: max(132px, 22%);
 }
 .search-lock-overlay i {
   font-size: 28px;
