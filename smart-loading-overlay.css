@@ -1,0 +1,240 @@
+/* ============================================
+   SMART LOADING OVERLAY STYLES
+   Full-screen blurred overlay with spinner
+   ============================================ */
+
+/* Main overlay container */
+.smart-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647; /* Maximum z-index to ensure it's on top of everything */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
+              visibility 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Visible state */
+.smart-loading-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Blurred backdrop */
+.smart-loading-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-bg, rgba(2, 6, 23, 0.95));
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  transition: backdrop-filter 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Content container */
+.smart-loading-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  padding: 24px;
+  transform: scale(0.9) translateY(20px);
+  transition: transform 0.4s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.smart-loading-overlay.visible .smart-loading-content {
+  transform: scale(1) translateY(0);
+}
+
+/* Spinner */
+.smart-loading-spinner {
+  width: 56px;
+  height: 56px;
+  border: 4px solid var(--border, #1e293b);
+  border-top-color: var(--accent, #3b82f6);
+  border-radius: 50%;
+  animation: smartLoadingSpin 0.9s linear infinite;
+  box-shadow: 
+    0 0 0 1px var(--border, #1e293b),
+    0 8px 32px rgba(59, 130, 246, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+@keyframes smartLoadingSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Loading text */
+.smart-loading-text {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-white, #f8fafc);
+  letter-spacing: 0.02em;
+  animation: smartLoadingPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes smartLoadingPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Body lock when loading */
+body.smart-loading-active {
+  overflow: hidden !important;
+}
+
+/* ============================================
+   THEME VARIANTS (auto-adapts via CSS variables)
+   ============================================ */
+
+/* LootLingua (default dark) */
+[data-theme="lootlingua"] .smart-loading-spinner {
+  border-color: var(--border);
+  border-top-color: var(--accent);
+  box-shadow: 
+    0 0 0 1px var(--border),
+    0 8px 32px rgba(59, 130, 246, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Golden theme */
+[data-theme="golden"] .smart-loading-spinner {
+  border-color: var(--border);
+  border-top-color: var(--accent);
+  box-shadow: 
+    0 0 0 1px var(--border),
+    0 8px 32px rgba(184, 134, 11, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Scroll theme (light) */
+[data-theme="scroll"] .smart-loading-spinner {
+  border-color: var(--border);
+  border-top-color: var(--accent);
+  box-shadow: 
+    0 0 0 1px var(--border),
+    0 8px 32px rgba(74, 55, 40, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Ocean theme (light) */
+[data-theme="ocean"] .smart-loading-spinner {
+  border-color: var(--border);
+  border-top-color: var(--accent);
+  box-shadow: 
+    0 0 0 1px var(--border),
+    0 8px 32px rgba(37, 99, 235, 0.35),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Glass theme */
+[data-theme="glass"] .smart-loading-backdrop {
+  background: var(--glass-bg-1, rgba(255, 255, 255, 0.05));
+  backdrop-filter: blur(20px) saturate(100%);
+  -webkit-backdrop-filter: blur(20px) saturate(100%);
+}
+
+[data-theme="glass"] .smart-loading-spinner {
+  border-color: var(--glass-border-1);
+  border-top-color: var(--accent);
+  box-shadow: 
+    0 0 0 1px var(--glass-border-1),
+    0 8px 32px rgba(14, 165, 233, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="glass"] .smart-loading-text {
+  color: var(--text-white);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   PERFORMANCE MODE ADAPTATIONS
+   ============================================ */
+
+/* Reduce animations in turbo/stable modes */
+body.perf-turbo .smart-loading-spinner,
+body.perf-stable .smart-loading-spinner {
+  animation-duration: 1.2s;
+}
+
+body.perf-turbo .smart-loading-text,
+body.perf-stable .smart-loading-text {
+  animation: none;
+  opacity: 1;
+}
+
+body.perf-turbo .smart-loading-content,
+body.perf-stable .smart-loading-content {
+  transition: none;
+}
+
+body.perf-turbo .smart-loading-backdrop,
+body.perf-stable .smart-loading-backdrop {
+  transition: none;
+}
+
+body.perf-turbo .smart-loading-overlay,
+body.perf-stable .smart-loading-overlay {
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+/* ============================================
+   REDUCED MOTION ACCESSIBILITY
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .smart-loading-spinner {
+    animation: none;
+    border-top-color: transparent;
+    background: conic-gradient(from 0deg, var(--accent), transparent 50%, var(--accent));
+  }
+  
+  .smart-loading-text {
+    animation: none;
+  }
+  
+  .smart-loading-content {
+    transition: none;
+    transform: scale(1) translateY(0);
+  }
+  
+  .smart-loading-overlay {
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+  }
+  
+  .smart-loading-backdrop {
+    transition: none;
+  }
+}
+
+/* ============================================
+   RTL SUPPORT (already handled by dir="rtl" on html)
+   ============================================ */
+[dir="rtl"] .smart-loading-text {
+  text-align: right;
+}
+
+/* ============================================
+   HIGH CONTRAST MODE
+   ============================================ */
+@media (prefers-contrast: high) {
+  .smart-loading-spinner {
+    border-width: 5px;
+    border-color: var(--text-white);
+    border-top-color: var(--accent);
+  }
+  
+  .smart-loading-backdrop {
+    background: rgba(0, 0, 0, 0.98);
+    backdrop-filter: none;
+  }
+}
