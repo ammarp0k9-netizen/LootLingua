@@ -50,21 +50,6 @@
 </head>
 <body class="legend-dock-visible">
 
-<!-- ══ SMART LOADING OVERLAY ══ -->
-<div id="smartLoader" class="smart-loader">
-  <script>
-    // منطق التجاوز الذكي للضيف (يُنفذ فوراً قبل رندر الـ UI)
-    if (localStorage.getItem('words_normal_guest') || localStorage.getItem('lootlinguaGuestDataDirty')) {
-      document.getElementById('smartLoader').style.display = 'none';
-      document.body.classList.add('loader-dismissed');
-    }
-  </script>
-  <div class="loader-content">
-    <div class="loot-spinner"></div>
-    <div class="loader-text">جارٍ التحميل...</div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div id="toastMessage" class="toast-msg"></div>
 <!-- XP Float Badge -->
