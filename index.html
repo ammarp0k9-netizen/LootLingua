@@ -47,6 +47,7 @@
   <link rel="icon" type="image/png" href="ammar1.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="smart-loading-overlay.css">
 </head>
 <body class="legend-dock-visible">
 
@@ -830,6 +831,11 @@
   }
 
   onAuthStateChanged(auth, (user) => {
+    // Notify Smart Loading Overlay that auth state is resolved
+    if (window.SmartLoadingOverlay && window.SmartLoadingOverlay.onAuthResolved) {
+      window.SmartLoadingOverlay.onAuthResolved(user);
+    }
+
     if (wordsUnsubscribe) {
       wordsUnsubscribe();
       wordsUnsubscribe = null;
@@ -937,12 +943,22 @@
         window.writeWordsToStorage(cloudWords, "normal", listenerUid);
       }
       saveAndRender();
+      
+      // Notify Smart Loading Overlay that user data is loaded
+      if (window.SmartLoadingOverlay && window.SmartLoadingOverlay.onUserDataLoaded) {
+        window.SmartLoadingOverlay.onUserDataLoaded();
+      }
+      
       if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("words");
       else if (typeof window.finishInitialFeatureLoad === "function") window.finishInitialFeatureLoad();
     }, (error) => {
       console.warn("loadWordsFromCloud:", error.code || error.message, error);
       if (error.code === "permission-denied" && typeof showToast === "function") {
         showToast("قواعد Firebase لا تسمح بقراءة كلماتك حالياً. راجع Firestore Rules.");
+      }
+      // Even on error, dismiss the loading overlay
+      if (window.SmartLoadingOverlay && window.SmartLoadingOverlay.onUserDataLoaded) {
+        window.SmartLoadingOverlay.onUserDataLoaded();
       }
       if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("words");
     });
@@ -1174,6 +1190,11 @@ window.loadProfileFromCloud = async function(user) {
   finally {
     window.__applyingCloudProfile = false;
     if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("profile");
+    
+    // Notify Smart Loading Overlay that profile data is loaded
+    if (window.SmartLoadingOverlay && window.SmartLoadingOverlay.onUserDataLoaded) {
+      window.SmartLoadingOverlay.onUserDataLoaded();
+    }
   }
 };
 
@@ -1191,6 +1212,7 @@ onAuthStateChanged(profileAuth, (user) => {
 });
 </script>
 
+<script src="smart-loading-overlay.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
