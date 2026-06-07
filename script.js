@@ -1,13 +1,3 @@
-// Smart Loader Controller
-// ═══════════════════════════════════════════════════════
-window.dismissSmartLoader = function() {
-  const loader = document.getElementById('smartLoader');
-  if (loader) {
-    loader.classList.add('fade-out');
-    setTimeout(() => { loader.style.display = 'none'; }, 500);
-  }
-};
-
 // Performance mode
 // ═══════════════════════════════════════════════════════
 const PERFORMANCE_MODE_KEY = 'lootlinguaPerformanceMode';
