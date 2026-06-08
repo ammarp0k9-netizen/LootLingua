@@ -238,6 +238,87 @@ body.perf-stable .smart-loading-overlay {
     backdrop-filter: none;
   }
 }
+
+/* ============================================
+   SLOW CONNECTION WARNING
+   ============================================ */
+.smart-loading-slow-warning {
+  margin: 0;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent2, #f59e0b);
+  background: color-mix(in srgb, var(--accent2, #f59e0b) 15%, var(--surface-bg, #1e293b));
+  border: 1px solid color-mix(in srgb, var(--accent2, #f59e0b) 40%, var(--border, #1e293b));
+  border-radius: 12px;
+  max-width: 90vw;
+  line-height: 1.5;
+  text-align: center;
+  animation: smartLoadingWarningFadeIn 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@keyframes smartLoadingWarningFadeIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Theme variants for slow warning */
+[data-theme="lootlingua"] .smart-loading-slow-warning {
+  color: var(--star, #f59e0b);
+  background: color-mix(in srgb, var(--star, #f59e0b) 15%, var(--surface-bg));
+  border-color: color-mix(in srgb, var(--star, #f59e0b) 40%, var(--border));
+}
+
+[data-theme="golden"] .smart-loading-slow-warning {
+  color: var(--star, #f59e0b);
+  background: color-mix(in srgb, var(--star, #f59e0b) 15%, var(--surface-bg));
+  border-color: color-mix(in srgb, var(--star, #f59e0b) 40%, var(--border));
+}
+
+[data-theme="scroll"] .smart-loading-slow-warning {
+  color: var(--star, #b45309);
+  background: color-mix(in srgb, var(--star, #b45309) 15%, var(--surface-bg));
+  border-color: color-mix(in srgb, var(--star, #b45309) 40%, var(--border));
+}
+
+[data-theme="ocean"] .smart-loading-slow-warning {
+  color: var(--star, #ca8a04);
+  background: color-mix(in srgb, var(--star, #ca8a04) 15%, var(--surface-bg));
+  border-color: color-mix(in srgb, var(--star, #ca8a04) 40%, var(--border));
+}
+
+[data-theme="glass"] .smart-loading-slow-warning {
+  color: var(--star, #f59e0b);
+  background: color-mix(in srgb, var(--star, #f59e0b) 15%, var(--glass-bg-2));
+  border-color: color-mix(in srgb, var(--star, #f59e0b) 40%, var(--glass-border-2));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Performance mode adaptations for slow warning */
+body.perf-turbo .smart-loading-slow-warning,
+body.perf-stable .smart-loading-slow-warning {
+  animation: none;
+  opacity: 1;
+}
+
+/* Reduced motion for slow warning */
+@media (prefers-reduced-motion: reduce) {
+  .smart-loading-slow-warning {
+    animation: none;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* High contrast for slow warning */
+@media (prefers-contrast: high) {
+  .smart-loading-slow-warning {
+    border-width: 2px;
+    background: var(--surface-bg);
+    color: var(--star);
+  }
+}
+
 /* ── إشعارات (مرتبطة بالزر) ── */
 .notif-hub {
   position: relative;
