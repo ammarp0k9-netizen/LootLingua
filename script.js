@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════
 // Smart Loading Overlay - Handles authentication and data-fetching delay
 // Full-screen blurred overlay that appears on page refresh
-// and disappears the EXACT millisecond user data arrives.
+// and disappears after UI stabilization (min 1000ms + 500ms settling delay).
+// Includes slow connection/offline detection (4s warning).
 // ═══════════════════════════════════════════════════════
 (function() {
   'use strict';
@@ -13,16 +14,30 @@
   const GUEST_STORAGE_KEY = 'words_normal_guest';
   const LEGACY_DICTIONARY_KEY = 'lootlinguaDict';
   const LOADING_TEXT = 'جارٍ التحميل...';
+  const SLOW_CONNECTION_TEXT = 'يبدو أن التحميل يستغرق وقتاً أطول من المعتاد. يرجى التحقق من اتصالك بالإنترنت.';
   const OVERLAY_ID = 'smartLoadingOverlay';
+  const SLOW_WARNING_ID = 'smartLoadingSlowWarning';
+
+  // Timing constants
+  const MIN_VISIBILITY_MS = 1000;      // Minimum time overlay must stay visible from page load
+  const SETTLING_DELAY_MS = 500;       // Delay after data loaded before starting fade-out
+  const SLOW_CONNECTION_THRESHOLD_MS = 4000; // Time before showing slow connection warning
+  const FADE_OUT_DURATION_MS = 400;    // CSS transition duration (must match CSS)
 
   // ============================================
   // STATE
   // ============================================
   let overlayElement = null;
+  let slowWarningElement = null;
   let isOverlayVisible = false;
   let hasCheckedGuest = false;
   let authResolved = false;
   let userDataLoaded = false;
+  let pageLoadTime = Date.now();
+  let slowWarningTimer = null;
+  let minVisibilityTimer = null;
+  let settlingTimer = null;
+  let dismissalScheduled = false;
 
   // ============================================
   // CREATE OVERLAY HTML
@@ -42,11 +57,13 @@
       <div class="smart-loading-content">
         <div class="smart-loading-spinner" aria-hidden="true"></div>
         <p class="smart-loading-text">${LOADING_TEXT}</p>
+        <p id="${SLOW_WARNING_ID}" class="smart-loading-slow-warning" aria-live="assertive" style="display: none; opacity: 0;">${SLOW_CONNECTION_TEXT}</p>
       </div>
     `;
 
     document.body.appendChild(overlay);
     overlayElement = overlay;
+    slowWarningElement = document.getElementById(SLOW_WARNING_ID);
     
     // Force reflow to enable transition
     overlay.offsetHeight;
@@ -93,6 +110,96 @@
     
     // Prevent scrolling while loading
     document.body.style.overflow = 'hidden';
+    
+    // Start the slow connection warning timer
+    startSlowConnectionTimer();
+    
+    // Start the minimum visibility timer
+    startMinVisibilityTimer();
+  }
+
+  // ============================================
+  // SLOW CONNECTION WARNING TIMER
+  // ============================================
+  function startSlowConnectionTimer() {
+    // Clear any existing timer
+    if (slowWarningTimer) {
+      clearTimeout(slowWarningTimer);
+      slowWarningTimer = null;
+    }
+    
+    slowWarningTimer = setTimeout(() => {
+      if (isOverlayVisible && slowWarningElement) {
+        // Fade in the slow connection warning
+        slowWarningElement.style.display = 'block';
+        // Force reflow for transition
+        slowWarningElement.offsetHeight;
+        slowWarningElement.style.opacity = '1';
+        slowWarningElement.style.transition = 'opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)';
+        console.log('SmartLoadingOverlay: Slow connection warning displayed');
+      }
+    }, SLOW_CONNECTION_THRESHOLD_MS);
+  }
+
+  function clearSlowConnectionTimer() {
+    if (slowWarningTimer) {
+      clearTimeout(slowWarningTimer);
+      slowWarningTimer = null;
+    }
+    // Also hide the warning if it was shown
+    if (slowWarningElement) {
+      slowWarningElement.style.opacity = '0';
+      slowWarningElement.style.display = 'none';
+    }
+  }
+
+  // ============================================
+  // MINIMUM VISIBILITY TIMER
+  // ============================================
+  function startMinVisibilityTimer() {
+    const elapsed = Date.now() - pageLoadTime;
+    const remaining = Math.max(0, MIN_VISIBILITY_MS - elapsed);
+    
+    if (minVisibilityTimer) {
+      clearTimeout(minVisibilityTimer);
+    }
+    
+    minVisibilityTimer = setTimeout(() => {
+      minVisibilityTimer = null;
+      checkAndScheduleDismissal();
+    }, remaining);
+  }
+
+  // ============================================
+  // SETTLING DELAY (after data loaded)
+  // ============================================
+  function startSettlingDelay() {
+    if (settlingTimer) {
+      clearTimeout(settlingTimer);
+    }
+    
+    settlingTimer = setTimeout(() => {
+      settlingTimer = null;
+      checkAndScheduleDismissal();
+    }, SETTLING_DELAY_MS);
+  }
+
+  // ============================================
+  // CHECK CONDITIONS AND SCHEDULE DISMISSAL
+  // ============================================
+  function checkAndScheduleDismissal() {
+    // Can dismiss if:
+    // 1. Minimum visibility time has passed (minVisibilityTimer is null)
+    // 2. Data has settled (settlingTimer is null or not needed)
+    // 3. Either guest was confirmed OR user data loaded
+    const minVisibilityPassed = minVisibilityTimer === null;
+    const settlingPassed = settlingTimer === null;
+    const dataReady = hasCheckedGuest || userDataLoaded;
+    
+    if (minVisibilityPassed && settlingPassed && dataReady && !dismissalScheduled) {
+      dismissalScheduled = true;
+      hideOverlay();
+    }
   }
 
   // ============================================
@@ -100,6 +207,17 @@
   // ============================================
   function hideOverlay() {
     if (!isOverlayVisible || !overlayElement) return;
+    
+    // Clear all timers
+    if (minVisibilityTimer) {
+      clearTimeout(minVisibilityTimer);
+      minVisibilityTimer = null;
+    }
+    if (settlingTimer) {
+      clearTimeout(settlingTimer);
+      settlingTimer = null;
+    }
+    clearSlowConnectionTimer();
     
     isOverlayVisible = false;
     overlayElement.classList.remove('visible');
@@ -111,8 +229,10 @@
       if (overlayElement && !isOverlayVisible) {
         overlayElement.remove();
         overlayElement = null;
+        slowWarningElement = null;
       }
-    }, 400); // Match CSS transition duration
+      dismissalScheduled = false;
+    }, FADE_OUT_DURATION_MS); // Match CSS transition duration
   }
 
   // ============================================
@@ -124,10 +244,11 @@
     hasCheckedGuest = true;
     
     if (isGuest) {
-      // GUEST: Bypass loading screen entirely - hide immediately
-      console.log('SmartLoadingOverlay: Guest detected, bypassing loading screen');
-      hideOverlay();
-      return true; // Indicates bypass happened
+      // GUEST: Don't hide immediately - wait for min visibility + settling delay
+      console.log('SmartLoadingOverlay: Guest detected, will dismiss after stabilization');
+      // Start settling delay for guest (data is already "loaded" locally)
+      startSettlingDelay();
+      return true; // Indicates guest was detected
     }
     
     // NOT A GUEST (or no guest data): Keep overlay, wait for Firebase
@@ -141,6 +262,7 @@
   window.SmartLoadingOverlay = {
     // Call this ASAP on page load (before Firebase initializes)
     init: function() {
+      pageLoadTime = Date.now(); // Reset page load time on init
       showOverlay();
       const bypassed = runSmartDetection();
       return bypassed;
@@ -151,9 +273,10 @@
       authResolved = true;
       
       if (!user) {
-        // No user signed in - dismiss immediately
-        console.log('SmartLoadingOverlay: Auth resolved - no user, dismissing');
-        hideOverlay();
+        // No user signed in - treat as guest, wait for settling
+        console.log('SmartLoadingOverlay: Auth resolved - no user, will dismiss after stabilization');
+        hasCheckedGuest = true; // Mark as checked so we can dismiss
+        startSettlingDelay();
         return;
       }
       
@@ -165,8 +288,8 @@
     // Call this when user profile/words data is fully loaded from Firebase
     onUserDataLoaded: function() {
       userDataLoaded = true;
-      console.log('SmartLoadingOverlay: User data loaded, dismissing overlay');
-      hideOverlay();
+      console.log('SmartLoadingOverlay: User data loaded, will dismiss after stabilization');
+      startSettlingDelay();
     },
 
     // Force hide (emergency fallback)
