@@ -478,8 +478,11 @@
 
 <!-- ── Legend Dock (4 تبويبات) ── -->
 <nav id="legendDock" class="legend-dock treasure-dock" aria-label="تنقل التطبيق">
-  <button class="legend-dock-btn treasure-dock-btn" type="button" data-dock-view="treasure" data-label="الكنز" aria-label="الكنز" onclick="loadTreasureView()">
-    <i class="fa-solid fa-gem" aria-hidden="true"></i>
+  <button class="legend-dock-btn treasure-dock-btn" type="button" data-feature="treasure" data-dock-view="treasure" data-label="الكنز" aria-label="الكنز" onclick="return onDockFeatureClick(event, 'treasure', function () { loadTreasureView(); });">
+    <span class="dock-btn-icon-wrap">
+      <i class="fa-solid fa-gem" aria-hidden="true"></i>
+      <span class="dock-lock-overlay" aria-hidden="true"><i class="fa-solid fa-lock"></i></span>
+    </span>
   </button>
   <button class="legend-dock-btn treasure-dock-btn active" type="button" data-dock-view="personal" data-label="قاموسك" aria-label="قاموسك الشخصي" onclick="loadPersonalDictionary()">
     <i class="fa-solid fa-book-open" aria-hidden="true"></i>
@@ -925,6 +928,7 @@
     const q = query(collection(db, "users", user.uid, "words"), orderBy("createdAt", "desc"));
     wordsUnsubscribe = onSnapshot(q, (snapshot) => {
       if (auth.currentUser?.uid !== listenerUid) return;
+      if (window.__suppressCloudWordsSnapshot) return;
       const cloudWords = snapshot.docs.map(d => ({
         id:          d.id,
         word:        d.data().text   || d.data().word || '',
@@ -1189,11 +1193,6 @@ window.loadProfileFromCloud = async function(user) {
   finally {
     window.__applyingCloudProfile = false;
     if (typeof window.markInitialFeatureLoadPartDone === "function") window.markInitialFeatureLoadPartDone("profile");
-    
-    // Notify Smart Loading Overlay that profile data is loaded
-    if (window.SmartLoadingOverlay && window.SmartLoadingOverlay.onUserDataLoaded) {
-      window.SmartLoadingOverlay.onUserDataLoaded();
-    }
   }
 };
 
