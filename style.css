@@ -161,12 +161,7 @@ body.smart-loading-active {
    PERFORMANCE MODE ADAPTATIONS
    ============================================ */
 
-/* Reduce animations in turbo/stable modes */
-body.perf-turbo .smart-loading-spinner,
-body.perf-stable .smart-loading-spinner {
-  animation-duration: 1.2s;
-}
-
+/* Reduce animations in turbo/stable modes — keep spinner rotating smoothly */
 body.perf-turbo .smart-loading-text,
 body.perf-stable .smart-loading-text {
   animation: none;
@@ -6028,6 +6023,22 @@ body.low-end-device *::after {
   transition-duration: 0.001ms !important;
   scroll-behavior: auto !important;
 }
+
+/* Keep essential loading/onboarding motion in turbo — global * rule disables them otherwise */
+body.perf-turbo .smart-loading-overlay .smart-loading-spinner,
+body.perf-stable .smart-loading-overlay .smart-loading-spinner,
+body.low-end-device .smart-loading-overlay .smart-loading-spinner {
+  animation: smartLoadingSpin 0.85s linear infinite !important;
+  animation-iteration-count: infinite !important;
+}
+
+body.perf-turbo .empty-onboarding-tip.visible,
+body.perf-stable .empty-onboarding-tip.visible,
+body.low-end-device .empty-onboarding-tip.visible {
+  animation: emptyOnboardingFloat 1.85s ease-in-out infinite !important;
+  animation-iteration-count: infinite !important;
+}
+
 body.perf-balanced .legend-top-bar,
 body.perf-balanced .sidebar,
 body.perf-balanced .legend-dock,
@@ -6605,6 +6616,104 @@ body.low-end-device .game-card img {
 }
 .treasure-dock-btn.dock-feature-locked .dock-lock-overlay {
   display: flex;
+}
+
+.legend-dock-btn.pulse-onboarding-highlight {
+  animation: pulseOnboardingHighlight 1.15s ease-in-out 3;
+  z-index: 4;
+  border-radius: 14px;
+}
+
+@keyframes pulseOnboardingHighlight {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent);
+    transform: scale(1.07);
+  }
+}
+
+.empty-onboarding-tip {
+  position: fixed;
+  z-index: 100006;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  color: var(--text-white);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38);
+  font-size: 14px;
+  line-height: 1.65;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.empty-onboarding-tip.visible {
+  opacity: 1;
+  animation: emptyOnboardingFloat 1.85s ease-in-out infinite;
+}
+
+.empty-onboarding-tip.fade-out {
+  opacity: 0;
+  animation: none;
+}
+
+.empty-onboarding-tip-inner {
+  display: block;
+}
+
+.empty-onboarding-tip.placement-above::after,
+.empty-onboarding-tip.placement-below::after,
+.empty-onboarding-tip.placement-below-bar::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--card-bg);
+  border: 2px solid var(--accent);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.empty-onboarding-tip.placement-above::after {
+  bottom: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border-top: none;
+  border-left: none;
+}
+
+.empty-onboarding-tip.placement-below::after {
+  top: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.empty-onboarding-tip.placement-below-bar::after {
+  top: -7px;
+  left: var(--tip-arrow-left, 50%);
+  margin-left: -6px;
+  border-bottom: none;
+  border-right: none;
+}
+
+@keyframes emptyOnboardingFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legend-dock-btn.pulse-onboarding-highlight,
+  .empty-onboarding-tip.visible {
+    animation: none;
+  }
 }
 
 /* Legend dock — 4 tabs */
