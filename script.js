@@ -971,6 +971,7 @@ function hideEmptyOnboardingSearchTooltip() {
   if (!emptyOnboardingState.searchTip) return;
   const tip = emptyOnboardingState.searchTip;
   emptyOnboardingState.searchTip = null;
+  unbindEmptyOnboardingSearchDismiss();
   removeEmptyOnboardingTooltip(tip);
 }
 
@@ -980,19 +981,50 @@ function hideAllEmptyOnboardingTooltips() {
   unbindEmptyOnboardingReposition();
 }
 
+function unbindEmptyOnboardingSearchDismiss() {
+  const wordInput = document.getElementById('wordInput');
+  if (!wordInput?.__emptyOnboardingDismiss) return;
+  wordInput.removeEventListener('input', wordInput.__emptyOnboardingDismiss);
+  wordInput.removeEventListener('focus', wordInput.__emptyOnboardingDismiss);
+  wordInput.removeEventListener('keydown', wordInput.__emptyOnboardingDismiss);
+  wordInput.__emptyOnboardingDismiss = null;
+}
+
 function bindEmptyOnboardingSearchDismiss() {
   const wordInput = document.getElementById('wordInput');
-  if (!wordInput || wordInput.dataset.emptyOnboardingBound === '1') return;
-  wordInput.dataset.emptyOnboardingBound = '1';
+  if (!wordInput) return;
+  unbindEmptyOnboardingSearchDismiss();
   const dismiss = () => {
-    if (emptyOnboardingState.phase === 2) hideEmptyOnboardingSearchTooltip();
+    if (emptyOnboardingState.searchTip) hideEmptyOnboardingSearchTooltip();
   };
-  wordInput.addEventListener('focus', dismiss);
+  wordInput.__emptyOnboardingDismiss = dismiss;
   wordInput.addEventListener('input', dismiss);
+  wordInput.addEventListener('focus', dismiss);
+  wordInput.addEventListener('keydown', dismiss);
+}
+
+function initEmptyOnboardingInputWatcher() {
+  if (window.__emptyOnboardingInputWatcher) return;
+  window.__emptyOnboardingInputWatcher = true;
+  const isPersonalSearchTarget = (el) => {
+    if (!el) return false;
+    if (el.id === 'wordInput') return true;
+    return Boolean(el.closest?.('#normalSearchZone'));
+  };
+  const dismissIfTyping = (e) => {
+    if (!emptyOnboardingState.searchTip) return;
+    if (!isPersonalSearchTarget(e.target)) return;
+    hideEmptyOnboardingSearchTooltip();
+  };
+  document.addEventListener('input', dismissIfTyping, true);
+  document.addEventListener('keydown', dismissIfTyping, true);
+  document.addEventListener('beforeinput', dismissIfTyping, true);
+  document.addEventListener('compositionstart', dismissIfTyping, true);
 }
 
 function startEmptyOnboardingPhase1() {
   if (!shouldRunEmptyOnboarding() || emptyOnboardingState.active) return;
+  initEmptyOnboardingInputWatcher();
   const btn = document.getElementById('dailyQuestsBtn');
   if (!btn) return;
   emptyOnboardingState.active = true;
@@ -1229,6 +1261,50 @@ function purgeStaleGuestLocalData() {
   });
   if (typeof clearGuestSearchLocks === 'function') clearGuestSearchLocks();
 }
+window.purgeStaleGuestLocalData = purgeStaleGuestLocalData;
+
+function getGuestLootSnapshot() {
+  return {
+    words: getGuestMigrationWords(),
+    profile: getGuestProgressSnapshot(),
+  };
+}
+
+function hasMeaningfulGuestLoot(snapshot) {
+  const loot = snapshot || getGuestLootSnapshot();
+  const words = loot.words || [];
+  const p = loot.profile || {};
+  const xp = Math.max(Number(p.userXP) || 0, hasSignedInUser() ? 0 : (Number(userXP) || 0));
+  if (words.length === 0 && xp === 0) return false;
+  if (words.length > 0) return true;
+  if (xp > 0) return true;
+  if ((Number(p.dailyStreak) || 0) > 0) return true;
+  if ((Number(p.maxStreak) || 0) > 0) return true;
+  if ((Number(p.streakFreezes) || 0) > 0) return true;
+  if ((Number(p.freezeSaves) || 0) > 0) return true;
+  if ((Number(p.gameDictAdds) || 0) > 0) return true;
+  if ((Number(p.perfectQuizzes) || 0) > 0) return true;
+  const titles = p.titlesState?.unlocked;
+  if (Array.isArray(titles) && titles.length > 0) return true;
+  const lootState = p.dailyLootState;
+  if (lootState && ((Number(lootState.totalOpens) || 0) > 0 || (Number(lootState.streak) || 0) > 0)) return true;
+  if (Array.isArray(p.addedGameWords) && p.addedGameWords.length > 0) return true;
+  if (Array.isArray(p.extraChests) && p.extraChests.length > 0) return true;
+  return false;
+}
+
+function reconcileEmptyGuestSessionState() {
+  if (hasSignedInUser()) return;
+  if ((Array.isArray(window.words) ? window.words.length : 0) > 0) return;
+  if ((Number(userXP) || 0) > 0) return;
+  purgeStaleGuestLocalData();
+  resetGuestProgressState();
+  localStorage.removeItem(GUEST_MIGRATION_HANDLED_KEY);
+  localStorage.removeItem(GUEST_MIGRATION_COMPLETE_KEY);
+  window.__guestMigrationSessionComplete = true;
+}
+window.reconcileEmptyGuestSessionState = reconcileEmptyGuestSessionState;
+window.hasMeaningfulGuestLoot = hasMeaningfulGuestLoot;
 
 function hasUserWordsCache(uid) {
   if (!uid) return false;
@@ -1237,6 +1313,10 @@ function hasUserWordsCache(uid) {
 
 function shouldSkipGuestMigrationPrompt(user) {
   if (!user?.uid) return true;
+  if (!hasMeaningfulGuestLoot()) {
+    reconcileEmptyGuestSessionState();
+    return true;
+  }
   if (window.__guestMigrationSessionComplete) return true;
   if (isGuestMigrationComplete(user.uid)) {
     purgeStaleGuestLocalData();
@@ -3175,14 +3255,15 @@ window.prepareGuestMigrationForUser = function(user) {
     return window.__guestMigrationPromise;
   }
 
-  const words = getGuestMigrationWords();
-  const profile = getGuestProgressSnapshot();
-  const hasGuestData = words.length > 0 || hasGuestProgress(profile);
+  const loot = getGuestLootSnapshot();
+  const words = loot.words;
+  const profile = loot.profile;
+  const hasGuestData = hasMeaningfulGuestLoot(loot);
   const shouldPrompt = hasGuestData && (hasDirtyGuestData() || !hasHandledGuestMigrationForUser(user.uid));
   window.__guestMigrationSummary = { words, profile, user };
 
   if (!shouldPrompt) {
-    if (hasGuestProgress(profile)) {
+    if (hasMeaningfulGuestLoot(loot)) {
       window.__acceptedGuestProfileMigration = { uid: user.uid, profile };
     }
     if (hasGuestData) purgeStaleGuestLocalData();
@@ -3991,6 +4072,7 @@ window.deleteWord = function(id, event) {
       
       // تحديث البيانات في الخلفية ورسم القائمة من جديد (بعد اكتمال الأنيميشن)
       persistDictionary();
+      if (typeof reconcileEmptyGuestSessionState === 'function') reconcileEmptyGuestSessionState();
       if (currentView === 'starred') renderStarredWords();
       else render();
     }, 300);
@@ -5946,6 +6028,7 @@ function initTreasureSwipeNavigation() {
 initTreasureSwipeNavigation();
 
 window.loadGameDictionary = function(gameKey) {
+  cleanupQuizSessionIfActive();
   if (!isFeatureUnlocked(gameKey)) {
     openUnlockExplainModal(gameKey);
     refreshFeatureUnlockUI();
@@ -6106,6 +6189,7 @@ function hideAllViewElements() {
 
 // ── Worlds Hub ──
 window.loadWorldsView = function() {
+  cleanupQuizSessionIfActive();
   if (currentView === 'personal') animateWorldsRoute('next');
   else if (WORLDS_VIEWS.has(currentView) && currentView !== 'worlds') animateWorldsRoute('back');
   beginViewSwitch();
@@ -6138,6 +6222,7 @@ window.loadWorldsView = function() {
 
 // ── Treasure Full-Page View ──
 window.loadTreasureView = function() {
+  cleanupQuizSessionIfActive();
   if (!isFeatureUnlocked('treasure')) {
     openUnlockExplainModal('treasure');
     refreshFeatureUnlockUI();
@@ -6173,6 +6258,7 @@ window.loadTreasureView = function() {
 
 // ── Starred Words View ──
 window.loadStarredView = function() {
+  cleanupQuizSessionIfActive();
   if (!isFeatureUnlocked('starred')) {
     openUnlockExplainModal('starred');
     refreshFeatureUnlockUI();
@@ -6308,6 +6394,7 @@ window.loadQuizView = function() {
 };
 
 window.loadPersonalDictionary = function() {
+  cleanupQuizSessionIfActive();
   const returningFromTreasure = currentView === 'treasure';
   const returningFromWorlds = WORLDS_VIEWS.has(currentView) || currentView === 'quiz';
   if (returningFromTreasure) animateTreasureRoute('back');
@@ -6743,6 +6830,7 @@ document.addEventListener('click', (e) => {
 
 // ── Centralized Click Handling (Event Delegation) ───────
 document.addEventListener('DOMContentLoaded', () => {
+  initEmptyOnboardingInputWatcher();
   bindSearchLockOverlays();
   refreshGuestSearchLocks();
 
@@ -6874,8 +6962,25 @@ function hideQuizPlayPanels() {
 }
 
 function stopTimeAttackTimer() {
-  if (timeAttackTimer) clearInterval(timeAttackTimer);
-  timeAttackTimer = null;
+  if (timeAttackTimer) {
+    clearInterval(timeAttackTimer);
+    timeAttackTimer = null;
+  }
+}
+
+function cleanupQuizSessionIfActive() {
+  if (currentView !== 'quiz') return;
+  stopTimeAttackTimer();
+  quizIndex = 0;
+  currentQuizWords = [];
+  currentStreak = 0;
+  currentQuizMistakes = 0;
+  timeAttackHp = 0;
+  hideQuizPlayPanels();
+  const setup = document.getElementById('quizViewSetup');
+  if (setup) setup.style.display = 'block';
+  const exitBtn = document.querySelector('#quizView .quiz-exit-btn');
+  if (exitBtn) exitBtn.style.display = 'flex';
 }
 
 function showQuizModes() {
@@ -7174,8 +7279,13 @@ function renderTimeAttackQuestion() {
   timeAttackSeconds = 15;
   document.getElementById('timeAttackTimer').textContent = `${timeAttackSeconds}s`;
   timeAttackTimer = setInterval(() => {
+    if (currentView !== 'quiz') {
+      stopTimeAttackTimer();
+      return;
+    }
     timeAttackSeconds--;
-    document.getElementById('timeAttackTimer').textContent = `${timeAttackSeconds}s`;
+    const timerEl = document.getElementById('timeAttackTimer');
+    if (timerEl) timerEl.textContent = `${timeAttackSeconds}s`;
     if (timeAttackSeconds <= 0) answerTimeAttack('');
   }, 1000);
 }
