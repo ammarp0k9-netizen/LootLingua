@@ -1,8 +1,8 @@
 // ═══════════════════════════════════════════════════════
 // Smart Loading Overlay - Handles authentication and data-fetching delay
-// Full-screen blurred overlay that appears on page refresh
-// and disappears after UI stabilization (min 1000ms + 500ms settling delay).
-// Includes slow connection/offline detection (4s warning).
+// Full-screen blurred overlay that appears instantly on page load
+// and dismisses the moment user data arrives (300ms opacity fade-out).
+// Includes slow connection/offline detection (5s warning).
 // ═══════════════════════════════════════════════════════
 (function() {
   'use strict';
@@ -14,15 +14,13 @@
   const GUEST_STORAGE_KEY = 'words_normal_guest';
   const LEGACY_DICTIONARY_KEY = 'lootlinguaDict';
   const LOADING_TEXT = 'جارٍ التحميل...';
-  const SLOW_CONNECTION_TEXT = 'يبدو أن التحميل يستغرق وقتاً أطول من المعتاد. يرجى التحقق من اتصالك بالإنترنت.';
+  const SLOW_CONNECTION_TEXT = 'يبدو أن التحميل يستغرق وقتًا أطول من المعتاد. يرجى التحقق من اتصالك بالإنترنت.';
   const OVERLAY_ID = 'smartLoadingOverlay';
   const SLOW_WARNING_ID = 'smartLoadingSlowWarning';
 
   // Timing constants
-  const MIN_VISIBILITY_MS = 1000;      // Minimum time overlay must stay visible from page load
-  const SETTLING_DELAY_MS = 500;       // Delay after data loaded before starting fade-out
-  const SLOW_CONNECTION_THRESHOLD_MS = 4000; // Time before showing slow connection warning
-  const FADE_OUT_DURATION_MS = 400;    // CSS transition duration (must match CSS)
+  const SLOW_CONNECTION_THRESHOLD_MS = 5000; // Time before showing slow connection warning
+  const FADE_OUT_DURATION_MS = 300;        // CSS transition duration (must match CSS)
 
   // ============================================
   // STATE
@@ -30,14 +28,8 @@
   let overlayElement = null;
   let slowWarningElement = null;
   let isOverlayVisible = false;
-  let hasCheckedGuest = false;
-  let authResolved = false;
-  let userDataLoaded = false;
-  let pageLoadTime = Date.now();
   let slowWarningTimer = null;
-  let minVisibilityTimer = null;
-  let settlingTimer = null;
-  let dismissalScheduled = false;
+  let dismissPending = false;
 
   // ============================================
   // CREATE OVERLAY HTML
@@ -64,10 +56,6 @@
     document.body.appendChild(overlay);
     overlayElement = overlay;
     slowWarningElement = document.getElementById(SLOW_WARNING_ID);
-    
-    // Force reflow to enable transition
-    overlay.offsetHeight;
-    
     return overlay;
   }
 
@@ -105,6 +93,8 @@
     if (!overlayElement) createOverlay();
     
     isOverlayVisible = true;
+    overlayElement.style.transition = 'none';
+    overlayElement.style.opacity = '1';
     overlayElement.classList.add('visible');
     document.body.classList.add('smart-loading-active');
     
@@ -113,9 +103,6 @@
     
     // Start the slow connection warning timer
     startSlowConnectionTimer();
-    
-    // Start the minimum visibility timer
-    startMinVisibilityTimer();
   }
 
   // ============================================
@@ -154,52 +141,17 @@
   }
 
   // ============================================
-  // MINIMUM VISIBILITY TIMER
+  // SCHEDULE DISMISSAL (instant trigger + smooth fade)
   // ============================================
-  function startMinVisibilityTimer() {
-    const elapsed = Date.now() - pageLoadTime;
-    const remaining = Math.max(0, MIN_VISIBILITY_MS - elapsed);
-    
-    if (minVisibilityTimer) {
-      clearTimeout(minVisibilityTimer);
-    }
-    
-    minVisibilityTimer = setTimeout(() => {
-      minVisibilityTimer = null;
-      checkAndScheduleDismissal();
-    }, remaining);
-  }
+  function scheduleDismiss() {
+    if (dismissPending || !isOverlayVisible) return;
+    dismissPending = true;
 
-  // ============================================
-  // SETTLING DELAY (after data loaded)
-  // ============================================
-  function startSettlingDelay() {
-    if (settlingTimer) {
-      clearTimeout(settlingTimer);
-    }
-    
-    settlingTimer = setTimeout(() => {
-      settlingTimer = null;
-      checkAndScheduleDismissal();
-    }, SETTLING_DELAY_MS);
-  }
-
-  // ============================================
-  // CHECK CONDITIONS AND SCHEDULE DISMISSAL
-  // ============================================
-  function checkAndScheduleDismissal() {
-    // Can dismiss if:
-    // 1. Minimum visibility time has passed (minVisibilityTimer is null)
-    // 2. Data has settled (settlingTimer is null or not needed)
-    // 3. Either guest was confirmed OR user data loaded
-    const minVisibilityPassed = minVisibilityTimer === null;
-    const settlingPassed = settlingTimer === null;
-    const dataReady = hasCheckedGuest || userDataLoaded;
-    
-    if (minVisibilityPassed && settlingPassed && dataReady && !dismissalScheduled) {
-      dismissalScheduled = true;
-      hideOverlay();
-    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        hideOverlay();
+      });
+    });
   }
 
   // ============================================
@@ -208,18 +160,11 @@
   function hideOverlay() {
     if (!isOverlayVisible || !overlayElement) return;
     
-    // Clear all timers
-    if (minVisibilityTimer) {
-      clearTimeout(minVisibilityTimer);
-      minVisibilityTimer = null;
-    }
-    if (settlingTimer) {
-      clearTimeout(settlingTimer);
-      settlingTimer = null;
-    }
     clearSlowConnectionTimer();
     
     isOverlayVisible = false;
+    overlayElement.style.transition = `opacity ${FADE_OUT_DURATION_MS}ms ease, visibility ${FADE_OUT_DURATION_MS}ms ease`;
+    overlayElement.style.opacity = '0';
     overlayElement.classList.remove('visible');
     document.body.classList.remove('smart-loading-active');
     document.body.style.overflow = '';
@@ -231,29 +176,21 @@
         overlayElement = null;
         slowWarningElement = null;
       }
-      dismissalScheduled = false;
-    }, FADE_OUT_DURATION_MS); // Match CSS transition duration
+      dismissPending = false;
+    }, FADE_OUT_DURATION_MS);
   }
 
   // ============================================
   // SMART DETECTION LOGIC
   // ============================================
   function runSmartDetection() {
-    // IMMEDIATELY check for guest data (synchronous, no await)
     const isGuest = checkGuestDataExists();
-    hasCheckedGuest = true;
-    
-    if (isGuest) {
-      // GUEST: Don't hide immediately - wait for min visibility + settling delay
-      console.log('SmartLoadingOverlay: Guest detected, will dismiss after stabilization');
-      // Start settling delay for guest (data is already "loaded" locally)
-      startSettlingDelay();
-      return true; // Indicates guest was detected
-    }
-    
-    // NOT A GUEST (or no guest data): Keep overlay, wait for Firebase
-    console.log('SmartLoadingOverlay: No guest data, waiting for Firebase Auth...');
-    return false; // Indicates we need to wait for auth
+    console.log(
+      isGuest
+        ? 'SmartLoadingOverlay: Guest data present, waiting for auth resolution'
+        : 'SmartLoadingOverlay: No guest data, waiting for Firebase Auth...'
+    );
+    return isGuest;
   }
 
   // ============================================
@@ -262,7 +199,6 @@
   window.SmartLoadingOverlay = {
     // Call this ASAP on page load (before Firebase initializes)
     init: function() {
-      pageLoadTime = Date.now(); // Reset page load time on init
       showOverlay();
       const bypassed = runSmartDetection();
       return bypassed;
@@ -270,26 +206,19 @@
 
     // Call this when Firebase Auth state is resolved (user or null)
     onAuthResolved: function(user) {
-      authResolved = true;
-      
       if (!user) {
-        // No user signed in - treat as guest, wait for settling
-        console.log('SmartLoadingOverlay: Auth resolved - no user, will dismiss after stabilization');
-        hasCheckedGuest = true; // Mark as checked so we can dismiss
-        startSettlingDelay();
+        console.log('SmartLoadingOverlay: Auth resolved - no user, dismissing');
+        scheduleDismiss();
         return;
       }
       
-      // User exists - wait for data to load
       console.log('SmartLoadingOverlay: Auth resolved - user found, waiting for data...');
-      // Don't hide yet - wait for onUserDataLoaded
     },
 
-    // Call this when user profile/words data is fully loaded from Firebase
+    // Call this when user words data is fully loaded from Firebase
     onUserDataLoaded: function() {
-      userDataLoaded = true;
-      console.log('SmartLoadingOverlay: User data loaded, will dismiss after stabilization');
-      startSettlingDelay();
+      console.log('SmartLoadingOverlay: User data loaded, dismissing');
+      scheduleDismiss();
     },
 
     // Force hide (emergency fallback)
@@ -759,6 +688,57 @@ const DAILY_QUEST_DEFS = [
   { id: 'openLoot', label: 'افتح صندوق اللوت اليومي', reward: 0, icon: 'fa-box-open' },
 ];
 
+const ONBOARDING_INTRO_QUEST_DEFS = [
+  { id: 'introSearch', label: 'ابحث عن أول كلمة إلك في صندوق البحث.', reward: 0, icon: 'fa-magnifying-glass', introOnly: true },
+  { id: 'introAdd', label: 'ضيف الكلمة لقاموسك عشان تفتح أولى ميزات الموقع.', reward: 0, icon: 'fa-plus', introOnly: true },
+];
+
+const EMPTY_ONBOARDING_STORAGE_KEY = 'hasCompletedOnboarding';
+
+const EMPTY_ONBOARDING_COPY = {
+  questTip: '🎯 ابدأ من هون! عندك مهام ترحيبية بسيطة بتستناك.',
+  searchTip: '💡 محتار بأول كلمة؟ جرب اكتب Sword أو Book وشوف السحر كيف بيصير! ⚔️',
+  firstWordToast: 'شوف! زادت نقاط خبرتك الـ XP.. اضغط على صورتك فوق ع اليمين وشوف كم صارت! 🔥',
+  treasureUnlock: '🔓 انفتحت لك ميزة الصندوق! روح شوف خانة المكافآت بالأسفل وافتح صندوقك اليومي لتكسب مكافآت جديدة وتثبت حماسلك!',
+};
+
+let emptyOnboardingState = {
+  active: false,
+  phase: 0,
+  questTip: null,
+  searchTip: null,
+  repositionHandler: null,
+};
+
+function hasCompletedEmptyOnboarding() {
+  return localStorage.getItem(EMPTY_ONBOARDING_STORAGE_KEY) === 'true';
+}
+
+function getDictionaryWordCount() {
+  return Array.isArray(window.words) ? window.words.length : 0;
+}
+
+function shouldRunEmptyOnboarding() {
+  if (hasCompletedEmptyOnboarding()) return false;
+  if (getDictionaryWordCount() > 0) return false;
+  if (document.documentElement.classList.contains('onboarding-active')) return false;
+  return true;
+}
+
+function isIntroQuestMode() {
+  return shouldRunEmptyOnboarding();
+}
+
+function getActiveQuestDefs() {
+  return isIntroQuestMode() ? ONBOARDING_INTRO_QUEST_DEFS : DAILY_QUEST_DEFS;
+}
+
+function canStartEmptyOnboardingNow() {
+  if (isInitialLoad || window.isInitialLoad) return false;
+  if (window.__initialFeatureLoadPending instanceof Set && window.__initialFeatureLoadPending.has('words')) return false;
+  return true;
+}
+
 function getDailyQuestState() {
   return loadJSON(getDailyQuestStorageKey(), { claimed: {}, flags: {} });
 }
@@ -774,6 +754,14 @@ function saveDailyQuestState(state) {
 }
 
 function isDailyQuestDone(id) {
+  if (id === 'introSearch') {
+    const wordInput = document.getElementById('wordInput');
+    const suggestions = document.getElementById('suggestionsList');
+    const hasInput = Boolean(wordInput?.value.trim());
+    const hasSuggestions = Boolean(suggestions?.querySelector('.sug-item, .suggestion-item, li, button'));
+    return hasInput || hasSuggestions;
+  }
+  if (id === 'introAdd') return getDictionaryWordCount() >= 1;
   const s = getDailyQuestState();
   if (id === 'add3') return getDailyCount() >= 3;
   if (id === 'perfectQuiz') return Boolean(s.flags.perfectQuiz);
@@ -790,8 +778,8 @@ function markDailyQuestFlag(flag) {
 }
 
 function claimDailyQuest(id) {
-  const def = DAILY_QUEST_DEFS.find(q => q.id === id);
-  if (!def || !isDailyQuestDone(id)) return;
+  const def = getActiveQuestDefs().find(q => q.id === id);
+  if (!def || def.introOnly || !isDailyQuestDone(id)) return;
   const s = getDailyQuestState();
   if (s.claimed[id]) return;
   s.claimed[id] = true;
@@ -828,8 +816,9 @@ window.toggleDailyQuestsSheet = function() {
 };
 
 window.closeDailyQuestsSheet = function(silent) {
+  const sheet = document.getElementById('dailyQuestsSheet');
+  const wasOpen = sheet?.classList.contains('open');
   const close = () => {
-    const sheet = document.getElementById('dailyQuestsSheet');
     const backdrop = document.getElementById('dailyQuestsBackdrop');
     const btn = document.getElementById('dailyQuestsBtn');
     if (!sheet) return;
@@ -838,6 +827,9 @@ window.closeDailyQuestsSheet = function(silent) {
     sheet.setAttribute('aria-hidden', 'true');
     btn?.setAttribute('aria-expanded', 'false');
     document.body.classList.remove('daily-quests-open');
+    if (wasOpen && emptyOnboardingState.active && emptyOnboardingState.phase === 1) {
+      startEmptyOnboardingPhase2();
+    }
   };
   if (silent) close();
   else closeRouteEntry('overlay', 'quests', close);
@@ -846,18 +838,26 @@ window.closeDailyQuestsSheet = function(silent) {
 function updateDailyQuestsBadge() {
   const badge = document.getElementById('dailyQuestsBadge');
   if (!badge) return;
-  const done = DAILY_QUEST_DEFS.filter(q => isDailyQuestDone(q.id)).length;
-  badge.textContent = done + '/' + DAILY_QUEST_DEFS.length;
+  const defs = getActiveQuestDefs();
+  const done = defs.filter(q => isDailyQuestDone(q.id)).length;
+  badge.textContent = done + '/' + defs.length;
   const btn = document.getElementById('dailyQuestsBtn');
-  if (btn) btn.classList.toggle('has-pending', done < DAILY_QUEST_DEFS.length);
+  if (btn) btn.classList.toggle('has-pending', done < defs.length);
 }
 
 function renderDailyQuests() {
   const list = document.getElementById('dailyQuestsList');
   if (!list) return;
   updateDailyQuestsBadge();
+  const defs = getActiveQuestDefs();
+  const hint = document.getElementById('dailyQuestsResetHint');
+  if (hint) {
+    hint.textContent = isIntroQuestMode()
+      ? 'مهام ترحيبية بسيطة — ابدأ من أول خطوة وكمّل على مزاجك'
+      : 'تتجدد كل يوم — اضغط المهمة المكتملة لاستلام XP';
+  }
   const state = getDailyQuestState();
-  list.innerHTML = DAILY_QUEST_DEFS.map(q => {
+  list.innerHTML = defs.map(q => {
     const done = isDailyQuestDone(q.id);
     const claimed = Boolean(state.claimed[q.id]);
     const rewardTxt = q.reward > 0 ? '+' + q.reward + ' XP' : '✓';
@@ -869,6 +869,8 @@ function renderDailyQuests() {
   }).join('');
   list.querySelectorAll('.daily-quest-item.done').forEach(el => {
     const id = el.dataset.quest;
+    const def = defs.find((q) => q.id === id);
+    if (def?.introOnly) return;
     const st = getDailyQuestState();
     if (!st.claimed[id]) {
       el.style.cursor = 'pointer';
@@ -876,6 +878,187 @@ function renderDailyQuests() {
     }
   });
 }
+
+function unbindEmptyOnboardingReposition() {
+  if (!emptyOnboardingState.repositionHandler) return;
+  window.removeEventListener('resize', emptyOnboardingState.repositionHandler);
+  window.removeEventListener('scroll', emptyOnboardingState.repositionHandler, true);
+  emptyOnboardingState.repositionHandler = null;
+}
+
+function positionEmptyOnboardingTooltip(tip, anchor, placement = 'above') {
+  if (!tip || !anchor) return;
+  tip.classList.remove('placement-above', 'placement-below', 'placement-below-bar');
+  const width = tip.offsetWidth || 280;
+  const height = tip.offsetHeight || 72;
+
+  if (placement === 'below-bar') {
+    const topBar = document.getElementById('legendTopBar') || anchor.closest('.legend-top-bar');
+    const barRect = topBar?.getBoundingClientRect();
+    const btnRect = anchor.getBoundingClientRect();
+    if (!barRect) return;
+    tip.classList.add('placement-below-bar');
+    let top = barRect.bottom + 10;
+    let left = btnRect.left + btnRect.width / 2 - width / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+    top = Math.max(barRect.bottom + 8, Math.min(top, window.innerHeight - height - 12));
+    tip.style.top = `${top}px`;
+    tip.style.left = `${left}px`;
+    const arrowLeft = btnRect.left + btnRect.width / 2 - left;
+    tip.style.setProperty('--tip-arrow-left', `${arrowLeft}px`);
+    return;
+  }
+
+  tip.classList.add(placement === 'below' ? 'placement-below' : 'placement-above');
+  const rect = anchor.getBoundingClientRect();
+  let top = placement === 'below' ? rect.bottom + 14 : rect.top - height - 14;
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+  top = Math.max(12, Math.min(top, window.innerHeight - height - 12));
+  tip.style.top = `${top}px`;
+  tip.style.left = `${left}px`;
+}
+
+function bindEmptyOnboardingReposition(tip, anchor, placement) {
+  unbindEmptyOnboardingReposition();
+  const handler = () => positionEmptyOnboardingTooltip(tip, anchor, placement);
+  emptyOnboardingState.repositionHandler = handler;
+  window.addEventListener('resize', handler);
+  window.addEventListener('scroll', handler, true);
+}
+
+function createEmptyOnboardingTooltip(text, anchor, placement = 'above') {
+  const tip = document.createElement('div');
+  tip.className = 'empty-onboarding-tip';
+  tip.setAttribute('role', 'tooltip');
+  tip.innerHTML = `<span class="empty-onboarding-tip-inner">${text}</span>`;
+  document.body.appendChild(tip);
+  positionEmptyOnboardingTooltip(tip, anchor, placement);
+  requestAnimationFrame(() => {
+    positionEmptyOnboardingTooltip(tip, anchor, placement);
+    tip.classList.add('visible');
+  });
+  bindEmptyOnboardingReposition(tip, anchor, placement);
+  return tip;
+}
+
+function removeEmptyOnboardingTooltip(tip, onDone) {
+  if (!tip) {
+    onDone?.();
+    return;
+  }
+  tip.classList.remove('visible');
+  tip.classList.add('fade-out');
+  const finish = () => {
+    tip.remove();
+    onDone?.();
+  };
+  tip.addEventListener('transitionend', finish, { once: true });
+  setTimeout(finish, 380);
+}
+
+function hideEmptyOnboardingQuestTooltip(onDone) {
+  if (!emptyOnboardingState.questTip) {
+    onDone?.();
+    return;
+  }
+  const tip = emptyOnboardingState.questTip;
+  emptyOnboardingState.questTip = null;
+  removeEmptyOnboardingTooltip(tip, onDone);
+}
+
+function hideEmptyOnboardingSearchTooltip() {
+  if (!emptyOnboardingState.searchTip) return;
+  const tip = emptyOnboardingState.searchTip;
+  emptyOnboardingState.searchTip = null;
+  removeEmptyOnboardingTooltip(tip);
+}
+
+function hideAllEmptyOnboardingTooltips() {
+  hideEmptyOnboardingQuestTooltip();
+  hideEmptyOnboardingSearchTooltip();
+  unbindEmptyOnboardingReposition();
+}
+
+function bindEmptyOnboardingSearchDismiss() {
+  const wordInput = document.getElementById('wordInput');
+  if (!wordInput || wordInput.dataset.emptyOnboardingBound === '1') return;
+  wordInput.dataset.emptyOnboardingBound = '1';
+  const dismiss = () => {
+    if (emptyOnboardingState.phase === 2) hideEmptyOnboardingSearchTooltip();
+  };
+  wordInput.addEventListener('focus', dismiss);
+  wordInput.addEventListener('input', dismiss);
+}
+
+function startEmptyOnboardingPhase1() {
+  if (!shouldRunEmptyOnboarding() || emptyOnboardingState.active) return;
+  const btn = document.getElementById('dailyQuestsBtn');
+  if (!btn) return;
+  emptyOnboardingState.active = true;
+  emptyOnboardingState.phase = 1;
+  emptyOnboardingState.questTip = createEmptyOnboardingTooltip(EMPTY_ONBOARDING_COPY.questTip, btn, 'below-bar');
+  updateDailyQuestsBadge();
+}
+
+function startEmptyOnboardingPhase2() {
+  if (!emptyOnboardingState.active || emptyOnboardingState.phase !== 1) return;
+  const wordInput = document.getElementById('wordInput') || document.getElementById('normalSearchZone');
+  if (!wordInput) return;
+  hideEmptyOnboardingQuestTooltip(() => {
+    if (!shouldRunEmptyOnboarding()) return;
+    emptyOnboardingState.phase = 2;
+    emptyOnboardingState.searchTip = createEmptyOnboardingTooltip(
+      EMPTY_ONBOARDING_COPY.searchTip,
+      wordInput,
+      'below'
+    );
+    bindEmptyOnboardingSearchDismiss();
+  });
+}
+
+function highlightTreasureDockForOnboarding() {
+  const btn = document.querySelector('.legend-dock-btn[data-dock-view="treasure"]');
+  if (!btn) return;
+  btn.classList.remove('pulse-onboarding-highlight');
+  void btn.offsetWidth;
+  btn.classList.add('pulse-onboarding-highlight');
+  setTimeout(() => btn.classList.remove('pulse-onboarding-highlight'), 4200);
+}
+
+function completeEmptyOnboardingFirstWord() {
+  if (hasCompletedEmptyOnboarding()) return;
+  hideAllEmptyOnboardingTooltips();
+  emptyOnboardingState.active = false;
+  emptyOnboardingState.phase = 3;
+  showToast(EMPTY_ONBOARDING_COPY.firstWordToast, 'success', 5000);
+  setTimeout(() => {
+    pushNotification(EMPTY_ONBOARDING_COPY.treasureUnlock, 'success');
+    refreshFeatureUnlockUI();
+    highlightTreasureDockForOnboarding();
+    localStorage.setItem(EMPTY_ONBOARDING_STORAGE_KEY, 'true');
+    emptyOnboardingState.phase = 0;
+    updateDailyQuestsBadge();
+    if (document.getElementById('dailyQuestsSheet')?.classList.contains('open')) renderDailyQuests();
+  }, 5200);
+}
+
+function notifyDictionaryWordAdded() {
+  if (getDictionaryWordCount() !== 1) return;
+  if (hasCompletedEmptyOnboarding()) return;
+  completeEmptyOnboardingFirstWord();
+}
+
+window.tryStartEmptyOnboarding = function() {
+  if (!canStartEmptyOnboardingNow() || !shouldRunEmptyOnboarding()) return;
+  if (emptyOnboardingState.active) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (!canStartEmptyOnboardingNow() || !shouldRunEmptyOnboarding() || emptyOnboardingState.active) return;
+      startEmptyOnboardingPhase1();
+    });
+  });
+};
 
 // ── زر الرجوع (عوالم ← كلمات صعبة / قواميس) ──
 let viewBackTarget = 'worlds';
@@ -948,6 +1131,7 @@ const LEGACY_DICTIONARY_KEY = 'lootlinguaDict';
 const WORDS_NORMAL_PREFIX = 'words_normal_';
 const WORDS_GAMER_PREFIX = 'words_gamer_';
 const GUEST_MIGRATION_HANDLED_KEY = 'lootlinguaGuestMigrationHandled';
+const GUEST_MIGRATION_COMPLETE_KEY = 'lootlingua_migration_complete';
 const GUEST_DATA_DIRTY_KEY = 'lootlinguaGuestDataDirty';
 const GUEST_PROFILE_DIRTY_KEYS = new Set([
   'userXP',
@@ -994,6 +1178,83 @@ function markGuestMigrationHandled(user, status) {
 
 function hasHandledGuestMigration() {
   return Boolean(localStorage.getItem(GUEST_MIGRATION_HANDLED_KEY));
+}
+
+function hasHandledGuestMigrationForUser(uid) {
+  if (!uid) return hasHandledGuestMigration();
+  try {
+    const raw = localStorage.getItem(GUEST_MIGRATION_HANDLED_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    return data.uid === uid;
+  } catch {
+    return hasHandledGuestMigration();
+  }
+}
+
+function isGuestMigrationComplete(uid) {
+  if (!uid) return localStorage.getItem(GUEST_MIGRATION_COMPLETE_KEY) === 'true';
+  try {
+    const raw = localStorage.getItem(GUEST_MIGRATION_COMPLETE_KEY);
+    if (!raw) return false;
+    if (raw === 'true') return true;
+    const data = JSON.parse(raw);
+    return data.uid === uid;
+  } catch {
+    return localStorage.getItem(GUEST_MIGRATION_COMPLETE_KEY) === 'true';
+  }
+}
+
+function markGuestMigrationCompleteFlag(user, status) {
+  localStorage.setItem(GUEST_MIGRATION_COMPLETE_KEY, JSON.stringify({
+    uid: user?.uid || '',
+    status,
+    at: Date.now()
+  }));
+  markGuestMigrationHandled(user, status);
+  localStorage.removeItem(GUEST_DATA_DIRTY_KEY);
+  window.__guestMigrationSessionComplete = true;
+}
+
+function purgeStaleGuestLocalData() {
+  localStorage.removeItem(getWordsStorageKey('normal', 'guest'));
+  localStorage.removeItem(getWordsStorageKey('gamer', 'guest'));
+  localStorage.removeItem(LEGACY_DICTIONARY_KEY);
+  localStorage.removeItem(GUEST_DATA_DIRTY_KEY);
+  GUEST_PROFILE_DIRTY_KEYS.forEach((key) => localStorage.removeItem(key));
+  Object.keys(localStorage).forEach((key) => {
+    if (GUEST_PROFILE_DIRTY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+      localStorage.removeItem(key);
+    }
+  });
+  if (typeof clearGuestSearchLocks === 'function') clearGuestSearchLocks();
+}
+
+function hasUserWordsCache(uid) {
+  if (!uid) return false;
+  return localStorage.getItem(getWordsStorageKey('normal', uid)) !== null;
+}
+
+function shouldSkipGuestMigrationPrompt(user) {
+  if (!user?.uid) return true;
+  if (window.__guestMigrationSessionComplete) return true;
+  if (isGuestMigrationComplete(user.uid)) {
+    purgeStaleGuestLocalData();
+    return true;
+  }
+  if (hasHandledGuestMigrationForUser(user.uid)) {
+    purgeStaleGuestLocalData();
+    return true;
+  }
+  if (window._profileLoaded) {
+    purgeStaleGuestLocalData();
+    return true;
+  }
+  if (hasSignedInUser() && hasUserWordsCache(user.uid) && !hasDirtyGuestData()) {
+    purgeStaleGuestLocalData();
+    return true;
+  }
+  return false;
 }
 
 function hasDirtyGuestData() {
@@ -1106,6 +1367,7 @@ window.finishInitialFeatureLoad = function() {
   window.isInitialLoad = false;
   window.__suppressUnlockNotices = false;
   window.__initialFeatureLoadPending?.clear?.();
+  if (typeof tryStartEmptyOnboarding === 'function') tryStartEmptyOnboarding();
 };
 window.markInitialFeatureLoadPartDone = function(part) {
   if (part && window.__initialFeatureLoadPending instanceof Set) {
@@ -1246,7 +1508,10 @@ function getUnlockProgressSnapshot() {
 function computeDefaultUnlockedFeatures() {
   const p = getUnlockProgressSnapshot();
   const u = new Set(['personal', 'stats']);
-  if (p.wordCount >= 1) u.add('starred');
+  if (p.wordCount >= 1) {
+    u.add('starred');
+    u.add('treasure');
+  }
   if (p.wordCount >= 2 || p.userXP >= 10) u.add('minecraft');
   if (p.wordCount >= 2 || p.userXP >= 10) u.add('pubg');
   if (p.wordCount >= 5) u.add('quiz');
@@ -1322,6 +1587,17 @@ const UNLOCK_EXPLAIN = {
       return p.wordCount >= need
         ? `تقدّمك: ${p.wordCount} كلمة (تم استيفاء الشرط).`
         : `تقدّمك: ${p.wordCount} من ${need} كلمات في القاموس.`;
+    },
+  },
+  treasure: {
+    title: 'صندوق المكافآت',
+    why: 'صندوق المكافآت يفتح بعد ما تضيف أول كلمة لقاموسك.',
+    how: 'ابحث عن كلمة وأضفها لقاموسك الشخصي.',
+    progress: (p) => {
+      const need = 1;
+      return p.wordCount >= need
+        ? `تقدّمك: ${p.wordCount} كلمة (تم استيفاء الشرط).`
+        : `تقدّمك: ${p.wordCount} من ${need} كلمة في القاموس.`;
     },
   },
 };
@@ -2892,20 +3168,24 @@ window.prepareGuestMigrationForUser = function(user) {
     return window.__guestMigrationPromise;
   }
 
+  window.__guestMigrationUid = user.uid;
+
+  if (shouldSkipGuestMigrationPrompt(user)) {
+    window.__guestMigrationPromise = Promise.resolve('none');
+    return window.__guestMigrationPromise;
+  }
+
   const words = getGuestMigrationWords();
   const profile = getGuestProgressSnapshot();
   const hasGuestData = words.length > 0 || hasGuestProgress(profile);
-  const shouldPrompt = hasGuestData && (hasDirtyGuestData() || !hasHandledGuestMigration());
-  window.__guestMigrationUid = user.uid;
+  const shouldPrompt = hasGuestData && (hasDirtyGuestData() || !hasHandledGuestMigrationForUser(user.uid));
   window.__guestMigrationSummary = { words, profile, user };
 
   if (!shouldPrompt) {
     if (hasGuestProgress(profile)) {
       window.__acceptedGuestProfileMigration = { uid: user.uid, profile };
     }
-    if (hasGuestData && hasHandledGuestMigration() && !hasDirtyGuestData()) {
-      clearGuestWordsStorage();
-    }
+    if (hasGuestData) purgeStaleGuestLocalData();
     window.__guestMigrationPromise = Promise.resolve('none');
     return window.__guestMigrationPromise;
   }
@@ -2921,6 +3201,8 @@ window.confirmGuestMigration = async function() {
   const summary = window.__guestMigrationSummary;
   const user = summary?.user || window.auth?.currentUser;
   if (!summary || !user) return;
+
+  markGuestMigrationCompleteFlag(user, 'accepted');
 
   const accept = document.getElementById('guestMigrationAcceptBtn');
   const decline = document.getElementById('guestMigrationDeclineBtn');
@@ -2956,9 +3238,8 @@ window.confirmGuestMigration = async function() {
     }
 
     writeWordsToStorage(window.words, 'normal', user.uid);
-    clearGuestWordsStorage();
+    purgeStaleGuestLocalData();
     window.__acceptedGuestProfileMigration = { uid: user.uid, profile: summary.profile };
-    markGuestMigrationHandled(user, 'accepted');
     saveAndRender();
     hideModal('guestMigrationModal');
     showToast(uploaded > 0 ? `تم نقل ${uploaded} كلمات لحسابك` : 'ما في كلمات جديدة للنقل، وتم حفظ تقدمك', 'success', 4200);
@@ -2986,9 +3267,10 @@ window.declineGuestMigration = function() {
     showToast('اضغط تأكيد مرة ثانية إذا بدك تبدأ من جديد بدون نقل.', 'warning', 4200);
     return;
   }
-  clearGuestWordsStorage();
+  const user = window.auth?.currentUser;
+  markGuestMigrationCompleteFlag(user, 'declined');
+  purgeStaleGuestLocalData();
   resetGuestProgressState();
-  markGuestMigrationHandled(window.auth?.currentUser, 'declined');
   hideModal('guestMigrationModal');
   showToast('تم تجاهل بيانات الضيف وبدينا صفحة جديدة.', 'info', 3600);
   window.__resolveGuestMigration?.('declined');
@@ -3240,6 +3522,7 @@ function updateXP(amount) {
   if (!hasSignedInUser()) markGuestDataDirty();
   if (window.saveProfileToCloud) window.saveProfileToCloud();
   renderXPBar();
+  if (isJsonImportBatchActive()) return;
   if (amount > 0 && getRank(userXP).label !== oldRank.label)
     setTimeout(()=>showRankUp(getRank(userXP)), 400);
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(false);
@@ -3268,6 +3551,7 @@ function renderXPBar() {
 }
 
 function showXPBadge(amount, anchorId, isNeg) {
+  if (isJsonImportBatchActive()) return;
   const b = document.getElementById('xpBadge');
   if (!b) return;
   b.textContent      = (isNeg?'-':'+')+amount+' XP';
@@ -3319,7 +3603,7 @@ function checkAndUpdateStreak() {
 
   if (lastActivity === yesterday) {
     dailyStreak++;
-    setTimeout(()=>showToast('Streak '+dailyStreak+' يوم!'), 1000);
+    if (!isJsonImportBatchActive()) setTimeout(()=>showToast('Streak '+dailyStreak+' يوم!'), 1000);
   } else if (lastActivity !== '') {
     const freezes = typeof getStreakFreezeCount === 'function' ? getStreakFreezeCount() : loadInt('lootlinguaStreakFreezes', 0);
     if (freezes > 0) {
@@ -3327,8 +3611,10 @@ function checkAndUpdateStreak() {
       else saveInt('lootlinguaStreakFreezes', freezes - 1);
       saveInt('lootlinguaFreezeSaves', loadInt('lootlinguaFreezeSaves', 0) + 1);
       dailyStreak = Math.max(1, dailyStreak);
-      setTimeout(() => showToast('Streak Freeze اشتغل وأنقذ السلسلة. رجعت قبل ما تنكسر!', 'success', 5600), 900);
-      if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
+      if (!isJsonImportBatchActive()) {
+        setTimeout(() => showToast('Streak Freeze اشتغل وأنقذ السلسلة. رجعت قبل ما تنكسر!', 'success', 5600), 900);
+      }
+      if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(!isJsonImportBatchActive());
     } else {
       dailyStreak = 1;
     }
@@ -3368,15 +3654,25 @@ function getDailyCount() {
 }
 
 function incrementDailyCount() {
+  incrementDailyCountBy(1);
+}
+
+function incrementDailyCountBy(amount = 1) {
+  const n = Math.max(0, Number(amount) || 0);
+  if (!n) return;
   const today = todayStr();
   const map   = loadJSON('activityMap', {});
-  map[today]  = (map[today] || 0) + 1;
+  const before = map[today] || 0;
+  map[today]  = before + n;
   saveJSON('activityMap', map);
   if (!hasSignedInUser()) markGuestDataDirty();
   if (window.saveProfileToCloud) window.saveProfileToCloud();
   if (typeof updateDailyQuestsBadge === 'function') updateDailyQuestsBadge();
   renderDailyGoal();
-  if (map[today] === DAILY_GOAL) setTimeout(launchConfetti, 400);
+  const after = map[today];
+  if (!isJsonImportBatchActive() && before < DAILY_GOAL && after >= DAILY_GOAL) {
+    setTimeout(launchConfetti, 400);
+  }
 }
 
 function decrementDailyCount() {
@@ -3519,6 +3815,9 @@ function saveAndRender() {
   persistDictionary();
   renderLimit = 20; // العودة للحد الأول عند الحفظ
   render();
+  if (isJsonImportBatchActive()) return;
+  if (typeof tryStartEmptyOnboarding === 'function') tryStartEmptyOnboarding();
+  if (typeof notifyDictionaryWordAdded === 'function') notifyDictionaryWordAdded();
 }
 
 function clearInputs() {
@@ -4058,6 +4357,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
       btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>تمت الإضافة</span>';
       btn.classList.add('sug-added');
     }
+    if (added && typeof notifyDictionaryWordAdded === 'function') notifyDictionaryWordAdded();
   } catch (err) {
     console.error('addAiMeaningCore:', err);
     pushNotification('ما قدرنا نضيف الكلمة. جرّب مرة ثانية.', 'danger');
@@ -4308,6 +4608,10 @@ window.fetchSuggestions = async function() {
     loadingTimers.forEach(clearTimeout);
     btn.disabled  = false;
     syncAddFormExpanded();
+    if (isIntroQuestMode()) {
+      updateDailyQuestsBadge();
+      if (document.getElementById('dailyQuestsSheet')?.classList.contains('open')) renderDailyQuests();
+    }
   }
 };
 
@@ -4489,38 +4793,302 @@ function showBackupHelp(type, event) {
 // ═══════════════════════════════════════════════════════
 // Export / Import
 // ═══════════════════════════════════════════════════════
+const JSON_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+const JSON_IMPORT_MAX_WORDS = 500;
+const JSON_IMPORT_MAX_FIELD = 500;
+const JSON_IMPORT_FEATURE_PRIORITY = ['quiz', 'pubg', 'minecraft', 'treasure', 'starred'];
+
+function isJsonImportBatchActive() {
+  return window.__jsonImportBatchActive === true;
+}
+
+function seedFeatureUnlockBaseline() {
+  const unlocked = resolveUnlockedFeatures();
+  const currentLocks = {};
+  document.querySelectorAll('.nav-link[data-feature]').forEach((link) => {
+    const id = link.getAttribute('data-feature');
+    if (id) currentLocks[id] = !unlocked.has(id);
+  });
+  window.__navLockPrev = { ...currentLocks };
+  window.__navLockAnimSeeded = true;
+}
+
+function getHighestNewlyUnlockedFeature(beforeSet, afterSet) {
+  const newly = [...afterSet].filter((id) => !beforeSet.has(id));
+  if (!newly.length) return null;
+  for (const id of JSON_IMPORT_FEATURE_PRIORITY) {
+    if (newly.includes(id)) return id;
+  }
+  return newly[newly.length - 1];
+}
+
+function sanitizeImportText(value, maxLen = JSON_IMPORT_MAX_FIELD) {
+  if (value == null) return '';
+  let text = String(value);
+  if (text.length > maxLen) text = text.slice(0, maxLen);
+  text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  return text.trim();
+}
+
+function normalizeImportedWordEntry(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+  if (Object.prototype.hasOwnProperty.call(item, '__proto__') ||
+      Object.prototype.hasOwnProperty.call(item, 'constructor') ||
+      Object.prototype.hasOwnProperty.call(item, 'prototype')) {
+    return null;
+  }
+  const word = sanitizeImportText(item.word || item.text);
+  if (!word) return null;
+  const forgetCount = Number.parseInt(item.forgetCount, 10);
+  const xpValue = Number.parseInt(item.xpValue, 10);
+  return {
+    id: sanitizeImportText(item.id, 80) || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    word,
+    meaning: sanitizeImportText(item.meaning),
+    example: sanitizeImportText(item.example, 1000),
+    category: sanitizeImportText(item.category) || 'عام',
+    starred: Boolean(item.starred),
+    forgetCount: Number.isFinite(forgetCount) ? Math.max(0, Math.min(999, forgetCount)) : 0,
+    xpValue: Number.isFinite(xpValue) ? Math.max(1, Math.min(50, xpValue)) : 3,
+    createdAt: typeof item.createdAt === 'string' ? sanitizeImportText(item.createdAt, 40) : null,
+  };
+}
+
+function parseImportJsonWords(rawText) {
+  if (typeof rawText !== 'string' || rawText.length > JSON_IMPORT_MAX_BYTES) {
+    throw new Error('size');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error('parse');
+  }
+  let entries = parsed;
+  if (!Array.isArray(entries) && parsed && typeof parsed === 'object') {
+    if (parsed.format && parsed.format !== 'lootlingua-dictionary') throw new Error('shape');
+    if (Array.isArray(parsed.words)) entries = parsed.words;
+  }
+  if (!Array.isArray(entries)) throw new Error('shape');
+  if (entries.length > JSON_IMPORT_MAX_WORDS) throw new Error('limit');
+  const words = [];
+  for (const entry of entries) {
+    const normalized = normalizeImportedWordEntry(entry);
+    if (normalized) words.push(normalized);
+  }
+  if (!words.length) throw new Error('empty');
+  return words;
+}
+
+function mergeImportedWords(importedWords) {
+  const existing = new Set(window.words.map((w) => normalizeWord(w.word)));
+  const batchSeen = new Set();
+  const toAdd = [];
+  for (const item of importedWords) {
+    const key = normalizeWord(item.word);
+    if (!key || existing.has(key) || batchSeen.has(key)) continue;
+    batchSeen.add(key);
+    existing.add(key);
+    const uid = window.auth?.currentUser?.uid;
+    toAdd.push({
+      ...item,
+      userId: uid || item.userId,
+    });
+  }
+  return toAdd;
+}
+
+async function uploadImportedWordsToCloud(words) {
+  const result = { uploaded: 0, failed: 0 };
+  if (!window.auth?.currentUser || !window.saveWordToCloud || !words.length) return result;
+  for (const item of words) {
+    try {
+      const realId = await window.saveWordToCloud(
+        item.word,
+        item.category || 'عام',
+        item.meaning || '',
+        item.example || ''
+      );
+      if (!realId) {
+        result.failed++;
+        continue;
+      }
+      item.id = realId;
+      const idx = window.words.findIndex((w) => normalizeWord(w.word) === normalizeWord(item.word));
+      if (idx >= 0) window.words[idx].id = realId;
+      result.uploaded++;
+    } catch (err) {
+      console.warn('import upload:', err);
+      result.failed++;
+    }
+  }
+  return result;
+}
+
+function settleOnboardingAfterJsonImport(wordsBefore, addedCount) {
+  if (wordsBefore > 0 || addedCount < 1 || hasCompletedEmptyOnboarding()) return;
+  hideAllEmptyOnboardingTooltips();
+  emptyOnboardingState.active = false;
+  emptyOnboardingState.phase = 0;
+  localStorage.setItem(EMPTY_ONBOARDING_STORAGE_KEY, 'true');
+  updateDailyQuestsBadge();
+  if (document.getElementById('dailyQuestsSheet')?.classList.contains('open')) renderDailyQuests();
+}
+
+function finalizeJsonImport(ctx, uploadResult) {
+  const added = ctx.added || 0;
+  const skipped = ctx.skipped || 0;
+  const totalXp = ctx.totalXp || 0;
+  const uploaded = uploadResult?.uploaded || 0;
+  const failed = uploadResult?.failed || 0;
+
+  evaluateTitleUnlocks(false);
+  window.__suppressUnlockNotices = true;
+  refreshFeatureUnlockUI();
+  seedFeatureUnlockBaseline();
+  window.__suppressUnlockNotices = false;
+
+  const endUnlocked = resolveUnlockedFeatures();
+  const endRank = getRank(userXP);
+  const endTitles = new Set(getTitleState().unlocked || []);
+  const newTitleDefs = TITLE_DEFS.filter((def) => endTitles.has(def.id) && !ctx.startTitles.has(def.id));
+
+  let toastParts = [`تم استيراد ${added} كلمة`];
+  if (skipped > 0) toastParts.push(`تجاوزنا ${skipped} مكررة`);
+  if (totalXp > 0) toastParts.push(`+${totalXp} XP`);
+  showToast(toastParts.join(' — '), 'success', 4800);
+
+  const featureId = getHighestNewlyUnlockedFeature(ctx.startUnlocked, endUnlocked);
+  if (featureId) {
+    const featureTitle = UNLOCK_EXPLAIN[featureId]?.title || 'ميزة جديدة';
+    setTimeout(() => {
+      playUnlockSound();
+      pushNotification(`🎉 انفتحت لك: ${featureTitle}`, 'success');
+    }, 450);
+  }
+
+  if (endRank.label !== ctx.startRank.label) {
+    setTimeout(() => showRankUp(endRank), 900);
+  }
+
+  if (newTitleDefs.length) {
+    const latestTitle = newTitleDefs[newTitleDefs.length - 1];
+    setTimeout(() => pushNotification(`🏅 لقب جديد: ${latestTitle.name}`, 'success'), 1300);
+  }
+
+  const dailyBefore = ctx.dailyCountBefore || 0;
+  const dailyAfter = getDailyCount();
+  if (dailyBefore < DAILY_GOAL && dailyAfter >= DAILY_GOAL) {
+    setTimeout(launchConfetti, 1100);
+  }
+
+  if (window.auth?.currentUser) {
+    setTimeout(() => {
+      if (uploaded > 0) {
+        pushNotification(
+          failed > 0
+            ? `☁️ رُفع ${uploaded} كلمة لحسابك (${failed} ما انرفعت)`
+            : `☁️ رُفع ${uploaded} كلمة لحسابك بنجاح`,
+          failed > 0 ? 'warning' : 'success'
+        );
+      } else if (failed > 0) {
+        pushNotification('☁️ ما قدرنا نرفع الكلمات للسحابة. بياناتك محفوظة محلياً.', 'warning');
+      }
+    }, 1700);
+  }
+
+  settleOnboardingAfterJsonImport(ctx.wordsBefore, added);
+
+  window.__suppressCloudWordsSnapshot = false;
+  if (typeof window.writeWordsToStorage === 'function') {
+    window.writeWordsToStorage(window.words, 'normal', window.auth?.currentUser?.uid);
+  }
+}
+
 window.exportData = function() {
-  const a  = document.createElement('a');
-  a.href   = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(window.words));
+  const payload = {
+    format: 'lootlingua-dictionary',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    words: Array.isArray(window.words) ? window.words : [],
+  };
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(payload, null, 2));
   a.download = 'lootlingua_dict.json';
   a.click();
 };
 
 window.importData = async function(event) {
-  const file = event.target.files[0];
+  const file = event.target.files?.[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!Array.isArray(imported)) throw new Error();
-      const merged = [...imported, ...window.words];
-      const seen   = new Map();
-      window.words = merged.filter(item => {
-        const key = (item.word || item.text || '').toLowerCase();
-        return seen.has(key) ? false : seen.set(key, true);
-      });
-      saveAndRender();
-      if (window.auth?.currentUser && window.saveWordToCloud) {
-        for (const item of imported)
-          await window.saveWordToCloud(item.word || item.text, item.category, item.meaning, item.example);
-        showToast("تم الاستيراد والرفع للسحابة");
-      } else {
-        showToast("تم الاستيراد");
-      }
-    } catch { showToast("خطأ في الملف، تأكد إنه JSON صحيح."); }
+  event.target.value = '';
+
+  if (!rateLimit('jsonImport', 5, 60000)) {
+    showToast('استنى شوي قبل ما تستورد ملف ثاني.');
+    return;
+  }
+  if (file.size > JSON_IMPORT_MAX_BYTES) {
+    showToast('الملف كبير زيادة. الحد الأقصى 2 ميغابايت.');
+    return;
+  }
+
+  let importedWords;
+  try {
+    importedWords = parseImportJsonWords(await file.text());
+  } catch (err) {
+    const code = err?.message || '';
+    if (code === 'limit') showToast(`الملف فيه أكثر من ${JSON_IMPORT_MAX_WORDS} كلمة. قسّمه لملفات أصغر.`);
+    else if (code === 'size') showToast('الملف كبير زيادة. الحد الأقصى 2 ميغابايت.');
+    else if (code === 'empty') showToast('ما لقينا كلمات صالحة في الملف.');
+    else showToast('خطأ في الملف. تأكد إنه JSON صحيح من LootLingua.');
+    return;
+  }
+
+  const toAdd = mergeImportedWords(importedWords);
+  if (!toAdd.length) {
+    showToast('ما في كلمات جديدة — إما كلها موجودة عندك أو مكررة بالملف.');
+    return;
+  }
+
+  const ctx = {
+    startXp: userXP,
+    startRank: getRank(userXP),
+    startUnlocked: new Set(resolveUnlockedFeatures()),
+    startTitles: new Set(getTitleState().unlocked || []),
+    wordsBefore: window.words.length,
+    dailyCountBefore: getDailyCount(),
+    added: toAdd.length,
+    skipped: importedWords.length - toAdd.length,
+    totalXp: toAdd.reduce((sum, w) => sum + (w.xpValue || 3), 0),
   };
-  reader.readAsText(file);
+
+  window.__jsonImportBatchActive = true;
+  window.__suppressUnlockNotices = true;
+  window.__suppressCloudWordsSnapshot = Boolean(window.auth?.currentUser);
+
+  try {
+    window.words = [...toAdd, ...window.words];
+
+    if (ctx.totalXp > 0) updateXP(ctx.totalXp);
+    incrementDailyCountBy(toAdd.length);
+    if (typeof checkAndUpdateStreak === 'function') checkAndUpdateStreak();
+
+    const uploadResult = await uploadImportedWordsToCloud(toAdd);
+
+    persistDictionary();
+    renderLimit = 20;
+    render();
+
+    finalizeJsonImport(ctx, uploadResult);
+  } catch (err) {
+    console.error('importData:', err);
+    showToast('صار خطأ أثناء الاستيراد. جرب مرة ثانية.');
+    window.__suppressCloudWordsSnapshot = false;
+  } finally {
+    window.__jsonImportBatchActive = false;
+    window.__suppressUnlockNotices = false;
+  }
 };
 
 
@@ -4820,7 +5388,7 @@ function evaluateTitleUnlocks(celebrate = false) {
   state.unlocked = [...unlocked];
   saveTitleState(state);
   if (newly.length && window.saveProfileToCloud) window.saveProfileToCloud();
-  if (newly.length && celebrate) {
+  if (newly.length && celebrate && !isJsonImportBatchActive()) {
     const first = newly[0];
     launchConfetti();
     showToast(`لقب جديد: ${first.name}`, 'success', 5200);
@@ -5570,6 +6138,11 @@ window.loadWorldsView = function() {
 
 // ── Treasure Full-Page View ──
 window.loadTreasureView = function() {
+  if (!isFeatureUnlocked('treasure')) {
+    openUnlockExplainModal('treasure');
+    refreshFeatureUnlockUI();
+    return;
+  }
   animateTreasureRoute('next');
   beginViewSwitch();
   saveCurrentViewScroll();
