@@ -461,11 +461,11 @@
   <!-- تصدير / استيراد -->
   <div class="backup-zone">
     <div class="backup-row">
-      <button class="btn-backup" onclick="exportData()"><i class="fa-solid fa-file-export" aria-hidden="true"></i> تصدير JSON</button>
+      <button class="btn-backup" onclick="exportData()"><i class="fa-solid fa-file-export" aria-hidden="true"></i> حفظ نسخة احتياطية</button>
       <button type="button" class="icon-circle help-btn" aria-label="شرح التصدير" title="شرح التصدير" onclick="showBackupHelp('export', event)"><i class="fa-solid fa-question" aria-hidden="true"></i></button>
     </div>
     <div class="backup-row">
-      <button class="btn-backup" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-file-import" aria-hidden="true"></i> استيراد JSON</button>
+      <button class="btn-backup" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-file-import" aria-hidden="true"></i> استيراد نسخة احتياطية</button>
       <button type="button" class="icon-circle help-btn" aria-label="شرح الاستيراد" title="شرح الاستيراد" onclick="showBackupHelp('import', event)"><i class="fa-solid fa-question" aria-hidden="true"></i></button>
     </div>
     <input type="file" id="importFile" style="display:none;" onchange="importData(event)">
