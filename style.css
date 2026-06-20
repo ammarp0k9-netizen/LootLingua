@@ -7350,11 +7350,13 @@ body.modal-scroll-locked {
   overscroll-behavior: none;
 }
 .profile-modal,
-.stats-overlay {
+.stats-overlay,
+.word-hunter-modal {
   overscroll-behavior: contain;
 }
 .profile-modal-sheet,
-.stats-overlay {
+.stats-overlay,
+.word-hunter-sheet {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
@@ -7408,10 +7410,11 @@ body.onboarding-active .onboarding-active-target {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 18px;
+  padding: clamp(8px, 2vw, 20px);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  overflow: hidden;
   transition: opacity 0.24s ease, visibility 0.24s ease;
 }
 .word-hunter-modal.open {
@@ -7429,8 +7432,8 @@ body.onboarding-active .onboarding-active-target {
 .word-hunter-sheet {
   position: relative;
   z-index: 1;
-  width: min(980px, 100%);
-  max-height: min(88vh, 820px);
+  width: min(1180px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -7506,22 +7509,25 @@ body.onboarding-active .onboarding-active-target {
   text-align: center;
 }
 .word-hunter-stage {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.18);
-  max-height: 70vh;
+  max-height: none;
+  padding: 8px;
+  overscroll-behavior: contain;
 }
 .word-hunter-image-wrap {
   position: relative;
-  width: max-content;
+  width: fit-content;
   max-width: 100%;
   margin: 0 auto;
 }
 .word-hunter-image-wrap img {
   display: block;
-  max-width: 100%;
-  max-height: 68vh;
+  max-width: min(100%, calc(100vw - 72px));
+  max-height: calc(100dvh - 190px);
   width: auto;
   height: auto;
   object-fit: contain;
@@ -7548,9 +7554,11 @@ body.onboarding-active .onboarding-active-target {
   box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3);
 }
 .word-hunter-popover {
-  position: absolute;
-  z-index: 4;
-  width: min(380px, calc(100vw - 48px));
+  position: fixed;
+  z-index: 10280;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(340px, calc(100dvh - 24px));
+  overflow: auto;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -7570,7 +7578,7 @@ body.onboarding-active .onboarding-active-target {
   margin: 0 0 10px;
   line-height: 1.6;
   font-size: 15px;
-  max-height: 120px;
+  max-height: 150px;
   overflow: auto;
 }
 .word-hunter-popover small {
@@ -7612,16 +7620,29 @@ body.onboarding-active .onboarding-active-target {
 
 /* Profile titles */
 .profile-title-line {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.15;
+}
+.profile-title-line #profileModalTitle {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.profile-modal-identity {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.profile-active-title-badge {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-}
-.profile-active-title-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  gap: 3px;
   max-width: 100%;
+  margin-top: 2px;
   padding: 3px 6px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 999px;
@@ -7629,6 +7650,9 @@ body.onboarding-active .onboarding-active-target {
   color: var(--text-white);
   font-size: 12px;
   font-weight: 800;
+}
+.profile-active-title-badge[hidden] {
+  display: none !important;
 }
 .hero-active-title-badge,
 .profile-active-title-badge {
@@ -7646,6 +7670,12 @@ body.onboarding-active .onboarding-active-target {
   place-items: center;
   color: var(--title-color, var(--accent));
   vertical-align: middle;
+}
+.profile-active-title-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
 }
 .hero-active-title-icon {
   color: var(--title-color, var(--accent));
@@ -7714,17 +7744,31 @@ body.onboarding-active .onboarding-active-target {
 @media (max-width: 768px) {
   .word-hunter-modal {
     align-items: stretch;
-    padding: 10px;
+    padding: 6px;
   }
   .word-hunter-sheet {
-    max-height: calc(100vh - 20px);
+    width: 100%;
+    max-height: calc(100dvh - 12px);
+    padding: 10px;
+    gap: 10px;
+  }
+  .word-hunter-header h2 {
+    font-size: 17px;
+  }
+  .word-hunter-header p {
+    font-size: 12px;
+  }
+  .word-hunter-dropzone {
+    min-height: 112px;
     padding: 14px;
   }
   .word-hunter-image-wrap img {
-    max-height: 60vh;
+    max-width: calc(100vw - 28px);
+    max-height: calc(100dvh - 142px);
   }
   .word-hunter-popover {
-    width: min(320px, calc(100vw - 36px));
+    width: min(340px, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
   }
 }
 
