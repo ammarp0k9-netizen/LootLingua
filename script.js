@@ -1739,6 +1739,7 @@ const WORD_DOM_WINDOW_SIZE = 48;
 const WORD_DOM_BUFFER = 8;
 const WORD_DOM_EDGE_BUFFER = 8;
 const WORD_RENDER_TRANSITION_MS = 48;
+const WORD_RENDER_SCROLL_THROTTLE_MS = 120;
 let wordVirtualState = {
   key: '',
   start: 0,
@@ -2662,6 +2663,17 @@ function closeRouteOverlays() {
     stats.classList.remove('show');
     stats.style.display = 'none';
     unlockBackgroundScroll('stats');
+  }
+  const wordHunterModal = document.getElementById('wordHunterModal');
+  if (wordHunterModal?.classList.contains('open')) {
+    if (typeof window.closeWordHunterModal === 'function') {
+      window.closeWordHunterModal();
+    } else {
+      wordHunterModal.classList.remove('open');
+      wordHunterModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('word-hunter-open');
+      unlockBackgroundScroll('wordHunter');
+    }
   }
   if (typeof closeDailyQuestsSheet === 'function') closeDailyQuestsSheet(true);
   if (typeof closeNotificationsPanel === 'function') closeNotificationsPanel(true);
@@ -4054,7 +4066,7 @@ const XP_RANKS = [
   {min:15,  max:39,       label:'Wanderer', iconClass:'fa-solid fa-compass', color:'var(--header-grad)'},
   {min:40,  max:79,       label:'Learner',  iconClass:'fa-solid fa-book-open', color:'var(--accent)'},
   {min:80,  max:149,      label:'Explorer', iconClass:'fa-solid fa-binoculars', color:'var(--accent2)'},
-  {min:150, max:249,      label:'Pro',      iconClass:'fa-solid fa-sword', color:'var(--success)'},
+  {min:150, max:249,      label:'Pro',      iconClass:'fa-solid fa-award', color:'var(--success)'},
   {min:250, max:399,      label:'Veteran',  iconClass:'fa-solid fa-shield-halved', color:'var(--success)'},
   {min:400, max:599,      label:'Elite',    iconClass:'fa-solid fa-fire', color:'var(--star)'},
   {min:600, max:899,      label:'Master',   iconClass:'fa-solid fa-star', color:'var(--star)'},
@@ -5546,6 +5558,7 @@ function setWordHunterStatus(message, loading = false) {
 window.openWordHunterModal = function() {
   const modal = document.getElementById('wordHunterModal');
   if (!modal) return;
+  lockBackgroundScroll('wordHunter');
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('word-hunter-open');
@@ -5559,6 +5572,7 @@ window.closeWordHunterModal = function() {
   modal.classList.remove('open');
   modal.setAttribute('aria-hidden', 'true');
   document.body.classList.remove('word-hunter-open');
+  unlockBackgroundScroll('wordHunter');
   resetWordHunterModal();
 };
 
@@ -5767,13 +5781,8 @@ async function handleWordHunterWordClick(event, btn) {
 
 function showWordHunterPopover(anchor, data) {
   const popover = document.getElementById('wordHunterPopover');
-  const wrap = document.getElementById('wordHunterImageWrap');
-  if (!popover || !wrap || !anchor) return;
+  if (!popover || !anchor) return;
   const anchorRect = anchor.getBoundingClientRect();
-  const wrapRect = wrap.getBoundingClientRect();
-  const anchorCenter = anchorRect.left - wrapRect.left + anchorRect.width / 2;
-  const anchorTop = anchorRect.top - wrapRect.top;
-  const anchorBottom = anchorRect.bottom - wrapRect.top;
   popover.hidden = false;
   const disabled = data.local || data.empty || wordExists(data.word);
   popover.innerHTML = data.loading
@@ -5790,22 +5799,21 @@ function showWordHunterPopover(anchor, data) {
       </button>
     `;
 
-  const popoverWidth = popover.offsetWidth || 360;
+  const margin = 12;
+  const popoverWidth = popover.offsetWidth || Math.min(360, window.innerWidth - 24);
   const popoverHeight = popover.offsetHeight || 220;
+  const anchorCenter = anchorRect.left + anchorRect.width / 2;
   const left = Math.max(
-    (popoverWidth / 2) + 8,
-    Math.min(anchorCenter, wrapRect.width - (popoverWidth / 2) - 8)
+    margin + (popoverWidth / 2),
+    Math.min(anchorCenter, window.innerWidth - margin - (popoverWidth / 2))
   );
-  const canFitBelow = anchorBottom + 10 + popoverHeight <= wrapRect.height;
-  const canFitAbove = anchorTop - 10 - popoverHeight >= 0;
+  const belowTop = anchorRect.bottom + 10;
+  const aboveTop = anchorRect.top - popoverHeight - 10;
+  const canFitBelow = belowTop + popoverHeight <= window.innerHeight - margin;
+  const canFitAbove = aboveTop >= margin;
   popover.style.left = `${left}px`;
-  if (!canFitBelow && canFitAbove) {
-    popover.style.top = `${anchorTop - 10}px`;
-    popover.style.transform = 'translate(-50%, -100%)';
-  } else {
-    popover.style.top = `${anchorBottom + 10}px`;
-    popover.style.transform = 'translateX(-50%)';
-  }
+  popover.style.top = `${canFitBelow ? belowTop : canFitAbove ? aboveTop : Math.max(margin, Math.min(belowTop, window.innerHeight - popoverHeight - margin))}px`;
+  popover.style.transform = 'translateX(-50%)';
 }
 
 window.addWordHunterResult = async function(event) {
@@ -7808,8 +7816,8 @@ function getWordWindowRange(total, listEl, resetWindow, scrollYOverride) {
   };
 }
 
-function renderWordCard(w, query) {
-  const ri   = window.words.findIndex(x => x.id === w.id);
+function renderWordCard(w, query, indexMap) {
+  const ri   = indexMap?.get(String(w.id)) ?? window.words.findIndex(x => x.id === w.id);
   const drag = isReorderMode
     ? `draggable="true" ondragstart="drag(event,${ri})" ondragover="allowDrop(event)" ondrop="drop(event,${ri})"`
     : '';
@@ -8031,6 +8039,7 @@ function render(options = {}) {
       : restoredPersonalScroll;
   const range = getWordWindowRange(filtered.length, listEl, resetWindow, scrollYOverride);
   const displayWords = filtered.slice(range.start, range.end);
+  const wordIndexMap = new Map(window.words.map((item, index) => [String(item.id), index]));
   const htmlKey = [
     renderKey,
     range.start,
@@ -8049,7 +8058,7 @@ function render(options = {}) {
     const bottomSpacer = range.bottomSpacer
       ? `<li class="virtual-list-spacer" aria-hidden="true" style="height:${Math.round(range.bottomSpacer)}px"></li>`
       : '';
-    listEl.innerHTML = topSpacer + displayWords.map(w => renderWordCard(w, query)).join('') + bottomSpacer;
+    listEl.innerHTML = topSpacer + displayWords.map(w => renderWordCard(w, query, wordIndexMap)).join('') + bottomSpacer;
     wordVirtualState.start = range.start;
     wordVirtualState.end = range.end;
     wordVirtualState.lastHtmlKey = htmlKey;
@@ -8164,6 +8173,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Virtualized Scroll Logic ─────────────────────────────
 let wordRenderScrollRaf = null;
+let wordRenderScrollTimer = null;
+let wordRenderLastScrollCheck = 0;
 function shouldRenderWordWindowForScroll() {
   const listEl = document.getElementById('list');
   if (!listEl) return false;
@@ -8190,6 +8201,40 @@ function getWordWindowBoundaryState(listEl) {
   return { ...state, aboveWindow, belowWindow, nearTop, nearBottom };
 }
 
+function runWordScrollWindowCheck() {
+  wordRenderScrollRaf = null;
+  wordRenderScrollTimer = null;
+  wordRenderLastScrollCheck = performance.now();
+
+  if (currentView !== 'personal' || isReorderMode) return;
+  if (wordVirtualState.programmaticScroll || wordVirtualState.isTransitioning) return;
+  if (!shouldRenderWordWindowForScroll()) return;
+
+  const listEl = document.getElementById('list');
+  const state = getWordWindowBoundaryState(listEl);
+  if (state && (state.aboveWindow || state.belowWindow)) {
+    const goingUp = state.aboveWindow;
+    const safeFirst = goingUp
+      ? Math.max(0, wordVirtualState.start)
+      : Math.max(0, wordVirtualState.end - state.visibleRows);
+    const pinnedY = state.listTop + (safeFirst * state.rowH);
+    if (requestWordWindowTransition(window.scrollY, pinnedY)) return;
+  }
+  render();
+}
+
+function scheduleWordScrollWindowCheck() {
+  if (wordRenderScrollRaf || wordRenderScrollTimer) return;
+  const elapsed = performance.now() - wordRenderLastScrollCheck;
+  const delay = Math.max(0, WORD_RENDER_SCROLL_THROTTLE_MS - elapsed);
+  const scheduleFrame = () => {
+    wordRenderScrollTimer = null;
+    wordRenderScrollRaf = requestAnimationFrame(runWordScrollWindowCheck);
+  };
+  if (delay > 0) wordRenderScrollTimer = setTimeout(scheduleFrame, delay);
+  else scheduleFrame();
+}
+
 window.addEventListener('scroll', () => {
   if (currentView !== 'personal' || isReorderMode) return;
   if (wordVirtualState.programmaticScroll) return;
@@ -8201,22 +8246,7 @@ window.addEventListener('scroll', () => {
     setWordProgrammaticScroll(pinnedY);
     return;
   }
-  if (!shouldRenderWordWindowForScroll()) return;
-  const listEl = document.getElementById('list');
-  const state = getWordWindowBoundaryState(listEl);
-  if (state && (state.aboveWindow || state.belowWindow)) {
-    const goingUp = state.aboveWindow;
-    const safeFirst = goingUp
-      ? Math.max(0, wordVirtualState.start)
-      : Math.max(0, wordVirtualState.end - state.visibleRows);
-    const pinnedY = state.listTop + (safeFirst * state.rowH);
-    if (requestWordWindowTransition(window.scrollY, pinnedY)) return;
-  }
-  if (wordRenderScrollRaf) return;
-  wordRenderScrollRaf = requestAnimationFrame(() => {
-    wordRenderScrollRaf = null;
-    render();
-  });
+  scheduleWordScrollWindowCheck();
 }, { passive: true });
 
 // ═══════════════════════════════════════════════════════
