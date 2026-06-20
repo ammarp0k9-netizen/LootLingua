@@ -61,10 +61,11 @@
 <header class="legend-top-bar" id="legendTopBar">
   <button type="button" class="hero-avatar-btn" id="heroAvatarBtn" onclick="toggleProfileModal()" aria-label="ملفك الشخصي">
     <span class="hero-avatar-circle" id="heroAvatarCircle"><i class="fa-solid fa-user" id="heroAvatarIcon" aria-hidden="true"></i><span id="heroAvatarLetter" class="hero-avatar-letter" style="display:none;"></span></span>
-    <span class="hero-avatar-meta">
-      <span id="heroLevelBadge" class="hero-level-badge">Noob</span>
-      <span id="heroXpMini" class="hero-xp-mini">0 XP</span>
-    </span>
+      <span class="hero-avatar-meta">
+        <span id="heroLevelBadge" class="hero-level-badge">Noob</span>
+        <span id="heroActiveTitleBadge" class="hero-active-title-badge" hidden></span>
+        <span id="heroXpMini" class="hero-xp-mini">0 XP</span>
+      </span>
   </button>
   <div class="legend-top-widgets">
     <div id="streakWrap" class="streak-wrap" onclick="openStatsPanel()" title="إحصائياتك">
@@ -80,7 +81,7 @@
       <span id="goalText" class="goal-text">0/5</span>
     </div>
     <div class="notif-hub" id="notifHub">
-      <button type="button" id="notifBtn" class="notif-bell-btn" onclick="toggleNotificationsPanel(event)" aria-label="الإشعارات" aria-expanded="false" aria-controls="notificationsPanel">
+      <button type="button" id="notifBtn" class="notif-bell-btn delayed-tip" data-tip="الإشعارات" onclick="toggleNotificationsPanel(event)" aria-label="الإشعارات" aria-expanded="false" aria-controls="notificationsPanel">
         <span class="notif-bell-ring"></span>
         <i class="fa-solid fa-bell"></i>
         <span id="notifBadge" class="notif-badge" style="display:none;">0</span>
@@ -97,7 +98,7 @@
         <ul id="notificationsList" class="notifications-list"></ul>
       </div>
     </div>
-    <button type="button" id="dailyQuestsBtn" class="quest-pill-btn" onclick="toggleDailyQuestsSheet()" aria-label="مهام اليوم" aria-expanded="false" aria-controls="dailyQuestsSheet">
+    <button type="button" id="dailyQuestsBtn" class="quest-pill-btn delayed-tip" data-tip="مهام اليوم" onclick="toggleDailyQuestsSheet()" aria-label="مهام اليوم" aria-expanded="false" aria-controls="dailyQuestsSheet">
       <i class="fa-solid fa-scroll"></i>
       <span id="dailyQuestsBadge" class="quest-pill-badge">0/3</span>
     </button>
@@ -142,22 +143,24 @@
   <header class="page-header">
     <div class="header-top">
       <h1 id="pageTitle"><i class="fa-solid fa-sword" aria-hidden="true"></i> قاموسك الشخصي</h1>
+      <nav id="viewNavBar" class="view-nav-bar" aria-hidden="true">
+        <button type="button" id="viewBackBar" class="view-back-btn delayed-tip" data-tip="رجوع لعوالم الأساطير" onclick="goBackFromSubView()" aria-label="رجوع لعوالم الأساطير">
+          <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+          <span id="viewBackLabel">رجوع لعوالم الأساطير</span>
+        </button>
+      </nav>
     </div>
   </header>
-
-  <nav id="viewNavBar" class="view-nav-bar" aria-hidden="true">
-    <button type="button" id="viewBackBar" class="view-back-btn" onclick="goBackFromSubView()" aria-label="رجوع">
-      <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-      <span id="viewBackLabel">رجوع لعوالم الأساطير</span>
-    </button>
-  </nav>
 
   <!-- بطاقة الإضافة (تُخفى عند قواميس الألعاب) -->
   <div class="card-box" id="personalControls">
     <div id="normalSearchZone" class="search-zone" data-search-type="normal">
       <div class="search-zone-inner dictionary-search-row">
         <button onclick="fetchSuggestions()" id="searchBtn" class="btn-ai dictionary-search-btn" data-tip="بحث ذكي">ابحث عن معنى</button>
-        <input type="text" id="wordInput" placeholder="الكلمة بالإنجليزي (مثال: Sword)" dir="ltr">
+        <button type="button" id="wordHunterBtn" class="btn-icon-tip word-hunter-btn dictionary-word-hunter-btn" onclick="openWordHunterModal()" data-tip="صائد الكلمات" aria-label="صائد الكلمات">
+          <i class="fa-solid fa-crosshairs" aria-hidden="true"></i>
+        </button>
+        <input type="text" id="wordInput" class="dict-rtl-input" placeholder="الكلمة بالإنجليزي (مثال: Sword)" autocomplete="off">
       </div>
       <button type="button" class="search-lock-overlay" aria-label="البحث مقفل — سجّل دخولك" tabindex="-1">
         <i class="fa-solid fa-lock" aria-hidden="true"></i>
@@ -176,15 +179,19 @@
       <div class="add-form-advanced-inner">
         <input type="text" id="meaningInput" placeholder="المعنى بالعربي">
         <textarea id="exampleInput" placeholder="جملة مثال (اختياري)" rows="2"></textarea>
-        <select id="categoryInput">
-          <option value="عام">عام</option>
-          <option value="فعل">فعل</option>
-          <option value="اسم">اسم</option>
-          <option value="صفة">صفة</option>
-          <option value="أداة">أداة</option>
-          <option value="ظرف">ظرف</option>
-          <option value="جمل">جمل شائعة</option>
-        </select>
+        <div class="app-dropdown-wrap app-dropdown-block" id="categoryDropdownWrap">
+          <button type="button" id="categoryDropdownBtn" class="app-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">عام</button>
+          <div id="categoryDropdownMenu" class="app-dropdown-menu" role="listbox" aria-label="نوع الكلمة">
+            <button type="button" data-value="عام" class="active">عام</button>
+            <button type="button" data-value="فعل">فعل</button>
+            <button type="button" data-value="اسم">اسم</button>
+            <button type="button" data-value="صفة">صفة</button>
+            <button type="button" data-value="أداة">أداة</button>
+            <button type="button" data-value="ظرف">ظرف</button>
+            <button type="button" data-value="جمل">جمل شائعة</button>
+          </div>
+          <input type="hidden" id="categoryInput" value="عام">
+        </div>
         <button class="btn-main" id="addBtn" onclick="addWord()">إضافة للقاموس</button>
       </div>
     </div>
@@ -226,15 +233,62 @@
 
   <!-- شريط البحث والترتيب -->
   <div class="search-bar-row">
-    <input type="text" id="searchInput" placeholder="ابحث في قاموسك..." oninput="render()">
-    <select id="searchFilter" onchange="render()">
-      <option value="all">بحث في الكل</option>
-      <option value="word">الكلمة فقط</option>
-      <option value="meaning">المعنى فقط</option>
-      <option value="example">الجملة فقط</option>
-    </select>
+    <div class="dictionary-filter-search">
+      <button type="button" id="voiceSearchBtn" class="voice-search-btn btn-icon-tip" data-tip="بحث صوتي" onclick="startVoiceSearch()" aria-label="بحث صوتي">
+        <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+      </button>
+      <input type="text" id="searchInput" class="dict-rtl-input" placeholder="ابحث في قاموسك..." oninput="render()" autocomplete="off">
+      <div class="search-inline-divider"></div>
+      <div class="app-dropdown-wrap search-filter-dropdown" id="searchFilterWrap">
+        <button type="button" id="searchFilterBtn" class="app-dropdown-trigger delayed-tip" data-tip="إعدادات البحث" aria-haspopup="listbox" aria-expanded="false" aria-label="إعدادات البحث">
+          <i class="fa-solid fa-gear" aria-hidden="true"></i>
+        </button>
+        <div id="searchFilterMenu" class="app-dropdown-menu" role="listbox" aria-label="نطاق البحث">
+          <button type="button" data-value="all" class="active">بحث في الكل</button>
+          <button type="button" data-value="word">الكلمة فقط</button>
+          <button type="button" data-value="meaning">المعنى فقط</button>
+          <button type="button" data-value="example">الجملة فقط</button>
+        </div>
+        <input type="hidden" id="searchFilter" value="all">
+      </div>
+    </div>
+    <div class="sort-dropdown-wrap app-dropdown-wrap">
+      <button type="button" id="dictionarySortBtn" class="btn-icon-tip sort-trigger app-dropdown-trigger-icon" data-tip="فرز القاموس" onclick="toggleDictionarySortMenu()" aria-haspopup="menu" aria-expanded="false">
+        <i class="fa-solid fa-filter" aria-hidden="true"></i>
+      </button>
+      <div id="dictionarySortMenu" class="app-dropdown-menu sort-dropdown-menu" role="menu" aria-label="فرز القاموس">
+        <button type="button" data-sort-mode="auto" onclick="setDictionarySortMode('auto')">تلقائي</button>
+        <button type="button" data-sort-mode="newest" onclick="setDictionarySortMode('newest')">الأحدث</button>
+        <button type="button" data-sort-mode="oldest" onclick="setDictionarySortMode('oldest')">الأقدم</button>
+        <button type="button" data-sort-mode="alpha" onclick="setDictionarySortMode('alpha')">حسب الأحرف</button>
+        <div class="sort-submenu-wrap">
+          <button type="button" class="sort-submenu-toggle" onclick="toggleSortCategorySubmenu(event)">
+            ترتيب حسب النوع
+            <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+          </button>
+          <div class="sort-submenu" id="dictionarySortCategoryMenu">
+            <button type="button" data-sort-mode="category" data-sort-category="all" onclick="setDictionarySortMode('category', 'all')">كل الأنواع</button>
+            <button type="button" data-sort-mode="category" data-sort-category="عام" onclick="setDictionarySortMode('category', 'عام')">عام</button>
+            <button type="button" data-sort-mode="category" data-sort-category="اسم" onclick="setDictionarySortMode('category', 'اسم')">اسم</button>
+            <button type="button" data-sort-mode="category" data-sort-category="فعل" onclick="setDictionarySortMode('category', 'فعل')">فعل</button>
+            <button type="button" data-sort-mode="category" data-sort-category="صفة" onclick="setDictionarySortMode('category', 'صفة')">صفة</button>
+            <button type="button" data-sort-mode="category" data-sort-category="أداة" onclick="setDictionarySortMode('category', 'أداة')">أداة</button>
+            <button type="button" data-sort-mode="category" data-sort-category="ظرف" onclick="setDictionarySortMode('category', 'ظرف')">ظرف</button>
+            <button type="button" data-sort-mode="category" data-sort-category="جمل" onclick="setDictionarySortMode('category', 'جمل')">جمل شائعة</button>
+            <button type="button" data-sort-mode="category" data-sort-category="لعبة" onclick="setDictionarySortMode('category', 'لعبة')">لعبة</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="search-bar-divider"></div>
     <button id="reorderBtn" class="btn-icon-tip" onclick="toggleReorderMode()" data-tip="ترتيب"><i class="fas fa-sort-amount-down"></i></button>
+  </div>
+
+  <div id="bulkDeleteBar" class="bulk-delete-bar" hidden>
+    <button type="button" id="bulkDeleteConfirmBtn" class="bulk-delete-confirm" onclick="confirmBulkDeleteSelection()">
+      حذف الكلمات المحددة (0)
+    </button>
+    <button type="button" class="bulk-delete-cancel" onclick="exitBulkDeleteMode()">إلغاء</button>
   </div>
 
   <ul id="list"></ul>
@@ -339,7 +393,7 @@
       <button type="button" class="quiz-play-exit btn-icon-tip" data-tip="خروج" onclick="showQuizModes()"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
       <div class="quiz-card-meta">
         <span id="timeAttackCounter">1 / 10</span>
-        <span id="timeAttackHp">HP 3</span>
+        <span id="timeAttackHp" class="time-attack-hp" aria-live="polite"></span>
         <span id="timeAttackTimer">15s</span>
       </div>
       <div class="quiz-card-bar"><div id="timeAttackProgress"></div></div>
@@ -507,7 +561,7 @@
       <div class="profile-modal-hero">
         <span class="profile-modal-avatar" id="profileModalAvatar"><i class="fa-solid fa-user"></i></span>
         <div>
-          <h2 id="profileModalTitle">ملفك الشخصي</h2>
+          <h2 class="profile-title-line"><span id="profileModalTitle">ملفك الشخصي</span><span id="profileActiveTitleBadge" class="profile-active-title-badge" hidden></span></h2>
           <p id="profileModalSubtitle" class="profile-modal-sub">LootLingua Legend</p>
         </div>
       </div>
@@ -525,7 +579,17 @@
             <div class="xp-track"><div id="xpFill" class="xp-fill"></div></div>
             <div class="xp-bottom">
               <span class="xp-hint">التالي:</span>
-              <span id="xpNext" class="xp-next-val">15 XP</span>
+          <span id="xpNext" class="xp-next-val">15 XP</span>
+            </div>
+            <div class="xp-guide-inline xp-ranks-setting">
+              <button type="button" class="xp-guide-toggle" id="xpRanksGuideToggle" onclick="toggleXpRanksGuide(event)" aria-expanded="false" aria-controls="xpRanksGuidePanel">
+                <i class="fa-solid fa-chevron-down xp-ranks-guide-chevron" aria-hidden="true"></i>
+                <span>دليل المستويات</span>
+                <small id="xpRanksGuideSummary">Noob</small>
+              </button>
+              <div id="xpRanksGuidePanel" class="xp-ranks-guide-panel" hidden>
+                <ul id="xpRanksGuideList" class="xp-ranks-guide-list" aria-label="مستويات XP من الأقل للأعلى"></ul>
+              </div>
             </div>
           </div>
         </div>
@@ -537,6 +601,10 @@
           <div class="profile-stat-chip"><span id="profileStatStreak">0</span><small>أكبر سلسلة</small></div>
         </div>
         <button type="button" class="profile-link-btn" onclick="closeProfileModal(true); openStatsPanel();">عرض الإحصائيات الكاملة</button>
+      </section>
+      <section class="profile-section">
+        <h3><i class="fa-solid fa-medal"></i> ألقابك المفتوحة</h3>
+        <div id="profileTitlePicker" class="profile-title-picker" aria-label="الألقاب المفتوحة"></div>
       </section>
       <section class="profile-section">
         <h3><i class="fa-solid fa-palette"></i> الثيمات</h3>
@@ -617,6 +685,34 @@
     <div class="onboarding-buttons">
       <button id="onboardingPrimaryBtn" class="btn-main"></button>
       <button id="onboardingSecondaryBtn" class="btn-secondary"></button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: صائد الكلمات الذكي ══ -->
+<div id="wordHunterModal" class="word-hunter-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="wordHunterTitle">
+  <div class="word-hunter-backdrop" onclick="closeWordHunterModal()"></div>
+  <div class="word-hunter-sheet">
+    <div class="word-hunter-header">
+      <div>
+        <h2 id="wordHunterTitle"><i class="fa-solid fa-crosshairs" aria-hidden="true"></i> صائد الكلمات</h2>
+        <p>ارفع صورة، ثم اضغط على الكلمة التي تريد معناها فقط.</p>
+      </div>
+      <button type="button" class="word-hunter-close" onclick="closeWordHunterModal()" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="wordHunterDropzone" class="word-hunter-dropzone" role="button" tabindex="0" aria-label="رفع صورة لصائد الكلمات">
+      <input id="wordHunterFileInput" type="file" accept="image/*" hidden>
+      <i class="fa-solid fa-image" aria-hidden="true"></i>
+      <strong>اسحب الصورة هنا أو اضغط للاختيار</strong>
+      <span>تتم قراءة الصورة محلياً عبر Tesseract.js.</span>
+    </div>
+    <div id="wordHunterStatus" class="word-hunter-status" aria-live="polite"></div>
+    <div id="wordHunterStage" class="word-hunter-stage" hidden>
+      <div id="wordHunterImageWrap" class="word-hunter-image-wrap">
+        <img id="wordHunterImage" alt="الصورة المرفوعة لصائد الكلمات">
+        <div id="wordHunterOverlay" class="word-hunter-overlay"></div>
+        <div id="wordHunterPopover" class="word-hunter-popover" hidden></div>
+      </div>
     </div>
   </div>
 </div>
@@ -939,14 +1035,19 @@
         starred:     d.data().starred     || false,
         forgetCount: d.data().forgetCount || 0,
         xpValue:     d.data().xpValue ?? 3,
+        order:       Number.isFinite(d.data().order) ? d.data().order : null,
         createdAt:   d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null)
       }));
 
-      window.words = cloudWords;
-      if (typeof window.writeWordsToStorage === "function") {
-        window.writeWordsToStorage(cloudWords, "normal", listenerUid);
+      if (typeof window.applyCloudWordsFromSnapshot === "function") {
+        window.applyCloudWordsFromSnapshot(cloudWords);
+      } else {
+        window.words = cloudWords;
+        if (typeof window.writeWordsToStorage === "function") {
+          window.writeWordsToStorage(cloudWords, "normal", listenerUid);
+        }
+        if (typeof window.saveAndRender === "function") window.saveAndRender();
       }
-      saveAndRender();
       
       // Notify Smart Loading Overlay that user data is loaded
       if (window.SmartLoadingOverlay && window.SmartLoadingOverlay.onUserDataLoaded) {
@@ -968,7 +1069,7 @@
     });
   }
 
-  window.saveWordToCloud = async function(wordText, wordCategory, meaning, example) {
+  window.saveWordToCloud = async function(wordText, wordCategory, meaning, example, order = 0) {
     const user = auth.currentUser;
     if (!user) return null;
     try {
@@ -977,6 +1078,7 @@
         meaning, example, starred: false, forgetCount: 0,
         userId: user.uid,
         xpValue: 3,
+        order:       Number.isFinite(order) ? order : 0,
         createdAt: new Date()
       });
       return ref.id;
@@ -994,6 +1096,7 @@
     if ('starred'     in data) update.starred     = data.starred;
     if ('forgetCount' in data) update.forgetCount = data.forgetCount;
     if ('xpValue'     in data) update.xpValue     = data.xpValue;
+    if ('order'       in data) update.order       = data.order;
     try { await updateDoc(doc(db, "users", user.uid, "words", docId), update); }
     catch (e) { console.error("خطأ في التحديث:", e); }
   };
@@ -1100,7 +1203,7 @@
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">كلمة مضافة</div></div>
-      <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">Daily Streak</div></div>
+      <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">أكبر سلسلة</div></div>
       <div class="stat-card"><div class="stat-val" id="statStarred">0</div><div class="stat-lbl">كلمة صعبة</div></div>
       <div class="stat-card"><div class="stat-val" id="statForgot">0</div><div class="stat-lbl">تحتاج مراجعة 🔁</div></div>
       <div class="stat-card"><div class="stat-val" id="statDays">0 يوم</div><div class="stat-lbl">أيام نشاط</div></div>
@@ -1206,6 +1309,7 @@ onAuthStateChanged(profileAuth, (user) => {
 });
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
