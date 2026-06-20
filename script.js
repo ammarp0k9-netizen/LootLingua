@@ -601,6 +601,7 @@ window.toggleProfileModal = function() {
   modal.classList.toggle('open', open);
   modal.setAttribute('aria-hidden', open ? 'false' : 'true');
   document.body.classList.toggle('profile-modal-open', open);
+  lockBackgroundScroll('profile');
   syncHeroAvatar();
   renderProfileModalStats();
   renderXPBar();
@@ -616,19 +617,67 @@ window.closeProfileModal = function(silent) {
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('profile-modal-open');
+    unlockBackgroundScroll('profile');
   };
   if (silent) close();
   else closeRouteEntry('overlay', 'profile', close);
 };
+
+const backgroundScrollLocks = new Set();
+let backgroundScrollY = 0;
+let backgroundScrollStyles = null;
+
+function lockBackgroundScroll(key) {
+  if (backgroundScrollLocks.has(key)) return;
+  if (backgroundScrollLocks.size === 0) {
+    backgroundScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    backgroundScrollStyles = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      left: document.body.style.left,
+      right: document.body.style.right,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow,
+    };
+    document.documentElement.classList.add('modal-scroll-locked');
+    document.body.classList.add('modal-scroll-locked');
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${backgroundScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+  backgroundScrollLocks.add(key);
+}
+
+function unlockBackgroundScroll(key) {
+  backgroundScrollLocks.delete(key);
+  if (backgroundScrollLocks.size > 0) return;
+  document.documentElement.classList.remove('modal-scroll-locked');
+  document.body.classList.remove('modal-scroll-locked');
+  if (backgroundScrollStyles) {
+    document.body.style.position = backgroundScrollStyles.position;
+    document.body.style.top = backgroundScrollStyles.top;
+    document.body.style.left = backgroundScrollStyles.left;
+    document.body.style.right = backgroundScrollStyles.right;
+    document.body.style.width = backgroundScrollStyles.width;
+    document.body.style.overflow = backgroundScrollStyles.overflow;
+    backgroundScrollStyles = null;
+  }
+  window.scrollTo(0, backgroundScrollY);
+}
 
 function syncHeroAvatar() {
   const rank = getRank(userXP);
   const letterEl = document.getElementById('heroAvatarLetter');
   const iconEl = document.getElementById('heroAvatarIcon');
   const levelEl = document.getElementById('heroLevelBadge');
+  const heroTitleBadge = document.getElementById('heroActiveTitleBadge');
   const xpMini = document.getElementById('heroXpMini');
   const profileAv = document.getElementById('profileModalAvatar');
   const profileTitle = document.getElementById('profileModalTitle');
+  const profileBadge = document.getElementById('profileActiveTitleBadge');
   const name = (typeof getProfileDisplayName === 'function') ? getProfileDisplayName() : '';
   const initial = name ? name.trim().charAt(0).toUpperCase() : '';
   if (letterEl) {
@@ -642,6 +691,17 @@ function syncHeroAvatar() {
     }
   }
   if (levelEl) { levelEl.textContent = rank.label; levelEl.style.color = rank.color; }
+  if (heroTitleBadge && typeof getActiveTitleDef === 'function') {
+    const unlockedTitles = getUnlockedTitleDefs();
+    if (unlockedTitles.length) {
+      heroTitleBadge.hidden = false;
+      heroTitleBadge.innerHTML = unlockedTitles.map(def => renderTitleIcon(def, 'hero-active-title-icon')).join('');
+      heroTitleBadge.title = unlockedTitles.map(def => def.name).join('، ');
+    } else {
+      heroTitleBadge.hidden = true;
+      heroTitleBadge.innerHTML = '';
+    }
+  }
   if (xpMini) xpMini.textContent = userXP + ' XP';
   if (profileAv) {
     profileAv.textContent = '';
@@ -655,6 +715,18 @@ function syncHeroAvatar() {
     }
   }
   if (profileTitle) profileTitle.textContent = name || 'ملفك الشخصي';
+  if (profileBadge && typeof getActiveTitleDef === 'function') {
+    const unlockedTitles = getUnlockedTitleDefs();
+    if (unlockedTitles.length) {
+      profileBadge.hidden = false;
+      profileBadge.innerHTML = unlockedTitles.map(def => renderTitleIcon(def, 'profile-active-title-icon')).join('');
+      profileBadge.title = unlockedTitles.map(def => def.name).join('، ');
+    } else {
+      profileBadge.hidden = true;
+      profileBadge.innerHTML = '';
+    }
+  }
+  if (typeof renderProfileTitlePicker === 'function') renderProfileTitlePicker();
 }
 
 function getProfileDisplayName() {
@@ -714,8 +786,18 @@ function hasCompletedEmptyOnboarding() {
   return localStorage.getItem(EMPTY_ONBOARDING_STORAGE_KEY) === 'true';
 }
 
+function getPersonalDictionaryWordsSnapshot() {
+  if (typeof readWordsFromStorage === 'function') {
+    try {
+      const stored = readWordsFromStorage('normal');
+      if (Array.isArray(stored)) return stored;
+    } catch (_) {}
+  }
+  return Array.isArray(window.words) ? window.words : [];
+}
+
 function getDictionaryWordCount() {
-  return Array.isArray(window.words) ? window.words.length : 0;
+  return getPersonalDictionaryWordsSnapshot().length;
 }
 
 function shouldRunEmptyOnboarding() {
@@ -967,26 +1049,42 @@ function hideEmptyOnboardingQuestTooltip(onDone) {
   removeEmptyOnboardingTooltip(tip, onDone);
 }
 
+function removeOrphanEmptyOnboardingTips() {
+  document.querySelectorAll('.empty-onboarding-tip').forEach((tip) => {
+    if (tip !== emptyOnboardingState.questTip && tip !== emptyOnboardingState.searchTip) {
+      tip.remove();
+    }
+  });
+}
+
 function hideEmptyOnboardingSearchTooltip() {
-  if (!emptyOnboardingState.searchTip) return;
-  const tip = emptyOnboardingState.searchTip;
-  emptyOnboardingState.searchTip = null;
   unbindEmptyOnboardingSearchDismiss();
-  removeEmptyOnboardingTooltip(tip);
+  if (emptyOnboardingState.searchTip) {
+    const tip = emptyOnboardingState.searchTip;
+    emptyOnboardingState.searchTip = null;
+    removeEmptyOnboardingTooltip(tip);
+  }
+  document.querySelectorAll('.empty-onboarding-tip').forEach((tip) => {
+    if (tip !== emptyOnboardingState.questTip) tip.remove();
+  });
 }
 
 function hideAllEmptyOnboardingTooltips() {
   hideEmptyOnboardingQuestTooltip();
   hideEmptyOnboardingSearchTooltip();
+  removeOrphanEmptyOnboardingTips();
   unbindEmptyOnboardingReposition();
 }
 
 function unbindEmptyOnboardingSearchDismiss() {
   const wordInput = document.getElementById('wordInput');
   if (!wordInput?.__emptyOnboardingDismiss) return;
-  wordInput.removeEventListener('input', wordInput.__emptyOnboardingDismiss);
-  wordInput.removeEventListener('focus', wordInput.__emptyOnboardingDismiss);
-  wordInput.removeEventListener('keydown', wordInput.__emptyOnboardingDismiss);
+  const dismiss = wordInput.__emptyOnboardingDismiss;
+  wordInput.removeEventListener('input', dismiss);
+  wordInput.removeEventListener('focus', dismiss);
+  wordInput.removeEventListener('keydown', dismiss);
+  wordInput.removeEventListener('pointerdown', dismiss);
+  wordInput.removeEventListener('click', dismiss);
   wordInput.__emptyOnboardingDismiss = null;
 }
 
@@ -995,12 +1093,15 @@ function bindEmptyOnboardingSearchDismiss() {
   if (!wordInput) return;
   unbindEmptyOnboardingSearchDismiss();
   const dismiss = () => {
-    if (emptyOnboardingState.searchTip) hideEmptyOnboardingSearchTooltip();
+    hideEmptyOnboardingSearchTooltip();
+    removeOrphanEmptyOnboardingTips();
   };
   wordInput.__emptyOnboardingDismiss = dismiss;
   wordInput.addEventListener('input', dismiss);
   wordInput.addEventListener('focus', dismiss);
   wordInput.addEventListener('keydown', dismiss);
+  wordInput.addEventListener('pointerdown', dismiss);
+  wordInput.addEventListener('click', dismiss);
 }
 
 function initEmptyOnboardingInputWatcher() {
@@ -1012,7 +1113,7 @@ function initEmptyOnboardingInputWatcher() {
     return Boolean(el.closest?.('#normalSearchZone'));
   };
   const dismissIfTyping = (e) => {
-    if (!emptyOnboardingState.searchTip) return;
+    if (!emptyOnboardingState.searchTip && !document.querySelector('.empty-onboarding-tip')) return;
     if (!isPersonalSearchTarget(e.target)) return;
     hideEmptyOnboardingSearchTooltip();
   };
@@ -1035,11 +1136,21 @@ function startEmptyOnboardingPhase1() {
 
 function startEmptyOnboardingPhase2() {
   if (!emptyOnboardingState.active || emptyOnboardingState.phase !== 1) return;
-  const wordInput = document.getElementById('wordInput') || document.getElementById('normalSearchZone');
+  emptyOnboardingState.phase = 2;
+  const wordInput = document.getElementById('wordInput');
   if (!wordInput) return;
   hideEmptyOnboardingQuestTooltip(() => {
-    if (!shouldRunEmptyOnboarding()) return;
-    emptyOnboardingState.phase = 2;
+    if (!shouldRunEmptyOnboarding()) {
+      hideAllEmptyOnboardingTooltips();
+      emptyOnboardingState.active = false;
+      emptyOnboardingState.phase = 0;
+      return;
+    }
+    removeOrphanEmptyOnboardingTips();
+    if (emptyOnboardingState.searchTip) {
+      removeEmptyOnboardingTooltip(emptyOnboardingState.searchTip);
+      emptyOnboardingState.searchTip = null;
+    }
     emptyOnboardingState.searchTip = createEmptyOnboardingTooltip(
       EMPTY_ONBOARDING_COPY.searchTip,
       wordInput,
@@ -1098,11 +1209,18 @@ let viewBackTarget = 'worlds';
 function setViewBackBar(visible, label) {
   const nav = document.getElementById('viewNavBar');
   const lbl = document.getElementById('viewBackLabel');
+  const btn = document.getElementById('viewBackBar');
   if (!nav) return;
   nav.style.display = '';
   document.body.classList.toggle('view-has-back', Boolean(visible));
   nav.setAttribute('aria-hidden', visible ? 'false' : 'true');
-  if (lbl && label) lbl.textContent = label;
+  if (label) {
+    if (lbl) lbl.textContent = label;
+    if (btn) {
+      btn.setAttribute('aria-label', label);
+      btn.dataset.tip = label;
+    }
+  }
 }
 
 window.goBackFromSubView = function() {
@@ -1174,6 +1292,7 @@ const GUEST_PROFILE_DIRTY_KEYS = new Set([
   'addedGameWords',
   'lootlinguaDailyLootState',
   'lootlinguaTitlesState',
+  'lootlinguaActiveTitleId',
   'lootlinguaStreakFreezes',
   'lootlinguaFreezeSaves',
   'lootlinguaGameDictAdds',
@@ -1388,7 +1507,11 @@ window.clearDictionaryState = function({ renderView = true } = {}) {
 };
 
 window.loadGuestDictionaryState = function({ renderView = true } = {}) {
-  window.words = readWordsFromStorage('normal', 'guest');
+  loadDictionarySortPrefs();
+  window.words = applyStoredWordOrder(readWordsFromStorage('normal', 'guest'));
+  if (dictionarySortMode !== 'auto') {
+    window.words = sortDictionaryWords(window.words);
+  }
   editId = null;
   pendingDeleteId = null;
   selectedIndices = [];
@@ -1397,11 +1520,211 @@ window.loadGuestDictionaryState = function({ renderView = true } = {}) {
   if (renderView && typeof render === 'function') render();
 };
 
-window.words     = readWordsFromStorage('normal');
 let currentFilter    = 'all';
 let editId           = null;
 let isReorderMode    = false;
 let selectedIndices  = [];
+let dictionarySortMode = 'auto';
+let dictionarySortCategory = 'all';
+const WORD_CATEGORY_OPTIONS = [
+  { value: 'عام', label: 'عام' },
+  { value: 'فعل', label: 'فعل' },
+  { value: 'اسم', label: 'اسم' },
+  { value: 'صفة', label: 'صفة' },
+  { value: 'أداة', label: 'أداة' },
+  { value: 'ظرف', label: 'ظرف' },
+  { value: 'جمل', label: 'جمل شائعة' },
+];
+const CATEGORY_SORT_ORDER = ['عام', 'اسم', 'فعل', 'صفة', 'أداة', 'ظرف', 'جمل', 'لعبة'];
+const SEARCH_FILTER_LABELS = {
+  all: 'بحث في الكل',
+  word: 'الكلمة فقط',
+  meaning: 'المعنى فقط',
+  example: 'الجملة فقط',
+};
+let _wordOrderSyncTimer = null;
+
+function getDictSortStorageKey() {
+  return 'lootlinguaDictSort_' + getStorageUserId();
+}
+
+function loadDictionarySortPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(getDictSortStorageKey()) || '{}');
+    const validModes = ['auto', 'newest', 'oldest', 'alpha', 'category'];
+    if (validModes.includes(saved.mode)) dictionarySortMode = saved.mode;
+    if (saved.category) dictionarySortCategory = String(saved.category);
+  } catch {}
+  if (document.body) {
+    syncDictionarySortUI();
+    syncAppDropdownLabels();
+  }
+}
+
+function saveDictionarySortPrefs() {
+  localStorage.setItem(getDictSortStorageKey(), JSON.stringify({
+    mode: dictionarySortMode,
+    category: dictionarySortCategory,
+  }));
+}
+
+function reindexWordOrder(words = window.words) {
+  if (!Array.isArray(words)) return [];
+  words.forEach((word, index) => { word.order = index; });
+  return words;
+}
+
+function applyStoredWordOrder(words) {
+  const arr = Array.isArray(words) ? [...words] : [];
+  if (!arr.length) return arr;
+  if (arr.some((word) => Number.isFinite(word?.order))) {
+    arr.sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+    return reindexWordOrder(arr);
+  }
+  return reindexWordOrder(arr);
+}
+
+function scheduleWordOrderCloudSync() {
+  clearTimeout(_wordOrderSyncTimer);
+  _wordOrderSyncTimer = setTimeout(() => {
+    syncWordOrdersToCloud().catch(() => {});
+  }, 450);
+}
+
+async function syncWordOrdersToCloud() {
+  const user = window.auth?.currentUser;
+  if (!user || !window.updateWordInCloud || !Array.isArray(window.words)) return;
+  await Promise.all(
+    window.words.map((word, index) => window.updateWordInCloud(word.id, { order: index }))
+  );
+}
+
+function closeAppDropdowns(exceptWrap = null) {
+  document.querySelectorAll('.app-dropdown-menu.open').forEach((menu) => {
+    const wrap = menu.closest('.app-dropdown-wrap');
+    if (exceptWrap && wrap === exceptWrap) return;
+    menu.classList.remove('open');
+    wrap?.querySelector('.app-dropdown-trigger')?.setAttribute('aria-expanded', 'false');
+    wrap?.querySelector('.app-dropdown-trigger-icon')?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function syncAppDropdownLabels() {
+  const searchFilter = document.getElementById('searchFilter');
+  const searchBtn = document.getElementById('searchFilterBtn');
+  if (searchFilter && searchBtn) {
+    const label = SEARCH_FILTER_LABELS[searchFilter.value] || SEARCH_FILTER_LABELS.all;
+    searchBtn.setAttribute('aria-label', `إعدادات البحث: ${label}`);
+    searchBtn.removeAttribute('title');
+    searchBtn.dataset.tip = 'إعدادات البحث';
+  }
+  const categoryInput = document.getElementById('categoryInput');
+  const categoryBtn = document.getElementById('categoryDropdownBtn');
+  if (categoryInput && categoryBtn) {
+    const option = WORD_CATEGORY_OPTIONS.find((item) => item.value === categoryInput.value);
+    categoryBtn.textContent = option?.label || categoryInput.value || 'عام';
+  }
+}
+
+function setSearchFilterValue(value) {
+  const input = document.getElementById('searchFilter');
+  const menu = document.getElementById('searchFilterMenu');
+  if (!input) return;
+  input.value = value;
+  menu?.querySelectorAll('[data-value]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+  syncAppDropdownLabels();
+  renderLimit = 20;
+  render();
+}
+
+function setCategoryDropdownValue(value) {
+  const input = document.getElementById('categoryInput');
+  const menu = document.getElementById('categoryDropdownMenu');
+  if (!input) return;
+  input.value = value;
+  menu?.querySelectorAll('[data-value]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+  syncAppDropdownLabels();
+}
+
+function initAppDropdowns() {
+  initSearchFilterDropdown();
+  initCategoryDropdown();
+
+  document.querySelectorAll('.app-dropdown-wrap').forEach((wrap) => {
+    if (wrap.dataset.dropdownReady === '1') return;
+    if (wrap.id === 'searchFilterWrap' || wrap.id === 'categoryDropdownWrap') return;
+    const trigger = wrap.querySelector('.app-dropdown-trigger');
+    const menu = wrap.querySelector('.app-dropdown-menu');
+    if (!trigger || !menu) return;
+    wrap.dataset.dropdownReady = '1';
+    trigger.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = !menu.classList.contains('open');
+      closeAppDropdowns(wrap);
+      menu.classList.toggle('open', willOpen);
+      trigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+  });
+}
+
+function initSearchFilterDropdown() {
+  const searchWrap = document.getElementById('searchFilterWrap');
+  const searchTrigger = document.getElementById('searchFilterBtn');
+  const searchMenu = document.getElementById('searchFilterMenu');
+  if (!searchWrap || !searchTrigger || !searchMenu || searchWrap.dataset.dropdownReady === '1') return;
+  searchWrap.dataset.dropdownReady = '1';
+  searchTrigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const willOpen = !searchMenu.classList.contains('open');
+    closeAppDropdowns(searchWrap);
+    searchMenu.classList.toggle('open', willOpen);
+    searchTrigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  });
+  searchMenu.querySelectorAll('[data-value]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setSearchFilterValue(btn.dataset.value || 'all');
+      searchMenu.classList.remove('open');
+      searchTrigger.setAttribute('aria-expanded', 'false');
+    });
+  });
+}
+
+function initCategoryDropdown() {
+  const categoryWrap = document.getElementById('categoryDropdownWrap');
+  const categoryTrigger = document.getElementById('categoryDropdownBtn');
+  const categoryMenu = document.getElementById('categoryDropdownMenu');
+  if (!categoryWrap || !categoryTrigger || !categoryMenu || categoryWrap.dataset.dropdownReady === '1') return;
+  categoryWrap.dataset.dropdownReady = '1';
+  categoryTrigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const willOpen = !categoryMenu.classList.contains('open');
+    closeAppDropdowns(categoryWrap);
+    categoryMenu.classList.toggle('open', willOpen);
+    categoryTrigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  });
+  categoryMenu.querySelectorAll('[data-value]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setCategoryDropdownValue(btn.dataset.value || 'عام');
+      categoryMenu.classList.remove('open');
+      categoryTrigger.setAttribute('aria-expanded', 'false');
+    });
+  });
+}
+
+window.toggleSortCategorySubmenu = function(event) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  document.querySelector('.sort-submenu-wrap')?.classList.toggle('open');
+};
+let isBulkDeleteMode = false;
+let bulkSelectedWordIds = new Set();
+let suppressDeleteClickOnce = false;
 let currentQuizWords = [];
 let quizIndex        = 0;
 let currentStreak    = 0;
@@ -1464,6 +1787,276 @@ window.markInitialFeatureLoadPartDone = function(part) {
 
 function shouldSuppressUnlockNotices() {
   return isInitialLoad === true || window.__suppressUnlockNotices === true || window.__applyingCloudProfile === true;
+}
+
+function safeVibrate(duration = 80) {
+  try {
+    if (navigator?.vibrate) navigator.vibrate(duration);
+  } catch {}
+}
+
+function triggerShakeEffect(target, duration = 320) {
+  const el = typeof target === 'string' ? document.querySelector(target) : target;
+  if (!el) return;
+  el.classList.remove('shake-effect');
+  void el.offsetWidth;
+  el.classList.add('shake-effect');
+  setTimeout(() => el.classList.remove('shake-effect'), duration);
+}
+
+function cssEscapeValue(value) {
+  if (window.CSS?.escape) return CSS.escape(String(value));
+  return String(value).replace(/["\\]/g, '\\$&');
+}
+
+function getWordSortStamp(word) {
+  const created = word?.createdAt || word?.timestamp || word?.addedAt;
+  if (created?.toMillis) return created.toMillis();
+  const parsed = Date.parse(created || '');
+  if (Number.isFinite(parsed)) return parsed;
+  const numericId = parseInt(word?.id, 10);
+  return Number.isFinite(numericId) ? numericId : 0;
+}
+
+function sortDictionaryWords(wordsToSort) {
+  const sorted = [...wordsToSort];
+  if (dictionarySortMode === 'auto') {
+    if (sorted.some((word) => Number.isFinite(word?.order))) {
+      sorted.sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+    }
+    return sorted;
+  }
+  if (dictionarySortMode === 'oldest') {
+    sorted.sort((a, b) => getWordSortStamp(a) - getWordSortStamp(b));
+  } else if (dictionarySortMode === 'alpha') {
+    sorted.sort((a, b) => String(a.word || '').localeCompare(String(b.word || ''), undefined, { sensitivity: 'base' }));
+  } else if (dictionarySortMode === 'newest') {
+    sorted.sort((a, b) => getWordSortStamp(b) - getWordSortStamp(a));
+  } else if (dictionarySortMode === 'category') {
+    sorted.sort((a, b) => {
+      const catA = a.category || 'عام';
+      const catB = b.category || 'عام';
+      if (dictionarySortCategory && dictionarySortCategory !== 'all') {
+        const priA = catA === dictionarySortCategory ? 0 : 1;
+        const priB = catB === dictionarySortCategory ? 0 : 1;
+        if (priA !== priB) return priA - priB;
+      } else {
+        const idxA = CATEGORY_SORT_ORDER.indexOf(catA);
+        const idxB = CATEGORY_SORT_ORDER.indexOf(catB);
+        const orderA = idxA === -1 ? CATEGORY_SORT_ORDER.length : idxA;
+        const orderB = idxB === -1 ? CATEGORY_SORT_ORDER.length : idxB;
+        if (orderA !== orderB) return orderA - orderB;
+      }
+      return String(a.word || '').localeCompare(String(b.word || ''), undefined, { sensitivity: 'base' });
+    });
+  }
+  return sorted;
+}
+
+function syncDictionarySortUI() {
+  const btn = document.getElementById('dictionarySortBtn');
+  const menu = document.getElementById('dictionarySortMenu');
+  if (btn) btn.setAttribute('aria-expanded', String(menu?.classList.contains('open') || false));
+  menu?.querySelectorAll('[data-sort-mode]').forEach((item) => {
+    const mode = item.dataset.sortMode;
+    const category = item.dataset.sortCategory;
+    let active = false;
+    if (mode === 'category') {
+      active = dictionarySortMode === 'category' &&
+        (category ? category === dictionarySortCategory : false);
+    } else {
+      active = dictionarySortMode === mode;
+    }
+    item.classList.toggle('active', active);
+  });
+  document.querySelector('.sort-submenu-wrap')?.classList.toggle('open', dictionarySortMode === 'category');
+}
+
+window.toggleDictionarySortMenu = function() {
+  const menu = document.getElementById('dictionarySortMenu');
+  if (!menu) return;
+  const willOpen = !menu.classList.contains('open');
+  closeAppDropdowns(document.querySelector('.sort-dropdown-wrap'));
+  menu.classList.toggle('open', willOpen);
+  syncDictionarySortUI();
+};
+
+window.setDictionarySortMode = function(mode, category) {
+  const validModes = ['auto', 'newest', 'oldest', 'alpha', 'category'];
+  dictionarySortMode = validModes.includes(mode) ? mode : 'auto';
+  if (mode === 'category') {
+    dictionarySortCategory = category || 'all';
+  } else {
+    dictionarySortCategory = 'all';
+  }
+  window.words = sortDictionaryWords(window.words);
+  saveDictionarySortPrefs();
+  if (dictionarySortMode === 'auto') {
+    persistDictionary();
+  }
+  document.getElementById('dictionarySortMenu')?.classList.remove('open');
+  document.querySelector('.sort-submenu-wrap')?.classList.toggle('open', dictionarySortMode === 'category');
+  renderLimit = 20;
+  render();
+  syncDictionarySortUI();
+};
+
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.sort-dropdown-wrap') && !event.target.closest('.app-dropdown-wrap')) {
+    closeAppDropdowns();
+    document.getElementById('dictionarySortMenu')?.classList.remove('open');
+    syncDictionarySortUI();
+  }
+});
+
+window.words = applyStoredWordOrder(readWordsFromStorage('normal'));
+loadDictionarySortPrefs();
+if (dictionarySortMode !== 'auto') {
+  window.words = sortDictionaryWords(window.words);
+}
+
+window.startVoiceSearch = function() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const input = document.getElementById('searchInput');
+  const btn = document.getElementById('voiceSearchBtn');
+  if (!Recognition || !input) {
+    showToast('البحث الصوتي غير مدعوم في هذا المتصفح.');
+    return;
+  }
+  if (window.__activeVoiceRecognition) {
+    try { window.__activeVoiceRecognition.abort(); } catch (_) {}
+    window.__activeVoiceRecognition = null;
+  }
+  const recognition = new Recognition();
+  window.__activeVoiceRecognition = recognition;
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 5;
+  btn?.classList.add('is-listening');
+  safeVibrate(35);
+  recognition.onresult = (event) => {
+    const result = event.results?.[0];
+    if (!result) return;
+    let bestText = '';
+    let bestScore = -1;
+    for (let i = 0; i < result.length; i++) {
+      const candidate = normalizeVoiceTranscript(result[i].transcript);
+      if (!candidate) continue;
+      const score = scoreVoiceSearchCandidate(candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        bestText = pickBestVoiceQuery(result[i].transcript);
+      }
+    }
+    if (!bestText) return;
+    input.value = bestText;
+    renderLimit = 20;
+    render();
+    showToast(`سمّعنا: ${bestText}`, 'success', 1800);
+  };
+  recognition.onerror = (event) => {
+    if (event?.error === 'aborted') return;
+    showToast('تعذر التقاط الصوت. جرّب مرة ثانية.');
+  };
+  recognition.onend = () => {
+    btn?.classList.remove('is-listening');
+    if (window.__activeVoiceRecognition === recognition) window.__activeVoiceRecognition = null;
+  };
+  try {
+    recognition.start();
+  } catch (_) {
+    btn?.classList.remove('is-listening');
+    showToast('تعذر تشغيل الميكروفون. جرّب مرة ثانية.');
+  }
+};
+
+function normalizeVoiceTranscript(text) {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[.,!?;:'"]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function scoreVoiceSearchCandidate(normalized) {
+  if (!normalized) return -1;
+  let score = normalized.length;
+  const dictWords = Array.isArray(window.words) ? window.words : [];
+  dictWords.forEach((entry) => {
+    const word = normalizeVoiceTranscript(entry.word);
+    if (!word) return;
+    if (word === normalized) score += 120;
+    else if (word.startsWith(normalized) || normalized.startsWith(word)) score += 60;
+  });
+  return score;
+}
+
+function pickBestVoiceQuery(rawText) {
+  const normalized = normalizeVoiceTranscript(rawText);
+  if (!normalized) return '';
+  const dictWords = Array.isArray(window.words) ? window.words : [];
+  const exact = dictWords.find((entry) => normalizeVoiceTranscript(entry.word) === normalized);
+  if (exact?.word) return exact.word.trim();
+  const partial = dictWords.find((entry) => {
+    const word = normalizeVoiceTranscript(entry.word);
+    return word.startsWith(normalized) || normalized.startsWith(word);
+  });
+  if (partial?.word) return partial.word.trim();
+  return normalized;
+}
+
+function updateBulkDeleteBar() {
+  const bar = document.getElementById('bulkDeleteBar');
+  const btn = document.getElementById('bulkDeleteConfirmBtn');
+  const count = bulkSelectedWordIds.size;
+  if (bar) bar.hidden = !isBulkDeleteMode;
+  if (btn) btn.textContent = `حذف الكلمات المحددة (${count})`;
+}
+
+function syncBulkSelectionInDom(id) {
+  const cards = id
+    ? [document.querySelector(`.word-card[data-id="${cssEscapeValue(String(id))}"]`)].filter(Boolean)
+    : [...document.querySelectorAll('.word-card')];
+  cards.forEach((card) => {
+    const cardId = card.dataset.id;
+    if (!cardId) return;
+    card.classList.toggle('bulk-selected', bulkSelectedWordIds.has(String(cardId)));
+  });
+  updateBulkDeleteBar();
+}
+
+function clearBulkSelectionInDom() {
+  document.querySelectorAll('.word-card.bulk-selected').forEach((card) => {
+    card.classList.remove('bulk-selected');
+  });
+  updateBulkDeleteBar();
+}
+
+function enterBulkDeleteMode(id) {
+  if (!id) return;
+  if (isReorderMode) toggleReorderMode();
+  isBulkDeleteMode = true;
+  bulkSelectedWordIds.add(String(id));
+  safeVibrate(50);
+  syncBulkSelectionInDom(id);
+}
+
+window.exitBulkDeleteMode = function() {
+  isBulkDeleteMode = false;
+  bulkSelectedWordIds.clear();
+  clearBulkSelectionInDom();
+};
+
+function toggleBulkWordSelection(id) {
+  if (!id) return;
+  const key = String(id);
+  if (bulkSelectedWordIds.has(key)) bulkSelectedWordIds.delete(key);
+  else bulkSelectedWordIds.add(key);
+  if (!bulkSelectedWordIds.size) {
+    window.exitBulkDeleteMode();
+    return;
+  }
+  syncBulkSelectionInDom(key);
 }
 
 // ── MOBILE LONG-PRESS TOOLTIP (تفويض — يعمل مع الكروت المُعاد رسمها) ──
@@ -1573,7 +2166,7 @@ function setActiveNavLink(key) {
 // ═══════════════════════════════════════════════════════
 
 function getUnlockProgressSnapshot() {
-  const words = Array.isArray(window.words) ? window.words : [];
+  const words = getPersonalDictionaryWordsSnapshot();
   return {
     wordCount: words.length,
     starredCount: words.filter(w => w.starred).length,
@@ -1887,12 +2480,56 @@ function themeSeenKey(type, theme) {
 }
 
 function showThemeUseMessageOnce(theme) {
+  if (!THEME_USE_MESSAGES[theme]) return;
   const key = themeSeenKey('used', theme);
-  if (localStorage.getItem(key)) return;
-  const msg = THEME_USE_MESSAGES[theme];
-  if (!msg) return;
+  if (localStorage.getItem(key) === '1') return;
   localStorage.setItem(key, '1');
-  setTimeout(() => showToast(msg, 'success', 5200), 2400);
+  setTimeout(() => showToast(THEME_USE_MESSAGES[theme], 'success', 5200), 2400);
+}
+
+function bootstrapThemeNotificationKeysOnce() {
+  const bootKey = 'lootlingua:themeNotifyBootstrapped';
+  if (localStorage.getItem(bootKey) === '1') return;
+  Object.keys(THEME_UNLOCK_LEVELS).forEach((theme) => {
+    if (isThemeComingSoon(theme) || !isThemeUnlocked(theme)) return;
+    localStorage.setItem(themeSeenKey('unlocked', theme), '1');
+  });
+  const activeTheme = localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'lootlingua';
+  if (THEME_USE_MESSAGES[activeTheme] && isThemeUnlocked(activeTheme)) {
+    localStorage.setItem(themeSeenKey('used', activeTheme), '1');
+  }
+  localStorage.setItem(bootKey, '1');
+}
+
+function checkThemeUnlocksAfterXP(prevXP, nextXP) {
+  if (shouldSuppressUnlockNotices()) return;
+  const oldLevel = getLevelFromXP(prevXP);
+  const newLevel = getLevelFromXP(nextXP);
+  if (newLevel <= oldLevel) return;
+  Object.entries(THEME_UNLOCK_LEVELS).forEach(([theme, requiredLevel]) => {
+    if (isThemeComingSoon(theme)) return;
+    if (oldLevel >= requiredLevel || newLevel < requiredLevel) return;
+    const unlockKey = themeSeenKey('unlocked', theme);
+    if (localStorage.getItem(unlockKey) === '1') return;
+    localStorage.setItem(unlockKey, '1');
+    sessionStorage.removeItem(`lootlingua:themeRelockNotice:${theme}`);
+    playUnlockSound();
+    const msg = THEME_UNLOCK_MESSAGES[theme];
+    if (msg) setTimeout(() => showToast(msg, 'success', 5200), 420);
+  });
+}
+
+function checkThemeRelocksAfterXP(prevXP, nextXP) {
+  const oldLevel = getLevelFromXP(prevXP);
+  const newLevel = getLevelFromXP(nextXP);
+  if (newLevel >= oldLevel) return;
+  Object.entries(THEME_UNLOCK_LEVELS).forEach(([theme, requiredLevel]) => {
+    if (isThemeComingSoon(theme)) return;
+    if (oldLevel >= requiredLevel && newLevel < requiredLevel) {
+      localStorage.removeItem(themeSeenKey('unlocked', theme));
+      localStorage.removeItem(themeSeenKey('used', theme));
+    }
+  });
 }
 
 window.setTheme = function(theme, skipLockCheck = false) {
@@ -2018,11 +2655,13 @@ function closeRouteOverlays() {
     profile.classList.remove('open');
     profile.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('profile-modal-open');
+    unlockBackgroundScroll('profile');
   }
   const stats = document.getElementById('statsPanel');
   if (stats) {
     stats.classList.remove('show');
     stats.style.display = 'none';
+    unlockBackgroundScroll('stats');
   }
   if (typeof closeDailyQuestsSheet === 'function') closeDailyQuestsSheet(true);
   if (typeof closeNotificationsPanel === 'function') closeNotificationsPanel(true);
@@ -2495,6 +3134,10 @@ window.startOnboarding = function(force = false) {
     return;
   }
   if (force) setOnboardingStatus('new');
+
+  hideAllEmptyOnboardingTooltips();
+  emptyOnboardingState.active = false;
+  emptyOnboardingState.phase = 0;
 
   if (typeof closeProfileModal === 'function') closeProfileModal();
   if (typeof closeSidebarIfOpen === 'function') closeSidebarIfOpen();
@@ -2989,6 +3632,7 @@ window.getLootlinguaProfilePayload = function() {
     addedGameWords:   loadJSON('addedGameWords', []),
     dailyLootState:   typeof getLootState === 'function' ? getLootState() : loadJSON('lootlinguaDailyLootState', {}),
     titlesState:      typeof getTitleState === 'function' ? getTitleState() : loadJSON('lootlinguaTitlesState', {}),
+    activeTitleId:    localStorage.getItem('lootlinguaActiveTitleId') || '',
     dailyQuestDate,
     dailyQuestState:  loadJSON(getDailyQuestStorageKey(dailyQuestDate), { claimed: {}, flags: {} }),
     streakFreezes:    loadInt('lootlinguaStreakFreezes', 0),
@@ -3019,6 +3663,7 @@ window.resetLootlinguaProfileState = function(options = {}) {
     'addedGameWords',
     'lootlinguaDailyLootState',
     'lootlinguaTitlesState',
+    'lootlinguaActiveTitleId',
     'lootlinguaStreakFreezes',
     'lootlinguaFreezeSaves',
     'lootlinguaGameDictAdds',
@@ -3140,6 +3785,7 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
     });
   }
   if (d.displayName) localStorage.setItem('lootlinguaDisplayName', d.displayName);
+  if (d.activeTitleId) localStorage.setItem('lootlinguaActiveTitleId', String(d.activeTitleId));
   if (d.theme) {
     const nextTheme = isThemeComingSoon(d.theme) || !isThemeUnlocked(d.theme) ? 'lootlingua' : d.theme;
     if (typeof setTheme === 'function') setTheme(nextTheme, true);
@@ -3529,10 +4175,6 @@ function getThemeLockedMessage(theme) {
 }
 
 function refreshThemeLockUI() {
-  const previous = window.__themeLockPrev;
-  const current = {};
-  const newlyUnlocked = [];
-  const newlyLocked = [];
   const suppressUnlockNotice = shouldSuppressUnlockNotices();
   let activeThemeLocked = false;
   const activeTheme = localStorage.getItem('theme') || document.documentElement.getAttribute('data-theme') || 'lootlingua';
@@ -3541,7 +4183,6 @@ function refreshThemeLockUI() {
     const theme = opt.dataset.theme;
     const comingSoon = isThemeComingSoon(theme);
     const unlocked = isThemeUnlocked(theme);
-    current[theme] = !unlocked;
     opt.classList.toggle('theme-coming-soon', comingSoon);
     opt.classList.toggle('theme-locked', !unlocked && !comingSoon);
     opt.classList.toggle('theme-locked-level', !unlocked && !comingSoon);
@@ -3549,21 +4190,6 @@ function refreshThemeLockUI() {
     updateThemeOptionLabels(opt, theme, comingSoon, unlocked);
     if (comingSoon) opt.classList.remove('active');
     else if (unlocked) opt.removeAttribute('title');
-
-    if (window.__themeLockSeeded && previous?.[theme] === false && !unlocked) {
-      newlyLocked.push(theme);
-      localStorage.removeItem(themeSeenKey('unlocked', theme));
-      localStorage.removeItem(themeSeenKey('used', theme));
-    }
-
-    const unlockKey = themeSeenKey('unlocked', theme);
-    if (window.__themeLockSeeded && previous?.[theme] === true && unlocked && !localStorage.getItem(unlockKey)) {
-      if (!suppressUnlockNotice) newlyUnlocked.push(theme);
-      localStorage.setItem(unlockKey, '1');
-    } else if (unlocked && suppressUnlockNotice) {
-      localStorage.setItem(unlockKey, '1');
-    }
-
     if (theme === activeTheme && (!unlocked || comingSoon)) activeThemeLocked = true;
   });
 
@@ -3580,28 +4206,26 @@ function refreshThemeLockUI() {
     document.querySelectorAll('.theme-option').forEach(opt => {
       opt.classList.toggle('active', opt.dataset.theme === 'lootlingua');
     });
-    if (window.__themeLockSeeded && !suppressUnlockNotice) {
-      setTimeout(() => showToast('الثيم هذا رجع للخزنة مؤقتًا. ارجع ارفع مستواك وبتفتحه من جديد.', 'warning', 5600), 600);
+    if (!suppressUnlockNotice) {
+      const noticeKey = `lootlingua:themeRelockNotice:${activeTheme}`;
+      if (!sessionStorage.getItem(noticeKey)) {
+        sessionStorage.setItem(noticeKey, '1');
+        setTimeout(() => showToast('الثيم هذا رجع للخزنة مؤقتًا. ارجع ارفع مستواك وبتفتحه من جديد.', 'warning', 5600), 600);
+      }
     }
-  }
-
-  if (!window.__themeLockSeeded) window.__themeLockSeeded = true;
-  window.__themeLockPrev = current;
-
-  if (newlyUnlocked.length > 0) {
-    const theme = newlyUnlocked[0];
-    playUnlockSound();
-    setTimeout(() => showToast(THEME_UNLOCK_MESSAGES[theme] || 'فتحت ثيم جديد. شكلك ماشي صح.', 'success', 5200), 4100);
   }
 }
 
 function updateXP(amount) {
   if (!amount) return;
-  const oldRank = getRank(userXP);
+  const prevXP = userXP;
+  const oldRank = getRank(prevXP);
   userXP = Math.max(0, userXP + amount);
   saveInt('userXP', userXP);
   if (!hasSignedInUser()) markGuestDataDirty();
   if (window.saveProfileToCloud) window.saveProfileToCloud();
+  checkThemeRelocksAfterXP(prevXP, userXP);
+  checkThemeUnlocksAfterXP(prevXP, userXP);
   renderXPBar();
   if (isJsonImportBatchActive()) return;
   if (amount > 0 && getRank(userXP).label !== oldRank.label)
@@ -3609,6 +4233,40 @@ function updateXP(amount) {
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(false);
   refreshFeatureUnlockUI();
 }
+
+function renderXpRanksGuide() {
+  const list = document.getElementById('xpRanksGuideList');
+  const summary = document.getElementById('xpRanksGuideSummary');
+  if (!list) return;
+  const current = getRank(userXP);
+  if (summary) summary.textContent = current.label;
+  list.innerHTML = XP_RANKS.map((rank, index) => {
+    const level = index + 1;
+    const reached = userXP >= rank.min;
+    const isCurrent = rank.label === current.label;
+    const reqLabel = rank.min === 0 ? '0 XP' : `${rank.min} XP`;
+    return `<li class="xp-rank-row${reached ? ' reached' : ''}${isCurrent ? ' current' : ''}">
+      <span class="xp-rank-level">Level ${level}</span>
+      <span class="xp-rank-name"><i class="${rank.iconClass}" aria-hidden="true"></i> ${rank.label}</span>
+      <span class="xp-rank-req">${reqLabel}</span>
+    </li>`;
+  }).join('');
+}
+
+window.toggleXpRanksGuide = function(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const panel = document.getElementById('xpRanksGuidePanel');
+  const btn = document.getElementById('xpRanksGuideToggle');
+  const wrap = document.querySelector('.xp-ranks-setting');
+  if (!panel || !btn) return;
+  const open = panel.hidden;
+  panel.hidden = !open;
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  wrap?.classList.toggle('open', open);
+};
 
 function renderXPBar() {
   const rank=getRank(userXP), next=getNextRank(userXP);
@@ -3628,6 +4286,7 @@ function renderXPBar() {
   if (el.ico)   el.ico.innerHTML = `<i class="${rank.iconClass}" aria-hidden="true"></i>`;
   if (el.val)   el.val.textContent = userXP+' XP';
   if (el.nxt)   el.nxt.innerHTML = next ? `${next.min} XP` : `MAX <i class="fa-solid fa-trophy" aria-hidden="true"></i>`;
+  renderXpRanksGuide();
   syncHeroAvatar();
 }
 
@@ -3821,7 +4480,7 @@ function normalizeWord(w) {
 }
 function wordExists(text) {
   const k=normalizeWord(text);
-  return window.words.some(w=>normalizeWord(w.word)===k);
+  return getPersonalDictionaryWordsSnapshot().some(w=>normalizeWord(w.word)===k);
 }
 
 function escapeHtml(v) {
@@ -3840,6 +4499,7 @@ function safeClassToken(v) {
 // ── Stats Panel ───────────────────────────────────────
 function openStatsPanel() {
   const p=document.getElementById('statsPanel'); if(!p)return;
+  lockBackgroundScroll('stats');
   p.style.display='flex'; setTimeout(()=>p.classList.add('show'),10);
   renderHeatmap(); renderStatsNumbers();
   setAppRoute('overlay', 'stats');
@@ -3847,7 +4507,9 @@ function openStatsPanel() {
 function closeStatsPanel() {
   closeRouteEntry('overlay', 'stats', () => {
     const p=document.getElementById('statsPanel'); if(!p)return;
-    p.classList.remove('show'); setTimeout(()=>p.style.display='none',300);
+    p.classList.remove('show');
+    unlockBackgroundScroll('stats');
+    setTimeout(()=>p.style.display='none',300);
   });
 }
 function renderHeatmap() {
@@ -3887,6 +4549,9 @@ function renderStatsNumbers() {
 // Save & Render helpers
 // ═══════════════════════════════════════════════════════
 function persistDictionary() {
+  if (dictionarySortMode === 'auto' && Array.isArray(window.words)) {
+    reindexWordOrder(window.words);
+  }
   writeWordsToStorage(window.words, 'normal');
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(false);
   refreshFeatureUnlockUI();
@@ -3900,6 +4565,58 @@ function saveAndRender() {
   if (typeof tryStartEmptyOnboarding === 'function') tryStartEmptyOnboarding();
   if (typeof notifyDictionaryWordAdded === 'function') notifyDictionaryWordAdded();
 }
+window.saveAndRender = saveAndRender;
+
+function wordsSnapshotNeedsFullRender(prev, next) {
+  if (!Array.isArray(prev) || !Array.isArray(next)) return true;
+  if (prev.length !== next.length) return true;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (String(a?.id) !== String(b?.id)) return true;
+    if ((a?.word || '') !== (b?.word || '')) return true;
+    if ((a?.meaning || '') !== (b?.meaning || '')) return true;
+    if ((a?.example || '') !== (b?.example || '')) return true;
+    if ((a?.category || '') !== (b?.category || '')) return true;
+    if ((a?.order ?? null) !== (b?.order ?? null)) return true;
+    if ((a?.createdAt || '') !== (b?.createdAt || '')) return true;
+  }
+  return false;
+}
+
+function syncWordMetaInDom() {
+  if (!Array.isArray(window.words)) return;
+  window.words.forEach((word) => {
+    const safeId = cssEscapeValue(String(word.id));
+    const starBtn = document.querySelector(`[data-action="star"][data-id="${safeId}"]`);
+    if (starBtn) starBtn.classList.toggle('active', !!word.starred);
+  });
+}
+
+window.applyCloudWordsFromSnapshot = function(cloudWords) {
+  loadDictionarySortPrefs();
+  const prev = Array.isArray(window.words) ? window.words : [];
+  const uid = window.auth?.currentUser?.uid;
+  let normalized = applyStoredWordOrder(cloudWords);
+  if (dictionarySortMode !== 'auto') {
+    normalized = sortDictionaryWords(normalized);
+  }
+  window.words = normalized;
+  if (typeof window.writeWordsToStorage === 'function') {
+    window.writeWordsToStorage(normalized, 'normal', uid);
+  }
+  const needsFullRender =
+    wordsSnapshotNeedsFullRender(prev, normalized) ||
+    currentView !== 'personal' ||
+    isReorderMode ||
+    isBulkDeleteMode;
+  if (needsFullRender) {
+    saveAndRender();
+    return;
+  }
+  persistDictionary();
+  syncWordMetaInDom();
+};
 
 function clearInputs() {
   ['wordInput','meaningInput','exampleInput'].forEach(id => {
@@ -3908,6 +4625,7 @@ function clearInputs() {
   });
   const cat = document.getElementById('categoryInput');
   if (cat) cat.value = 'عام';
+  setCategoryDropdownValue('عام');
   const list = document.getElementById('suggestionsList');
   if (list) list.innerHTML = '';
   const box = document.getElementById('suggestionsBox');
@@ -3955,9 +4673,13 @@ window.toggleAddFormExpanded = function() {
 };
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setAddFormExpanded(false));
+  document.addEventListener('DOMContentLoaded', () => {
+    setAddFormExpanded(false);
+    initWordHunterUI();
+  });
 } else {
   setAddFormExpanded(false);
+  initWordHunterUI();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3988,10 +4710,11 @@ window.addWord = async function() {
     if (!rateLimit('addWord', 30, 60000)) { btn.disabled=false; return; }
     if (wordExists(w)) { showToast('هذه الكلمة موجودة بالفعل في قاموسك!'); btn.disabled=false; return; }
     const xpGain  = 3;
-    const newWord = { id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:xpGain };
+    const newWord = { id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:xpGain, order:0 };
     window.words.unshift(newWord);
+    reindexWordOrder(window.words);
     if (window.saveWordToCloud) {
-      const realId = await window.saveWordToCloud(w, c, m, ex);
+      const realId = await window.saveWordToCloud(w, c, m, ex, newWord.order ?? 0);
       if (realId) newWord.id = realId;
     }
     const isCombo = checkCombo();
@@ -4022,7 +4745,7 @@ window.editWord = function(id, event) {
   document.getElementById('wordInput').value     = item.word;
   document.getElementById('meaningInput').value  = item.meaning;
   document.getElementById('exampleInput').value  = item.example || '';
-  document.getElementById('categoryInput').value = item.category;
+  setCategoryDropdownValue(item.category || 'عام');
   setAddFormExpanded(true);
   editId = id;
   const btn = document.getElementById('addBtn');
@@ -4083,6 +4806,100 @@ window.deleteWord = function(id, event) {
 };
 
 // ═══════════════════════════════════════════════════════
+function resetDeleteModalCopy() {
+  const modal = document.querySelector('#deleteModal .modal-content');
+  const title = modal?.querySelector('h2');
+  const text = modal?.querySelector('p');
+  if (title) title.textContent = 'حذف الكلمة؟';
+  if (text) text.textContent = 'هذا الإجراء لا يمكن التراجع عنه';
+}
+
+function getDeleteXpLoss(wordsToDelete) {
+  return wordsToDelete.reduce((sum, word) => sum + (Number(word?.xpValue) || 3), 0);
+}
+
+function configureDeleteModal(wordsToDelete) {
+  const modal = document.querySelector('#deleteModal .modal-content');
+  const title = modal?.querySelector('h2');
+  const text = modal?.querySelector('p');
+  if (wordsToDelete.length > 1) {
+    if (title) title.textContent = `هل أنت متأكد من حذف ${wordsToDelete.length} من الكلمات؟`;
+    if (text) text.textContent = 'هذا الإجراء لا يمكن التراجع عنه';
+  } else {
+    resetDeleteModalCopy();
+  }
+
+  const modalBody = document.querySelector('#deleteModal .modal-content');
+  let warnEl = modalBody?.querySelector('.xp-delete-warn');
+  const xpLoss = getDeleteXpLoss(wordsToDelete);
+  if (xpLoss > 0 && modalBody) {
+    if (!warnEl) {
+      warnEl = document.createElement('div');
+      warnEl.className = 'xp-delete-warn';
+      modalBody.querySelector('p')?.after(warnEl);
+    }
+    warnEl.textContent = `⚠ ستخسر ${xpLoss} XP عند الحذف`;
+  } else if (warnEl) warnEl.remove();
+  return xpLoss;
+}
+
+function confirmDeleteWords(ids, { fromBulk = false } = {}) {
+  const uniqueIds = [...new Set((Array.isArray(ids) ? ids : [ids]).map(String).filter(Boolean))];
+  const wordsToDelete = uniqueIds
+    .map(id => window.words.find(w => String(w.id) === id))
+    .filter(Boolean);
+  if (!wordsToDelete.length) return;
+
+  pendingDeleteId = uniqueIds[0];
+  const xpLoss = configureDeleteModal(wordsToDelete);
+
+  document.getElementById('deleteConfirmBtn').onclick = async function() {
+    hideModal('deleteModal');
+    uniqueIds.forEach((id) => {
+      const li = document.querySelector(`[data-id="${cssEscapeValue(id)}"]`)?.closest('.word-card');
+      if (li) {
+        li.style.transition = 'all 0.28s cubic-bezier(0.4, 0, 0.2, 1)';
+        li.style.transform = 'scale(0.96) translateY(8px)';
+        li.style.opacity = '0';
+      }
+    });
+
+    setTimeout(async () => {
+      if (xpLoss > 0) { updateXP(-xpLoss); showXPBadge(xpLoss, null, true); }
+      wordsToDelete.forEach(() => decrementDailyCount());
+      const deleteSet = new Set(uniqueIds);
+      window.words = window.words.filter(w => !deleteSet.has(String(w.id)));
+      if (window.deleteWordFromCloud) await Promise.all(uniqueIds.map(id => window.deleteWordFromCloud(id)));
+      pendingDeleteId = null;
+      document.querySelector('#deleteModal .xp-delete-warn')?.remove();
+      resetDeleteModalCopy();
+      if (fromBulk || isBulkDeleteMode) window.exitBulkDeleteMode();
+      persistDictionary();
+      if (typeof reconcileEmptyGuestSessionState === 'function') reconcileEmptyGuestSessionState();
+      if (currentView === 'starred') renderStarredWords();
+      else render();
+    }, 300);
+  };
+
+  const cBtn = document.getElementById('deleteCancelBtn');
+  if (cBtn) cBtn.onclick = () => {
+    hideModal('deleteModal');
+    document.querySelector('#deleteModal .xp-delete-warn')?.remove();
+    resetDeleteModalCopy();
+  };
+  showModal('deleteModal');
+}
+
+window.confirmBulkDeleteSelection = function() {
+  if (!bulkSelectedWordIds.size) return;
+  confirmDeleteWords([...bulkSelectedWordIds], { fromBulk: true });
+};
+
+window.deleteWord = function(id, event) {
+  if (event) event.stopPropagation();
+  confirmDeleteWords([id]);
+};
+
 // Star Toggle
 // ═══════════════════════════════════════════════════════
 window.toggleStar = function(id, event) {
@@ -4363,10 +5180,10 @@ window.submitSuggestionFromUI = async function(wordEnc, arEnc, gameEnc, ev) {
   const word = decodeSugAttr(wordEnc);
   const ar = decodeSugAttr(arEnc);
   const game = decodeSugAttr(gameEnc);
-  const btn = ev?.currentTarget;
-  if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+  const btn = ev?.target?.closest?.('[data-action="submit-suggestion"]') || ev?.currentTarget;
+  if (btn?.classList) { btn.disabled = true; btn.classList.add('loading'); }
   const result = await window.submitWordSuggestion({ word, ar, game });
-  if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
+  if (btn?.classList) { btn.disabled = false; btn.classList.remove('loading'); }
   if (result?.ok) {
     pushNotification('وصل الاقتراح لغرفة العمليات.. كفو يا أسطورة! 🔥', 'success');
   } else {
@@ -4428,7 +5245,6 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
       const nw = { id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain };
       window.words.unshift(nw);
       persistDictionary();
-      if (currentView === 'personal') render();
       updateXP(xpGain);
       if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
       pushNotification('تمت الإضافة لقاموسك الشخصي!', 'success');
@@ -4494,6 +5310,7 @@ function renderSuggestionHtml(suggestions, itemClass, options = {}) {
     sourceWord = window.__lastDictSearchWord || '',
     game = getSuggestionGameLabel(),
     allowSelect = true,
+    showActions = false,
     listSelector = '',
   } = options;
 
@@ -4535,11 +5352,11 @@ function renderSuggestionHtml(suggestions, itemClass, options = {}) {
             </div>
           ` : ''}
         </div>
-        <div class="sug-actions">
+        ${showActions ? `<div class="sug-actions">
           <button type="button" class="sug-gamer-action-btn sug-add-personal-btn" data-action="add-ai-meaning"
             data-word="${wordEnc}" data-ar="${sugAttr(fields.ar)}" data-pos="${sugAttr(fields.pos)}" data-ex="${sugAttr(fields.ex)}" data-game="${itemGameEnc}">
             <i class="fa-solid fa-book" aria-hidden="true"></i>
-            <span>إضافة للقاموسك الشخصي</span>
+            <span>إضافة لقاموسك الشخصي</span>
           </button>
           <button type="button" class="sug-gamer-action-btn sug-suggest-btn" data-action="submit-suggestion"
             title="اقترح إضافة هذه الكلمة للموقع"
@@ -4547,7 +5364,7 @@ function renderSuggestionHtml(suggestions, itemClass, options = {}) {
             data-word="${wordEnc}" data-ar="${sugAttr(fields.ar)}" data-game="${itemGameEnc}">
             <i class="fa-solid fa-lightbulb" aria-hidden="true"></i>
           </button>
-        </div>
+        </div>` : ''}
       </div>`;
   });
 
@@ -4602,6 +5419,7 @@ window.fetchGamerSuggestions = async function() {
       sourceWord: word,
       game: getSuggestionGameLabel() || 'ألعاب',
       allowSelect: true,
+      showActions: true,
       listSelector: '.gamer-suggestions-results',
     });
     html += '</div>';
@@ -4699,13 +5517,309 @@ window.fetchSuggestions = async function() {
 
 function selectSuggestion(ar, pos, ex) {
   document.getElementById('meaningInput').value  = ar;
-  document.getElementById('categoryInput').value = pos;
+  setCategoryDropdownValue(pos || 'عام');
   document.getElementById('exampleInput').value  = ex;
   setAddFormExpanded(true);
   const box = document.getElementById('suggestionsBox');
   if (box) box.style.display = 'none';
   clearGamerSuggestionsUI();
 }
+
+const WORD_HUNTER_MIN_CONFIDENCE = 45;
+let wordHunterImageFile = null;
+let wordHunterNatural = { width: 1, height: 1 };
+let wordHunterActiveWord = null;
+let wordHunterObjectUrl = '';
+
+function cleanOcrWord(text) {
+  return String(text || '').replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, '').trim();
+}
+
+function setWordHunterStatus(message, loading = false) {
+  const status = document.getElementById('wordHunterStatus');
+  if (!status) return;
+  status.innerHTML = message
+    ? `${loading ? '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> ' : ''}${message}`
+    : '';
+}
+
+window.openWordHunterModal = function() {
+  const modal = document.getElementById('wordHunterModal');
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('word-hunter-open');
+  closeAppDropdowns();
+  document.getElementById('dictionarySortMenu')?.classList.remove('open');
+};
+
+window.closeWordHunterModal = function() {
+  const modal = document.getElementById('wordHunterModal');
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('word-hunter-open');
+  resetWordHunterModal();
+};
+
+function resetWordHunterModal() {
+  const dropzone = document.getElementById('wordHunterDropzone');
+  const stage = document.getElementById('wordHunterStage');
+  const image = document.getElementById('wordHunterImage');
+  const overlay = document.getElementById('wordHunterOverlay');
+  const popover = document.getElementById('wordHunterPopover');
+  dropzone?.classList.remove('is-hidden', 'drag-over');
+  if (stage) stage.hidden = true;
+  if (overlay) overlay.innerHTML = '';
+  if (popover) {
+    popover.hidden = true;
+    popover.innerHTML = '';
+  }
+  if (image) image.removeAttribute('src');
+  if (wordHunterObjectUrl) {
+    URL.revokeObjectURL(wordHunterObjectUrl);
+    wordHunterObjectUrl = '';
+  }
+  wordHunterImageFile = null;
+  wordHunterActiveWord = null;
+  wordHunterNatural = { width: 1, height: 1 };
+  setWordHunterStatus('');
+}
+
+function initWordHunterUI() {
+  const dropzone = document.getElementById('wordHunterDropzone');
+  const fileInput = document.getElementById('wordHunterFileInput');
+  if (!dropzone || !fileInput || dropzone.dataset.ready === '1') return;
+  dropzone.dataset.ready = '1';
+
+  const pickFile = () => fileInput.click();
+  dropzone.addEventListener('click', pickFile);
+  dropzone.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      pickFile();
+    }
+  });
+  ['dragenter', 'dragover'].forEach(type => {
+    dropzone.addEventListener(type, (event) => {
+      event.preventDefault();
+      dropzone.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(type => {
+    dropzone.addEventListener(type, (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('drag-over');
+    });
+  });
+  dropzone.addEventListener('drop', (event) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file) handleWordHunterFile(file);
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) handleWordHunterFile(file);
+    fileInput.value = '';
+  });
+}
+
+async function handleWordHunterFile(file) {
+  if (!file.type.startsWith('image/')) {
+    showToast('ارفع صورة فقط يا بطل.', 'warning');
+    return;
+  }
+  if (!window.Tesseract?.recognize) {
+    showToast('مكتبة قراءة الصور لم تجهز بعد. حدّث الصفحة أو جرّب بعد لحظة.', 'warning', 4200);
+    return;
+  }
+
+  wordHunterImageFile = file;
+  const dropzone = document.getElementById('wordHunterDropzone');
+  const image = document.getElementById('wordHunterImage');
+  const stage = document.getElementById('wordHunterStage');
+  const overlay = document.getElementById('wordHunterOverlay');
+  const popover = document.getElementById('wordHunterPopover');
+  if (!image || !stage || !overlay) return;
+
+  overlay.innerHTML = '';
+  popover?.setAttribute('hidden', '');
+  stage.hidden = false;
+  dropzone?.classList.add('is-hidden');
+  if (wordHunterObjectUrl) URL.revokeObjectURL(wordHunterObjectUrl);
+  wordHunterObjectUrl = URL.createObjectURL(file);
+  image.src = wordHunterObjectUrl;
+  await new Promise(resolve => {
+    image.onload = () => {
+      wordHunterNatural = {
+        width: image.naturalWidth || 1,
+        height: image.naturalHeight || 1,
+      };
+      resolve();
+    };
+  });
+
+  setWordHunterStatus('جاري استخراج الكلمات من الصورة محلياً...', true);
+  try {
+    const result = await window.Tesseract.recognize(wordHunterImageFile, 'eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round((m.progress || 0) * 100);
+          setWordHunterStatus(`جاري قراءة الصورة... ${pct}%`, true);
+        }
+      },
+    });
+    const words = Array.isArray(result?.data?.words) ? result.data.words : [];
+    renderWordHunterWords(words);
+  } catch (error) {
+    console.error('word hunter OCR:', error);
+    setWordHunterStatus('تعذر استخراج النص من الصورة. جرّب صورة أوضح.', false);
+  }
+}
+
+function getOcrBox(word) {
+  const box = word?.bbox || word;
+  const x0 = Number(box?.x0 ?? box?.left ?? box?.x ?? 0);
+  const y0 = Number(box?.y0 ?? box?.top ?? box?.y ?? 0);
+  const x1 = Number(box?.x1 ?? (x0 + Number(box?.width || 0)));
+  const y1 = Number(box?.y1 ?? (y0 + Number(box?.height || 0)));
+  return { x0, y0, x1, y1 };
+}
+
+function renderWordHunterWords(ocrWords) {
+  const overlay = document.getElementById('wordHunterOverlay');
+  if (!overlay) return;
+  const seen = [];
+  overlay.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  ocrWords.forEach((item, index) => {
+    const text = cleanOcrWord(item.text);
+    if (!text || text.length > 40) return;
+    if (Number(item.confidence ?? 100) < WORD_HUNTER_MIN_CONFIDENCE) return;
+    const box = getOcrBox(item);
+    const width = Math.max(0, box.x1 - box.x0);
+    const height = Math.max(0, box.y1 - box.y0);
+    if (width < 4 || height < 4) return;
+    seen.push(text);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'word-hunter-word';
+    btn.textContent = text;
+    btn.style.left = `${(box.x0 / wordHunterNatural.width) * 100}%`;
+    btn.style.top = `${(box.y0 / wordHunterNatural.height) * 100}%`;
+    btn.style.width = `${(width / wordHunterNatural.width) * 100}%`;
+    btn.style.height = `${(height / wordHunterNatural.height) * 100}%`;
+    btn.dataset.word = text;
+    btn.dataset.index = String(index);
+    btn.addEventListener('click', (event) => handleWordHunterWordClick(event, btn));
+    frag.appendChild(btn);
+  });
+  overlay.appendChild(frag);
+  setWordHunterStatus(
+    seen.length
+      ? `تم تجهيز ${seen.length} كلمة. اضغط على أي كلمة لمعناها.`
+      : 'لم تظهر كلمات واضحة. جرّب صورة أوضح أو قصّ الجزء الذي يحتوي النص.',
+    false
+  );
+}
+
+async function handleWordHunterWordClick(event, btn) {
+  event.preventDefault();
+  event.stopPropagation();
+  const word = cleanOcrWord(btn.dataset.word);
+  if (!word) return;
+  if (!rateLimit('wordHunterLookup', 12, 60000)) return;
+  wordHunterActiveWord = word;
+  document.querySelectorAll('.word-hunter-word.active').forEach(el => el.classList.remove('active'));
+  btn.classList.add('active');
+  showWordHunterPopover(btn, { word, loading: true });
+
+  const local = (window.words || []).find(item => String(item.word || '').toLowerCase() === word.toLowerCase());
+  if (local) {
+    showWordHunterPopover(btn, {
+      word,
+      meaning: local.meaning || '',
+      category: local.category || 'عام',
+      example: local.example || '',
+      local: true,
+    });
+    return;
+  }
+
+  try {
+    const { data, fromCache } = await fetchAiMeaningsWithCache(word, 'normal');
+    const fields = pickSuggestionFields(data?.[0] || {});
+    showWordHunterPopover(btn, {
+      word,
+      meaning: fields.ar || 'لم نجد معنى واضح.',
+      category: fields.pos || 'عام',
+      example: fields.ex || '',
+      fromCache,
+      empty: !fields.ar,
+    });
+  } catch (error) {
+    if (error.code === 403) {
+      showWordHunterPopover(btn, { word, meaning: 'سجل دخولك لاستخدام البحث الذكي بعد التجربة.', empty: true });
+      return;
+    }
+    showWordHunterPopover(btn, { word, meaning: 'تعذر جلب المعنى الآن.', empty: true });
+  }
+}
+
+function showWordHunterPopover(anchor, data) {
+  const popover = document.getElementById('wordHunterPopover');
+  const wrap = document.getElementById('wordHunterImageWrap');
+  if (!popover || !wrap || !anchor) return;
+  const anchorRect = anchor.getBoundingClientRect();
+  const wrapRect = wrap.getBoundingClientRect();
+  const anchorCenter = anchorRect.left - wrapRect.left + anchorRect.width / 2;
+  const anchorTop = anchorRect.top - wrapRect.top;
+  const anchorBottom = anchorRect.bottom - wrapRect.top;
+  popover.hidden = false;
+  const disabled = data.local || data.empty || wordExists(data.word);
+  popover.innerHTML = data.loading
+    ? `<div class="word-hunter-popover-loading"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i><strong>${escapeHtml(data.word)}</strong></div>`
+    : `
+      <strong>${escapeHtml(data.word)}</strong>
+      <p>${escapeHtml(data.meaning || '')}</p>
+      ${data.example ? `<small>${escapeHtml(data.example)}</small>` : ''}
+      <div class="word-hunter-popover-meta">${data.local ? 'موجودة في قاموسك' : (data.fromCache ? 'من الكاش المشترك' : 'فحص كلمة واحدة فقط')}</div>
+      <button type="button" ${disabled ? 'disabled' : ''} onclick="addWordHunterResult(event)"
+        data-word="${sugAttr(data.word)}" data-ar="${sugAttr(data.meaning || '')}" data-pos="${sugAttr(data.category || 'عام')}" data-ex="${sugAttr(data.example || '')}">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        <span>${disabled ? 'مضافة مسبقاً' : 'إضافة للقاموس'}</span>
+      </button>
+    `;
+
+  const popoverWidth = popover.offsetWidth || 360;
+  const popoverHeight = popover.offsetHeight || 220;
+  const left = Math.max(
+    (popoverWidth / 2) + 8,
+    Math.min(anchorCenter, wrapRect.width - (popoverWidth / 2) - 8)
+  );
+  const canFitBelow = anchorBottom + 10 + popoverHeight <= wrapRect.height;
+  const canFitAbove = anchorTop - 10 - popoverHeight >= 0;
+  popover.style.left = `${left}px`;
+  if (!canFitBelow && canFitAbove) {
+    popover.style.top = `${anchorTop - 10}px`;
+    popover.style.transform = 'translate(-50%, -100%)';
+  } else {
+    popover.style.top = `${anchorBottom + 10}px`;
+    popover.style.transform = 'translateX(-50%)';
+  }
+}
+
+window.addWordHunterResult = async function(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  const btn = event.currentTarget;
+  await addAiMeaningCore({
+    word: decodeSugAttr(btn.dataset.word),
+    ar: decodeSugAttr(btn.dataset.ar),
+    pos: decodeSugAttr(btn.dataset.pos),
+    ex: decodeSugAttr(btn.dataset.ex),
+    game: '',
+  }, btn);
+};
 
 window.openGameGamerAiSearch = function() {
   if (!guardGuestAiSearch('gamer')) return;
@@ -4754,6 +5868,7 @@ window.fetchGameGamerSuggestions = async function(forcedWord) {
       sourceWord: word,
       game: gameLabel,
       allowSelect: false,
+      showActions: true,
       listSelector: '.game-gamer-results',
     });
     html += '</div>';
@@ -4784,6 +5899,14 @@ function setFilter(f) {
 // ═══════════════════════════════════════════════════════
 function toggleReorderMode() {
   isReorderMode   = !isReorderMode;
+  if (isReorderMode) {
+    if (isBulkDeleteMode) window.exitBulkDeleteMode();
+  } else {
+    dictionarySortMode = 'auto';
+    reindexWordOrder(window.words);
+    saveDictionarySortPrefs();
+    scheduleWordOrderCloudSync();
+  }
   selectedIndices = [];
   const btn = document.getElementById('reorderBtn');
   btn.classList.toggle('active-tool', isReorderMode);
@@ -4806,8 +5929,11 @@ function drop(ev, dropIndex) {
   let target    = dropIndex;
   dragged.forEach(i => { if (i < dropIndex) target--; });
   window.words.splice(Math.max(target, 0), 0, ...items);
-  window.words.forEach((w, i) => { w.order = i; });
+  reindexWordOrder(window.words);
+  dictionarySortMode = 'auto';
+  saveDictionarySortPrefs();
   persistDictionary();
+  scheduleWordOrderCloudSync();
   selectedIndices = [];
   render();
 }
@@ -5180,6 +6306,8 @@ window.importData = async function(event) {
 const LOOT_BOX_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const LOOT_STATE_KEY = 'lootlinguaDailyLootState';
 const TITLE_STATE_KEY = 'lootlinguaTitlesState';
+const ACTIVE_TITLE_KEY = 'lootlinguaActiveTitleId';
+const ACTIVE_TITLE_NONE = '__none';
 const STREAK_FREEZE_KEY = 'lootlinguaStreakFreezes';
 const FREEZE_SAVES_KEY = 'lootlinguaFreezeSaves';
 const GAME_DICT_ADDS_KEY = 'lootlinguaGameDictAdds';
@@ -5189,6 +6317,7 @@ const TITLE_DEFS = [
   {
     id: 'first_spark',
     icon: 'fa-solid fa-bolt',
+    color: '#facc15',
     name: 'أول شرارة',
     how: 'افتح أول صندوق يومي.',
     unlocked: () => getLootState().totalOpens >= 1,
@@ -5196,6 +6325,7 @@ const TITLE_DEFS = [
   {
     id: 'loot_hunter',
     icon: 'fa-solid fa-box-open',
+    color: '#f59e0b',
     name: 'صياد اللوت',
     how: 'افتح 7 صناديق يومية متتالية.',
     unlocked: () => getLootState().streak >= 7,
@@ -5203,6 +6333,7 @@ const TITLE_DEFS = [
   {
     id: 'streak_savior',
     icon: 'fa-solid fa-shield-halved',
+    color: '#38bdf8',
     name: 'درع الستريك',
     how: 'خلّي Streak Freeze ينقذ سلسلتك مرة واحدة.',
     unlocked: () => loadInt(FREEZE_SAVES_KEY, 0) >= 1,
@@ -5210,6 +6341,7 @@ const TITLE_DEFS = [
   {
     id: 'game_explorer',
     icon: 'fa-solid fa-dice-d20',
+    color: '#a78bfa',
     name: 'رحّالة الألعاب',
     how: 'أضف كلمة من أي قاموس ألعاب إلى قاموسك.',
     unlocked: () => loadInt(GAME_DICT_ADDS_KEY, 0) >= 1,
@@ -5217,27 +6349,31 @@ const TITLE_DEFS = [
   {
     id: 'word_collector',
     icon: 'fa-solid fa-layer-group',
+    color: '#22c55e',
     name: 'جامع الكلمات',
     how: 'اجمع 25 كلمة في قاموسك.',
-    unlocked: () => window.words.length >= 25,
+    unlocked: () => getDictionaryWordCount() >= 25,
   },
   {
     id: 'dictionary_keeper',
     icon: 'fa-solid fa-book-bookmark',
+    color: '#06b6d4',
     name: 'أمين القاموس',
     how: 'وصل قاموسك إلى 50 كلمة.',
-    unlocked: () => window.words.length >= 50,
+    unlocked: () => getDictionaryWordCount() >= 50,
   },
   {
     id: 'star_chaser',
     icon: 'fa-solid fa-star',
+    color: '#fbbf24',
     name: 'صائد الصعب',
     how: 'علّم 10 كلمات ككلمات صعبة.',
-    unlocked: () => window.words.filter(w => w.starred).length >= 10,
+    unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => w.starred).length >= 10,
   },
   {
     id: 'strategist',
     icon: 'fa-solid fa-chess-knight',
+    color: '#f472b6',
     name: 'الخبير الاستراتيجي',
     how: 'أنهِ 10 اختبارات كاملة بدون ولا غلطة.',
     unlocked: () => loadInt('lootlinguaPerfectQuizzes', 0) >= 10,
@@ -5245,6 +6381,7 @@ const TITLE_DEFS = [
   {
     id: 'streak_guard',
     icon: 'fa-solid fa-fire-flame-curved',
+    color: '#fb7185',
     name: 'لهيب الأسبوع',
     how: 'حافظ على Streak لمدة 7 أيام.',
     unlocked: () => loadInt('dailyStreak', 0) >= 7,
@@ -5252,14 +6389,103 @@ const TITLE_DEFS = [
   {
     id: 'level_climber',
     icon: 'fa-solid fa-mountain-sun',
+    color: '#84cc16',
     name: 'متسلّق المستويات',
     how: 'وصل إلى Level 5.',
     unlocked: () => getLevelFromXP(loadInt('userXP', 0)) >= 5,
   },
 ];
 
+const TITLE_CUSTOM_ICON_URLS = {
+  first_spark: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/26a1.svg',
+  loot_hunter: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f4e6.svg',
+  streak_savior: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f6e1.svg',
+  game_explorer: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f3b2.svg',
+  word_collector: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f5c2.svg',
+  dictionary_keeper: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f4d6.svg',
+  star_chaser: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/2b50.svg',
+  strategist: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/265f.svg',
+  streak_guard: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f525.svg',
+  level_climber: 'https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/26f0.svg',
+};
+
+function getTitleIconUrl(def) {
+  return def?.iconUrl || TITLE_CUSTOM_ICON_URLS[def?.id] || '';
+}
+
+function renderTitleIcon(def, className = 'title-custom-icon') {
+  const color = escapeHtml(def?.color || 'var(--accent)');
+  return `<i class="${escapeHtml(className)} ${escapeHtml(def?.icon || 'fa-solid fa-medal')}" style="--title-color:${color};" aria-hidden="true"></i>`;
+}
+
+function getUnlockedTitleDefs() {
+  const unlocked = new Set(getTitleState().unlocked || []);
+  return TITLE_DEFS.filter(def => unlocked.has(def.id));
+}
+
+function getActiveTitleId() {
+  const unlocked = new Set(getTitleState().unlocked || []);
+  const saved = localStorage.getItem(ACTIVE_TITLE_KEY) || '';
+  if (saved === ACTIVE_TITLE_NONE) return '';
+  if (saved && unlocked.has(saved)) return saved;
+  return [...unlocked][0] || '';
+}
+
+function getActiveTitleDef() {
+  const id = getActiveTitleId();
+  return id ? TITLE_DEFS.find(def => def.id === id) || null : null;
+}
+
+window.setActiveLootlinguaTitle = function(titleId) {
+  const unlocked = new Set(getTitleState().unlocked || []);
+  const next = unlocked.has(titleId) ? titleId : '';
+  if (next) localStorage.setItem(ACTIVE_TITLE_KEY, next);
+  else localStorage.setItem(ACTIVE_TITLE_KEY, ACTIVE_TITLE_NONE);
+  markGuestProfileDataDirty(ACTIVE_TITLE_KEY);
+  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  syncHeroAvatar();
+};
+
+function renderProfileTitlePicker() {
+  const picker = document.getElementById('profileTitlePicker');
+  if (!picker) return;
+  const unlocked = getUnlockedTitleDefs();
+  if (!unlocked.length) {
+    picker.innerHTML = '<p class="profile-title-empty">افتح أول لقب من صفحة الكنز حتى يظهر هنا.</p>';
+    return;
+  }
+  picker.innerHTML = `
+    <button type="button" class="profile-title-choice ${!activeId ? 'active' : ''}" onclick="setActiveLootlinguaTitle('')" aria-pressed="${!activeId}">
+      <span class="profile-title-choice-icon"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i></span>
+      <span>بدون لقب</span>
+    </button>
+    ${unlocked.map(def => `
+      <button type="button" class="profile-title-choice ${activeId === def.id ? 'active' : ''}" onclick="setActiveLootlinguaTitle('${escapeHtml(def.id)}')" aria-pressed="${activeId === def.id}">
+        <span class="profile-title-choice-icon">${renderTitleIcon(def, 'profile-title-choice-img')}</span>
+        <span>${escapeHtml(def.name)}</span>
+      </button>
+    `).join('')}
+  `;
+}
+
 function getLootState() {
   return loadJSON(LOOT_STATE_KEY, { lastOpenAt: 0, streak: 0, totalOpens: 0, lastOpenDay: '', rewards: [], freezesEarned: 0 });
+}
+
+function renderProfileTitlePicker() {
+  const picker = document.getElementById('profileTitlePicker');
+  if (!picker) return;
+  const unlocked = getUnlockedTitleDefs();
+  if (!unlocked.length) {
+    picker.innerHTML = '<p class="profile-title-empty">افتح أول لقب من صفحة الكنز حتى يظهر هنا.</p>';
+    return;
+  }
+  picker.innerHTML = unlocked.map(def => `
+    <span class="profile-title-chip" title="${escapeHtml(def.name)}">
+      ${renderTitleIcon(def, 'profile-title-choice-img')}
+      <span>${escapeHtml(def.name)}</span>
+    </span>
+  `).join('');
 }
 
 function saveLootState(state) {
@@ -5434,7 +6660,7 @@ window.openDailyLootBox = function() {
 
 function getTitleProgress(def) {
   const loot = getLootState();
-  const words = Array.isArray(window.words) ? window.words : [];
+  const words = getPersonalDictionaryWordsSnapshot();
   const starred = words.filter(w => w.starred).length;
   const perfect = loadInt('lootlinguaPerfectQuizzes', 0);
   const freezeSaves = loadInt(FREEZE_SAVES_KEY, 0);
@@ -5468,6 +6694,11 @@ function evaluateTitleUnlocks(celebrate = false) {
     }
   });
   state.unlocked = [...unlocked];
+  if (localStorage.getItem(ACTIVE_TITLE_KEY) &&
+      localStorage.getItem(ACTIVE_TITLE_KEY) !== ACTIVE_TITLE_NONE &&
+      !unlocked.has(localStorage.getItem(ACTIVE_TITLE_KEY))) {
+    localStorage.removeItem(ACTIVE_TITLE_KEY);
+  }
   saveTitleState(state);
   if (newly.length && window.saveProfileToCloud) window.saveProfileToCloud();
   if (newly.length && celebrate && !isJsonImportBatchActive()) {
@@ -5476,6 +6707,7 @@ function evaluateTitleUnlocks(celebrate = false) {
     showToast(`لقب جديد: ${first.name}`, 'success', 5200);
   }
   renderTitlesGrid();
+  syncHeroAvatar();
   return newly;
 }
 
@@ -5493,7 +6725,7 @@ function renderTitlesGrid() {
     const progressText = getTitleProgress(def);
     return `
       <article class="${cls}" title="${escapeHtml(def.how)}">
-        <div class="title-icon"><i class="${def.icon}" aria-hidden="true"></i></div>
+        <div class="title-icon">${renderTitleIcon(def)}</div>
         <div class="title-info">
           <h3>${escapeHtml(isUnlocked ? def.name : 'لقب مخفي')}</h3>
           <p>${escapeHtml(def.how)}</p>
@@ -6174,6 +7406,7 @@ window.searchGameWords = function() {
 function hideAllViewElements() {
   document.getElementById('personalControls').style.display = 'none';
   document.querySelector('.search-bar-row').style.display   = 'none';
+  document.getElementById('bulkDeleteBar').style.display    = 'none';
   document.querySelector('.backup-zone').style.display      = 'none';
   document.getElementById('gameSearchBar').style.display    = 'none';
   document.getElementById('starredSearchBar').style.display = 'none';
@@ -6283,6 +7516,7 @@ window.loadStarredView = function() {
   setTreasureDockActive('worlds');
   document.getElementById('starredSearchBar').style.display = 'block';
   document.getElementById('starredSearchInput').value = '';
+  document.getElementById('bulkDeleteBar').style.display = '';
   document.getElementById('list').style.display = '';
 
   document.querySelector('.page-header h1').innerHTML = '<i class="fas fa-star" aria-hidden="true"></i> الكلمات الصعبة';
@@ -6328,9 +7562,12 @@ function renderStarredWords() {
     const safeId = w.id.replace(/'/g, "\\'");
     const dispWord   = query ? highlightText(w.word, query) : escapeHtml(w.word);
     const dispMeaning = query ? highlightText(w.meaning, query) : escapeHtml(w.meaning);
-    const cls = ['word-card', w.expanded ? 'show-example' : ''].filter(Boolean).join(' ');
+    const cls = ['word-card',
+      isBulkDeleteMode && bulkSelectedWordIds.has(String(w.id)) ? 'bulk-selected' : '',
+      w.expanded ? 'show-example' : ''
+    ].filter(Boolean).join(' ');
     return `
-      <li class="${cls}" data-action="toggle-expand" data-index="${ri}">
+      <li class="${cls}" data-action="toggle-expand" data-index="${ri}" data-id="${safeId}">
         <div class="word-body" style="flex:1;min-width:0;" data-action="toggle-expand" data-index="${ri}">
           <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
             <button class="star-btn active" data-tip="صعبة" data-action="star" data-id="${safeId}">
@@ -6395,6 +7632,7 @@ window.loadQuizView = function() {
 
 window.loadPersonalDictionary = function() {
   cleanupQuizSessionIfActive();
+  if (isBulkDeleteMode) window.exitBulkDeleteMode();
   const returningFromTreasure = currentView === 'treasure';
   const returningFromWorlds = WORLDS_VIEWS.has(currentView) || currentView === 'quiz';
   if (returningFromTreasure) animateTreasureRoute('back');
@@ -6416,6 +7654,7 @@ window.loadPersonalDictionary = function() {
   // إظهار كل عناصر القاموس الشخصي
   document.getElementById('personalControls').style.display = 'block';
   document.querySelector('.search-bar-row').style.display   = '';
+  document.getElementById('bulkDeleteBar').style.display    = '';
   document.querySelector('.backup-zone').style.display      = '';
   document.getElementById('list').style.display             = '';
 
@@ -6455,32 +7694,39 @@ window.addFromGame = async function(text, meaning, example, btnEl) {
   if (btnEl) { btnEl.textContent='...'; btnEl.disabled=true; }
 
   const canUseCloud = Boolean(window.auth?.currentUser && window.saveWordToCloud);
+  const refreshAfterGameDictionaryAdd = () => {
+    if (currentView === 'personal') render();
+    else if (currentView === 'minecraft' || currentView === 'pubg') renderGameWords(currentGameWords);
+    refreshFeatureUnlockUI();
+  };
   if (canUseCloud) {
     const realId = await window.saveWordToCloud(text, 'لعبة', meaning, example||'');
     if (realId) {
       window.words.unshift({id:realId,word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain});
       persistDictionary();
-      if (currentView === 'personal') render();
       showToast('تمت الإضافة لقاموسك');
       updateXP(xpGain); showXPBadge(xpGain,null,false);
       checkAndUpdateStreak(); incrementDailyCount(); recordGameDictionaryAdd();
+      refreshAfterGameDictionaryAdd();
       if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
     } else {
       const nw={id:Date.now().toString(),word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain};
       window.words.unshift(nw);
-      saveAndRender();
+      persistDictionary();
       showToast('تمت الإضافة محلياً');
       updateXP(xpGain); showXPBadge(xpGain,null,false);
       checkAndUpdateStreak(); incrementDailyCount(); recordGameDictionaryAdd();
+      refreshAfterGameDictionaryAdd();
       if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
     }
   } else {
     const nw={id:Date.now().toString(),word:text,meaning,example:example||'',category:'لعبة',starred:false,forgetCount:0,xpValue:xpGain};
     window.words.unshift(nw);
-    saveAndRender();
+    persistDictionary();
     showToast('تمت الإضافة للقاموس المحلي');
     updateXP(xpGain); showXPBadge(xpGain,null,false);
     checkAndUpdateStreak(); incrementDailyCount(); recordGameDictionaryAdd();
+    refreshAfterGameDictionaryAdd();
     if (btnEl) { btnEl.textContent='✓'; btnEl.classList.add('btn-already-added'); }
   }
 };
@@ -6500,6 +7746,10 @@ function getWordRenderKey(query, searchType, filtered) {
     query,
     searchType,
     currentFilter,
+    dictionarySortMode,
+    dictionarySortCategory,
+    isBulkDeleteMode ? 'bulk' : 'normal',
+    [...bulkSelectedWordIds].join(','),
     window.words.length,
     filtered.length,
     filtered[0]?.id || '',
@@ -6564,12 +7814,14 @@ function renderWordCard(w, query) {
     ? `draggable="true" ondragstart="drag(event,${ri})" ondragover="allowDrop(event)" ondrop="drop(event,${ri})"`
     : '';
   const cls = ['word-card', isReorderMode ? 'reorder-mode-li' : '',
-               selectedIndices.includes(ri) ? 'selected-for-move' : '', w.expanded ? 'show-example' : '']
+               selectedIndices.includes(ri) ? 'selected-for-move' : '',
+               isBulkDeleteMode && bulkSelectedWordIds.has(String(w.id)) ? 'bulk-selected' : '',
+               w.expanded ? 'show-example' : '']
     .filter(Boolean).join(' ');
   const safeId = w.id.replace(/'/g, "\\'");
 
   return `
-    <li ${drag} class="${cls}" data-action="toggle-expand" data-index="${ri}">
+    <li ${drag} class="${cls}" data-action="toggle-expand" data-index="${ri}" data-id="${safeId}">
       <div class="word-body" style="flex:1;min-width:0;" data-action="toggle-expand" data-index="${ri}">
         <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
           <button class="star-btn ${w.starred ? 'active' : ''}" data-tip="صعبة"
@@ -6735,6 +7987,8 @@ function render(options = {}) {
       if (!aStarts && bStarts) return 1;
       return a.word.localeCompare(b.word);
     });
+  } else if (!isReorderMode) {
+    filtered = sortDictionaryWords(filtered);
   }
 
   const listEl = document.getElementById('list');
@@ -6831,11 +8085,36 @@ document.addEventListener('click', (e) => {
 // ── Centralized Click Handling (Event Delegation) ───────
 document.addEventListener('DOMContentLoaded', () => {
   initEmptyOnboardingInputWatcher();
+  initAppDropdowns();
+  syncAppDropdownLabels();
   bindSearchLockOverlays();
   refreshGuestSearchLocks();
+  syncDictionarySortUI();
+  updateBulkDeleteBar();
 
   const list = document.getElementById('list');
   if (!list) return;
+
+  let deleteLongPressTimer = null;
+
+  const clearDeleteLongPress = () => {
+    clearTimeout(deleteLongPressTimer);
+    deleteLongPressTimer = null;
+  };
+
+  list.addEventListener('pointerdown', (e) => {
+    const btn = e.target.closest('[data-action="delete"]');
+    if (!btn || isBulkDeleteMode) return;
+    clearDeleteLongPress();
+    deleteLongPressTimer = setTimeout(() => {
+      suppressDeleteClickOnce = true;
+      enterBulkDeleteMode(btn.dataset.id);
+    }, 700);
+  });
+
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => {
+    list.addEventListener(type, clearDeleteLongPress);
+  });
 
   list.addEventListener('click', (e) => {
     const target = e.target.closest('[data-action]');
@@ -6848,11 +8127,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // Stop propagation if it's a button action to prevent li toggle
     if (action !== 'toggle-expand') e.stopPropagation();
 
+    if (isBulkDeleteMode) {
+      e.preventDefault();
+      if (suppressDeleteClickOnce) {
+        suppressDeleteClickOnce = false;
+        return;
+      }
+      const row = target.closest('.word-card');
+      const selectedId = id || row?.dataset.id;
+      if (selectedId) toggleBulkWordSelection(selectedId);
+      return;
+    }
+
     switch (action) {
       case 'star':   window.toggleStar(id, e); break;
       case 'sound':  window.playSound(id, e);  break;
       case 'edit':   window.editWord(id, e);   break;
-      case 'delete': window.deleteWord(id, e); break;
+      case 'delete':
+        if (suppressDeleteClickOnce) {
+          suppressDeleteClickOnce = false;
+          return;
+        }
+        window.deleteWord(id, e);
+        break;
       case 'toggle-expand': 
         if (!isReorderMode) handleLiClick(parseInt(index), target.closest('li')); 
         break;
@@ -7235,6 +8532,8 @@ function finishQuizRun() {
 function markForgot() {
   currentStreak = 0;
   currentQuizMistakes++;
+  triggerShakeEffect(document.getElementById('quizViewCard'));
+  safeVibrate(100);
   const w = currentQuizWords[quizIndex];
   if (!w) return;
   const { updatedWord } = forgetQuizWord(w);
@@ -7251,7 +8550,32 @@ function playQuizSound(event) {
 
 function startTimeAttackQuiz() {
   timeAttackHp = 3;
+  renderTimeAttackHearts(timeAttackHp);
   renderTimeAttackQuestion();
+}
+
+function renderTimeAttackHearts(hp, options = {}) {
+  const host = document.getElementById('timeAttackHp');
+  if (!host) return;
+  const maxHp = 3;
+  if (!host.querySelector('.hp-hearts')) {
+    host.innerHTML = `<span class="hp-hearts" aria-label="نقاط الصحة ${hp}">${Array.from({ length: maxHp }, (_, index) =>
+      `<span class="hp-heart" data-heart-index="${index}"><i class="fa-solid fa-heart" aria-hidden="true"></i><span class="hp-heart-shard shard-1" aria-hidden="true"></span><span class="hp-heart-shard shard-2" aria-hidden="true"></span></span>`
+    ).join('')}</span>`;
+  }
+  const heartsWrap = host.querySelector('.hp-hearts');
+  if (heartsWrap) heartsWrap.setAttribute('aria-label', `نقاط الصحة ${Math.max(0, hp)}`);
+  const hearts = host.querySelectorAll('.hp-heart');
+  hearts.forEach((heart, index) => {
+    const alive = index < hp;
+    if (options.breakIndex === index) {
+      heart.classList.add('breaking');
+      heart.classList.remove('alive');
+      return;
+    }
+    heart.classList.toggle('alive', alive);
+    if (!options.keepBreaking) heart.classList.remove('breaking');
+  });
 }
 
 function renderTimeAttackQuestion() {
@@ -7263,7 +8587,7 @@ function renderTimeAttackQuestion() {
 
   const w = currentQuizWords[quizIndex];
   document.getElementById('timeAttackCounter').textContent = `${quizIndex + 1} / ${currentQuizWords.length}`;
-  document.getElementById('timeAttackHp').textContent = `HP ${timeAttackHp}`;
+  renderTimeAttackHearts(timeAttackHp);
   document.querySelector('#quizTimeAttackView .quiz-mini-label').textContent =
     timeAttackDirection === 'en-to-ar' ? 'اختر المعنى العربي' : 'اختر الكلمة الإنجليزية';
   document.getElementById('timeAttackPrompt').textContent =
@@ -7277,7 +8601,11 @@ function renderTimeAttackQuestion() {
   ).join('');
 
   timeAttackSeconds = 15;
-  document.getElementById('timeAttackTimer').textContent = `${timeAttackSeconds}s`;
+  const timerStartEl = document.getElementById('timeAttackTimer');
+  if (timerStartEl) {
+    timerStartEl.textContent = `${timeAttackSeconds}s`;
+    timerStartEl.classList.remove('timer-danger');
+  }
   timeAttackTimer = setInterval(() => {
     if (currentView !== 'quiz') {
       stopTimeAttackTimer();
@@ -7285,12 +8613,15 @@ function renderTimeAttackQuestion() {
     }
     timeAttackSeconds--;
     const timerEl = document.getElementById('timeAttackTimer');
-    if (timerEl) timerEl.textContent = `${timeAttackSeconds}s`;
-    if (timeAttackSeconds <= 0) answerTimeAttack('');
+    if (timerEl) {
+      timerEl.textContent = `${timeAttackSeconds}s`;
+      timerEl.classList.toggle('timer-danger', timeAttackSeconds <= 3);
+    }
+    if (timeAttackSeconds <= 0) answerTimeAttack('', { timedOut: true });
   }, 1000);
 }
 
-function answerTimeAttack(answerId) {
+function answerTimeAttack(answerId, options = {}) {
   stopTimeAttackTimer();
   const w = currentQuizWords[quizIndex];
   if (!w) return;
@@ -7301,10 +8632,15 @@ function answerTimeAttack(answerId) {
   } else {
     currentStreak = 0;
     currentQuizMistakes++;
+    const prevHp = timeAttackHp;
     timeAttackHp--;
+    renderTimeAttackHearts(timeAttackHp, { breakIndex: prevHp - 1, keepBreaking: true });
+    triggerShakeEffect(document.getElementById('quizTimeAttackView'));
+    safeVibrate(100);
     const { updatedWord } = forgetQuizWord(w);
     if (timeAttackHp > 0) requeueForgotQuizWord(updatedWord, quizIndex);
-    showToast(timeAttackHp > 0 ? 'غلط، جرّب تكمل!' : 'خلصت نقاط الصحة.');
+    showToast(options.timedOut ? 'انتهى الوقت!' : (timeAttackHp > 0 ? 'غلط، جرّب تكمل!' : 'خلصت نقاط الصحة.'));
+    setTimeout(() => renderTimeAttackHearts(timeAttackHp), 680);
   }
   quizIndex++;
   renderTimeAttackQuestion();
@@ -7358,6 +8694,8 @@ function submitScrambleAnswer() {
   } else {
     currentStreak = 0;
     currentQuizMistakes++;
+    triggerShakeEffect(document.getElementById('quizScrambleView'));
+    safeVibrate(100);
     const { updatedWord } = forgetQuizWord(w);
     requeueForgotQuizWord(updatedWord, quizIndex);
     showToast(`الإجابة: ${expected}`);
@@ -7515,6 +8853,7 @@ window.onload = function() {
       speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
   }
   // Gamification init
+  bootstrapThemeNotificationKeysOnce();
   // checkAndUpdateStreak يشتغل هنا فقط لو مش مسجل دخول
   // لو مسجل دخول، يشتغل بعد loadProfileFromCloud (في index.html)
   loadTheme();
@@ -7754,4 +9093,3 @@ if (typeof window.closeSidebarIfOpen !== 'function') {
     else btn.classList.remove('show');
   }, { passive: true });
 })();
-
