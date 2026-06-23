@@ -943,9 +943,12 @@ function renderDailyQuests() {
     const done = isDailyQuestDone(q.id);
     const claimed = Boolean(state.claimed[q.id]);
     const rewardTxt = q.reward > 0 ? '+' + q.reward + ' XP' : '✓';
+    const masteryHelp = /أتقن|اتقن|إتقان|الإتقان/.test(q.label)
+      ? '<button type="button" class="daily-quest-help" onclick="showMasteryHelp(event)" aria-label="شرح إتقان الكلمة"><i class="fa-solid fa-question" aria-hidden="true"></i></button>'
+      : '';
     return `<li class="daily-quest-item${done ? ' done' : ''}" data-quest="${q.id}">
       <span class="daily-quest-check">${done ? '<i class="fa-solid fa-check"></i>' : ''}</span>
-      <span class="daily-quest-text"><i class="fa-solid ${q.icon}"></i> ${q.label}</span>
+      <span class="daily-quest-text"><i class="fa-solid ${q.icon}"></i> ${q.label}${masteryHelp}</span>
       <span class="daily-quest-reward">${claimed ? 'تم' : rewardTxt}</span>
     </li>`;
   }).join('');
@@ -1805,6 +1808,17 @@ function triggerShakeEffect(target, duration = 320) {
   setTimeout(() => el.classList.remove('shake-effect'), duration);
 }
 
+function triggerAttentionFeedback(target, duration = 280) {
+  const el = typeof target === 'string' ? document.querySelector(target) : target;
+  if (el) {
+    el.classList.remove('attention-shake-effect');
+    void el.offsetWidth;
+    el.classList.add('attention-shake-effect');
+    setTimeout(() => el.classList.remove('attention-shake-effect'), duration);
+  }
+  safeVibrate([35, 25, 35]);
+}
+
 function cssEscapeValue(value) {
   if (window.CSS?.escape) return CSS.escape(String(value));
   return String(value).replace(/["\\]/g, '\\$&');
@@ -2378,6 +2392,31 @@ function playUnlockSound() {
   }
 }
 
+function playQuizCompletionSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.42);
+    gain.connect(ctx.destination);
+    [440, 660, 880].forEach((freq, index) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + index * 0.09);
+      osc.connect(gain);
+      osc.start(ctx.currentTime + index * 0.09);
+      osc.stop(ctx.currentTime + index * 0.09 + 0.16);
+      if (index === 2) osc.onended = () => ctx.close().catch(() => {});
+    });
+  } catch (e) {
+    // Audio is optional; browsers may block it in some contexts.
+  }
+}
+
 function syncNavLockUi() {
   const unlocked = resolveUnlockedFeatures();
   const currentLocks = {};
@@ -2741,6 +2780,11 @@ function handleInitialRouting() {
 
 window.addEventListener('popstate', () => {
   if (!appRoutingReady) return;
+  if (currentView === 'quiz' && activeQuizSession && isVerifiedQuizMode(activeQuizSession.mode)) {
+    setAppViewRoute('quiz', { replace: true, source: 'guarded-exit' });
+    window.requestQuizExit('personal');
+    return;
+  }
   applyAppRoute(parseAppRoute());
 });
 
@@ -2779,9 +2823,14 @@ function showToast(msg, type = 'info', duration = 2500) {
   t.textContent = String(msg ?? '');
   t.style.background = '';
   t.style.color = '';
-  t.classList.remove('toast-success', 'toast-warning', 'toast-danger', 'toast-info');
+  t.classList.remove('toast-success', 'toast-warning', 'toast-danger', 'toast-info', 'toast-attention-shake');
   t.classList.add(type === 'success' ? 'toast-success' : type === 'danger' ? 'toast-danger' : type === 'warning' ? 'toast-warning' : 'toast-info');
   t.classList.add('show');
+  if (type === 'warning' || type === 'danger') {
+    void t.offsetWidth;
+    t.classList.add('toast-attention-shake');
+    triggerAttentionFeedback(document.querySelector('.main-content') || document.body);
+  }
   clearTimeout(window.__toastHideTimer);
   window.__toastHideTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
@@ -6477,7 +6526,18 @@ function renderProfileTitlePicker() {
 }
 
 function getLootState() {
-  return loadJSON(LOOT_STATE_KEY, { lastOpenAt: 0, streak: 0, totalOpens: 0, lastOpenDay: '', rewards: [], freezesEarned: 0 });
+  return loadJSON(LOOT_STATE_KEY, {
+    lastOpenAt: 0,
+    streak: 0,
+    totalOpens: 0,
+    lastOpenDay: '',
+    rewards: [],
+    freezesEarned: 0,
+    lockedXP: 0,
+    lockStartedAt: 0,
+    lockMasteredWordIds: [],
+    lockHighAccuracyQuizIds: []
+  });
 }
 
 function renderProfileTitlePicker() {
@@ -6565,7 +6625,58 @@ function recordGameDictionaryAdd() {
 function describeLootReward(reward) {
   if (!reward) return 'لوت غامض';
   if (reward.type === 'freeze') return `${reward.label}: يحمي الستريك يوم غياب واحد`;
-  return `${reward.label} +${reward.xp || 0} XP`;
+  return `${reward.label} +${reward.xp || 0} XP مقفولة`;
+}
+
+const CHEST_MASTERED_WORDS_REQUIRED = 2;
+const CHEST_XP_UNLOCK_TEXT = `أتقن ${CHEST_MASTERED_WORDS_REQUIRED} كلمات أو أكمل اختبارين موثقين بدقة 90%+ لفتح XP هذا الصندوق.`;
+
+function saveChestProgressState(state) {
+  saveLootState(state);
+  if (typeof renderLootSummary === 'function' && currentView === 'treasure') renderLootSummary();
+}
+
+function unlockChestXP(reason = '') {
+  const state = getLootState();
+  const amount = Number(state.lockedXP) || 0;
+  if (amount <= 0) return false;
+  state.lockedXP = 0;
+  state.lockStartedAt = 0;
+  state.lockMasteredWordIds = [];
+  state.lockHighAccuracyQuizIds = [];
+  saveChestProgressState(state);
+  updateXP(amount);
+  showXPBadge(amount, 'dailyLootChest', false);
+  showToast(`انفتح XP الصندوق! +${amount} XP${reason ? ` — ${reason}` : ''}`, 'success', 5200);
+  return true;
+}
+
+function evaluateChestXPUnlock(state = getLootState()) {
+  if ((Number(state.lockedXP) || 0) <= 0) return false;
+  const mastered = new Set(state.lockMasteredWordIds || []).size;
+  const quizzes = new Set(state.lockHighAccuracyQuizIds || []).size;
+  if (mastered >= CHEST_MASTERED_WORDS_REQUIRED) return unlockChestXP(`أتقنت ${CHEST_MASTERED_WORDS_REQUIRED} كلمات`);
+  if (quizzes >= 2) return unlockChestXP('أكملت اختبارين بدقة عالية');
+  return false;
+}
+
+function recordChestMasteredWords(wordIds) {
+  const ids = [...(wordIds instanceof Set ? wordIds : new Set(wordIds || []))].filter(Boolean);
+  if (!ids.length) return;
+  const state = getLootState();
+  if ((Number(state.lockedXP) || 0) <= 0) return;
+  state.lockMasteredWordIds = [...new Set([...(state.lockMasteredWordIds || []), ...ids])];
+  saveChestProgressState(state);
+  evaluateChestXPUnlock(state);
+}
+
+function recordHighAccuracyVerifiedQuiz(sessionId) {
+  if (!sessionId) return;
+  const state = getLootState();
+  if ((Number(state.lockedXP) || 0) <= 0) return;
+  state.lockHighAccuracyQuizIds = [...new Set([...(state.lockHighAccuracyQuizIds || []), sessionId])];
+  saveChestProgressState(state);
+  evaluateChestXPUnlock(state);
 }
 
 function revealDailyLootReward(state, reward) {
@@ -6578,14 +6689,16 @@ function revealDailyLootReward(state, reward) {
     state.freezesEarned = (state.freezesEarned || 0) + (reward.freezes || 1);
   }
   state.rewards = [{ at: state.lastOpenAt, ...reward }, ...(state.rewards || [])].slice(0, 12);
-  saveLootState(state);
 
   if (reward.xp) {
-    updateXP(reward.xp);
-    showXPBadge(reward.xp, 'dailyLootChest', false);
+    state.lockedXP = (Number(state.lockedXP) || 0) + (Number(reward.xp) || 0);
+    state.lockStartedAt = state.lockStartedAt || state.lastOpenAt;
+    state.lockMasteredWordIds = state.lockMasteredWordIds || [];
+    state.lockHighAccuracyQuizIds = state.lockHighAccuracyQuizIds || [];
   }
+  saveLootState(state);
   launchConfetti();
-  setTimeout(() => showToast(`طلع لك: ${describeLootReward(reward)}`, 'success', 5600), 90);
+  setTimeout(() => showToast(`طلع لك: ${describeLootReward(reward)}. ${CHEST_XP_UNLOCK_TEXT}`, 'success', 6500), 90);
   evaluateTitleUnlocks(true);
   markDailyQuestFlag('openLoot');
   updateDailyQuestsBadge();
@@ -6750,13 +6863,22 @@ function renderLootSummary() {
   const count = document.getElementById('lootCountdownText');
   const preview = document.getElementById('lootRewardPreview');
   const slots = document.getElementById('treasureSlots');
+  const lockedXP = Number(state.lockedXP) || 0;
   if (chest) chest.classList.toggle('is-locked', !ready);
-  if (status) status.innerHTML = ready
-    ? '<i class="fa-solid fa-box-open" aria-hidden="true"></i> الصندوق اليومي جاهز'
-    : '<i class="fa-regular fa-clock" aria-hidden="true"></i> الصندوق يرجع بعد';
-  if (count) count.textContent = ready ? 'افتحه الآن' : formatLootTime(remaining);
+  if (status) status.innerHTML = lockedXP > 0
+    ? `<i class="fa-solid fa-lock" aria-hidden="true"></i> ${lockedXP} XP مقفولة`
+    : (ready
+      ? '<i class="fa-solid fa-box-open" aria-hidden="true"></i> الصندوق اليومي جاهز'
+      : '<i class="fa-regular fa-clock" aria-hidden="true"></i> الصندوق يرجع بعد');
+  if (count) {
+    count.innerHTML = lockedXP > 0
+      ? `الإتقان: ${(state.lockMasteredWordIds || []).length}/${CHEST_MASTERED_WORDS_REQUIRED} <button type="button" class="mastery-help-btn" onclick="showMasteryHelp(event)" aria-label="ما معنى إتقان الكلمة؟"><i class="fa-solid fa-question" aria-hidden="true"></i></button> | الاختبارات: ${(state.lockHighAccuracyQuizIds || []).length}/2`
+      : (ready ? 'افتحه الآن' : formatLootTime(remaining));
+  }
   if (preview) {
-    preview.textContent = ready
+    preview.textContent = lockedXP > 0
+      ? CHEST_XP_UNLOCK_TEXT
+      : ready
       ? 'فيه XP عشوائي، ومعه فرصة نادرة لـ Streak Freeze. ثبّت ضغطتك وافتحه.'
       : `سلسلة صناديقك: ${state.streak || 0} يوم | Freeze عندك: ${getStreakFreezeCount()} | مجموع الفتحات: ${state.totalOpens || 0}`;
   }
@@ -7585,6 +7707,7 @@ function renderStarredWords() {
               <div class="word-text">
                 ${dispWord}
                 <span class="cat-tag tag-${safeClassToken(w.category)}">${escapeHtml(w.category)}</span>
+                ${renderMasteryIndicator(w)}
               </div>
               <div class="meaning-text">${dispMeaning}</div>
             </div>
@@ -7627,6 +7750,11 @@ window.loadQuizView = function() {
   setTreasureDockActive('quiz');
   document.getElementById('quizView').style.display = 'block';
   showQuizModes();
+  loadStoredActiveQuizSession().then((session) => {
+    if (currentView !== 'quiz' || !session || !isVerifiedQuizMode(session.mode)) return;
+    window.__pendingQuizResumeSession = session;
+    showQuizResumePrompt();
+  });
 
   document.querySelector('.page-header h1').innerHTML = '<i class="fas fa-gamepad" aria-hidden="true"></i> الاختبار';
 
@@ -7840,6 +7968,7 @@ function renderWordCard(w, query, indexMap) {
             <div class="word-text">
               ${highlightText(w.word, query)}
               <span class="cat-tag tag-${safeClassToken(w.category)}">${escapeHtml(w.category)}</span>
+              ${renderMasteryIndicator(w)}
             </div>
             <div class="meaning-text">${highlightText(w.meaning, query)}</div>
           </div>
@@ -8254,13 +8383,133 @@ window.addEventListener('scroll', () => {
 // ═══════════════════════════════════════════════════════
 let selectedQuizMode = 'flashcards';
 let quizQuestionCount = '10';
-let currentQuizSource = 'general';
+let currentQuizSource = 'personal';
 let currentQuizPool = [];
 let timeAttackHp = 3;
 let timeAttackSeconds = 15;
 let timeAttackTimer = null;
 let timeAttackDirection = 'ar-to-en';
 let scrambleDirection = 'ar-to-en';
+let activeQuizSession = null;
+let quizSessionResults = [];
+let hasStartedAnswering = false;
+let pendingQuizExitTarget = 'quiz';
+
+const ACTIVE_QUIZ_SESSION_KEY = 'active_quiz_session';
+const SRS_STATUSES = ['New', 'Learning', 'Reviewing', 'Mastered'];
+const SRS_MASTERY_WINDOW_MS = 72 * 60 * 60 * 1000;
+const QUIZ_CORRECT_BASE_XP = 10;
+const QUIZ_MASTERY_XP = 40;
+const QUIZ_REMASTERY_XP = 10;
+const MIN_STARRED_QUIZ_WORDS = 10;
+const SCRAMBLE_DIRECTION_COPY = {
+  'ar-to-en': 'رتب حروف الكلمة الإنجليزية اعتماداً على معناها العربي.',
+  'en-to-ar': 'رتب حروف المعنى العربي اعتماداً على الكلمة الإنجليزية.'
+};
+
+function getDefaultMasteryState() {
+  return {
+    mastery_status: 'New',
+    mastery_streak: 0,
+    last_recalled_at: null,
+    first_recalled_at: null,
+    last_recall_day: '',
+    last_recall_session_id: '',
+    mastered_once: false
+  };
+}
+
+function normalizeMasteryStatus(status) {
+  return SRS_STATUSES.includes(status) ? status : 'New';
+}
+
+function getWordMasteryState(word = {}) {
+  const base = getDefaultMasteryState();
+  return {
+    mastery_status: normalizeMasteryStatus(word.mastery_status || word.masteryStatus || word.status),
+    mastery_streak: Math.max(0, Math.min(3, Number(word.mastery_streak ?? word.masteryStreak ?? 0) || 0)),
+    last_recalled_at: word.last_recalled_at || word.lastRecalledAt || null,
+    first_recalled_at: word.first_recalled_at || word.firstRecalledAt || null,
+    last_recall_day: word.last_recall_day || word.lastRecallDay || '',
+    last_recall_session_id: word.last_recall_session_id || word.lastRecallSessionId || '',
+    mastered_once: Boolean(word.mastered_once || word.masteredOnce)
+  };
+}
+
+function getWordDifficultyBonus(word = {}) {
+  const raw = String(word.difficulty || word.level || word.cefr || word.cefrLevel || '').toUpperCase();
+  if (/C1|C2/.test(raw)) return 4;
+  if (/B1|B2/.test(raw)) return 2;
+  return 0;
+}
+
+function getWordStateForQueue(word = {}) {
+  return getWordMasteryState(word).mastery_status;
+}
+
+function getMasteryLevel(word = {}) {
+  const state = getWordMasteryState(word);
+  return state.mastery_status === 'Mastered' ? 3 : Math.max(0, Math.min(2, state.mastery_streak || 0));
+}
+
+function getMasteryLabel(word = {}) {
+  const state = getWordMasteryState(word);
+  if (state.mastery_status === 'Mastered') return 'متقنة';
+  if (state.mastery_streak >= 2) return 'قريبة من الإتقان';
+  if (state.mastery_streak >= 1) return 'قيد التعلم';
+  return 'جديدة';
+}
+
+function renderMasteryIndicator(word = {}) {
+  const level = getMasteryLevel(word);
+  const label = getMasteryLabel(word);
+  const dots = [1, 2, 3].map(i => `<span class="mastery-dot${i <= level ? ' filled' : ''}" aria-hidden="true"></span>`).join('');
+  return `<span class="mastery-meter mastery-${level}" title="الإتقان: ${escapeHtml(label)}" aria-label="الإتقان: ${escapeHtml(label)}">${dots}</span>`;
+}
+
+window.showMasteryHelp = function(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  document.getElementById('masteryHelpPopover')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'masteryHelpPopover';
+  pop.className = 'mastery-help-popover';
+  pop.innerHTML = `
+    <button type="button" class="mastery-help-close" aria-label="إغلاق"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    <strong>كيف يعني إتقان كلمة؟</strong>
+    <p>كل كلمة عندها 3 نقاط. لما تجاوبها صح في اختبار موثّق وعلى يوم/جلسة مختلفة ترتفع نقطة. إذا وصلت 3 نقاط وبعد مرور 72 ساعة من أول مراجعة صحيحة، تصير الكلمة متقنة.</p>
+    <p>إذا غلطت، المؤشر ينزل درجة. الكلمة المتقنة تحتاج خطأين عشان ترجع للصفر.</p>
+  `;
+  document.body.appendChild(pop);
+  const target = event?.currentTarget || event?.target;
+  const rect = target?.getBoundingClientRect?.();
+  const top = rect ? rect.bottom + 8 : 90;
+  const left = rect ? Math.min(window.innerWidth - 18, Math.max(18, rect.left + rect.width / 2)) : window.innerWidth / 2;
+  pop.style.top = `${Math.min(top, window.innerHeight - 24)}px`;
+  pop.style.left = `${left}px`;
+  pop.querySelector('.mastery-help-close')?.addEventListener('click', () => pop.remove());
+  setTimeout(() => {
+    const close = (e) => {
+      if (!pop.contains(e.target)) {
+        pop.remove();
+        document.removeEventListener('pointerdown', close, true);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+  }, 0);
+};
+
+function getQuizDay(ts = Date.now()) {
+  return new Date(ts).toISOString().slice(0, 10);
+}
+
+function makeQuizSessionId() {
+  return `quiz_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function isVerifiedQuizMode(mode) {
+  return mode === 'timeAttack' || mode === 'scramble';
+}
 
 const QUIZ_MODE_META = {
   flashcards: {
@@ -8273,9 +8522,32 @@ const QUIZ_MODE_META = {
   },
   scramble: {
     title: 'الصندوق المشفر',
-    desc: 'رتب حروف الكلمة الإنجليزية اعتماداً على معناها العربي.'
+    desc: SCRAMBLE_DIRECTION_COPY['ar-to-en']
   }
 };
+
+function getScrambleDirectionText(direction = scrambleDirection) {
+  return SCRAMBLE_DIRECTION_COPY[direction] || SCRAMBLE_DIRECTION_COPY['ar-to-en'];
+}
+
+function syncScrambleDirectionCopy() {
+  const text = getScrambleDirectionText();
+  if (selectedQuizMode === 'scramble') {
+    const desc = document.getElementById('quizSettingsDesc');
+    if (desc) desc.textContent = text;
+  }
+  const cover = document.getElementById('scrambleModeCoverDesc');
+  if (cover) cover.textContent = text;
+}
+
+function warnIfTooFewStarredQuizWords(count = getQuizSourceWords('starred').length) {
+  if (count >= MIN_STARRED_QUIZ_WORDS) return false;
+  const message = count === 0
+    ? `ما عندك كلمات صعبة معلّمة بالنجمة حالياً. علّم كلماتك الصعبة أولاً، ولازم يكون عندك على الأقل ${MIN_STARRED_QUIZ_WORDS} كلمات عشان تبدأ اختبار الكلمات الصعبة.`
+    : `أنت محدد كلمات صعبة قليلة. أقل شيء ${MIN_STARRED_QUIZ_WORDS} كلمات معلّمة بالنجمة عشان تبدأ اختبار الكلمات الصعبة.`;
+  showToast(message, 'warning', 5600);
+  return true;
+}
 
 function openQuizSetup() {
   loadQuizView();
@@ -8288,6 +8560,195 @@ function hideQuizPlayPanels() {
   });
 }
 
+function setQuizImmersive(active) {
+  document.body.classList.toggle('quiz-active', Boolean(active));
+}
+
+function serializeActiveQuizSession() {
+  if (!activeQuizSession) return null;
+  return {
+    ...activeQuizSession,
+    quizIndex,
+    currentStreak,
+    currentQuizMistakes,
+    timeAttackHp,
+    quizSessionResults,
+    hasStartedAnswering
+  };
+}
+
+function saveActiveQuizSession() {
+  const session = serializeActiveQuizSession();
+  if (!session || !isVerifiedQuizMode(session.mode)) return;
+  if (hasSignedInUser()) {
+    window.saveActiveQuizSessionToCloud?.(session);
+  } else {
+    localStorage.setItem(ACTIVE_QUIZ_SESSION_KEY, JSON.stringify(session));
+  }
+}
+
+async function loadStoredActiveQuizSession() {
+  if (hasSignedInUser() && typeof window.loadActiveQuizSessionFromCloud === 'function') {
+    return await window.loadActiveQuizSessionFromCloud();
+  }
+  return loadJSON(ACTIVE_QUIZ_SESSION_KEY, null);
+}
+
+function clearActiveQuizSessionStorage() {
+  localStorage.removeItem(ACTIVE_QUIZ_SESSION_KEY);
+  if (hasSignedInUser()) window.clearActiveQuizSessionFromCloud?.();
+}
+
+function showQuizResumePrompt() {
+  const modal = document.getElementById('quizResumeModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('show');
+  }
+}
+
+function hideQuizResumePrompt() {
+  const modal = document.getElementById('quizResumeModal');
+  if (modal) {
+    modal.classList.remove('show');
+    modal.style.display = '';
+  }
+}
+
+function getQuizExitModalId() {
+  return hasStartedAnswering ? 'quizForfeitModal' : 'quizExitSafeModal';
+}
+
+function hideQuizExitPrompts() {
+  ['quizExitSafeModal', 'quizForfeitModal'].forEach((id) => {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('show');
+    modal.style.display = '';
+  });
+}
+
+function completeQuizExitNavigation() {
+  const target = pendingQuizExitTarget || 'quiz';
+  pendingQuizExitTarget = 'quiz';
+  if (target === 'personal') loadPersonalDictionary();
+  else showQuizModes({ force: true });
+}
+
+window.requestQuizExit = function(target = 'quiz') {
+  if (!activeQuizSession || !isVerifiedQuizMode(activeQuizSession.mode)) {
+    if (target === 'personal') loadPersonalDictionary();
+    else showQuizModes({ force: true });
+    return;
+  }
+  pendingQuizExitTarget = target;
+  hideQuizResumePrompt();
+  hideQuizExitPrompts();
+  const modal = document.getElementById(getQuizExitModalId());
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.classList.add('show');
+  }
+};
+
+window.cancelQuizExitPrompt = function() {
+  hideQuizExitPrompts();
+  pendingQuizExitTarget = 'quiz';
+  if (activeQuizSession && isVerifiedQuizMode(activeQuizSession.mode)) {
+    setQuizImmersive(true);
+    saveActiveQuizSession();
+  }
+};
+
+window.confirmQuizExitWithoutLoss = function() {
+  hideQuizExitPrompts();
+  stopTimeAttackTimer();
+  quizSessionResults = [];
+  hasStartedAnswering = false;
+  clearActiveQuizSessionStorage();
+  window.__pendingQuizResumeSession = null;
+  resetRuntimeQuizState();
+  showToast('تم الخروج بدون خسارة لأنك لم تبدأ الحل.', 'info', 3200);
+  completeQuizExitNavigation();
+};
+
+window.confirmQuizForfeit = function() {
+  hideQuizExitPrompts();
+  window.forfeitActiveQuizSession();
+};
+
+function resetRuntimeQuizState() {
+  stopTimeAttackTimer();
+  quizIndex = 0;
+  currentQuizWords = [];
+  currentStreak = 0;
+  currentQuizMistakes = 0;
+  timeAttackHp = 0;
+  activeQuizSession = null;
+  quizSessionResults = [];
+  hasStartedAnswering = false;
+  setQuizImmersive(false);
+}
+
+function applyStoredQuizSession(session) {
+  if (!session || !isVerifiedQuizMode(session.mode) || !Array.isArray(session.words) || !session.words.length) return false;
+  activeQuizSession = {
+    id: session.id || makeQuizSessionId(),
+    mode: session.mode,
+    source: session.source || 'personal',
+    createdAt: session.createdAt || Date.now(),
+    words: session.words,
+    questionCount: session.questionCount || session.words.length,
+    direction: session.direction || {}
+  };
+  selectedQuizMode = activeQuizSession.mode;
+  currentQuizSource = activeQuizSession.source;
+  currentQuizWords = activeQuizSession.words;
+  currentQuizPool = Array.isArray(session.pool) && session.pool.length ? session.pool : currentQuizWords;
+  quizIndex = Math.max(0, Math.min(Number(session.quizIndex) || 0, currentQuizWords.length));
+  currentStreak = Number(session.currentStreak) || 0;
+  currentQuizMistakes = Number(session.currentQuizMistakes) || 0;
+  timeAttackHp = Number(session.timeAttackHp) || 3;
+  quizSessionResults = Array.isArray(session.quizSessionResults) ? session.quizSessionResults : [];
+  hasStartedAnswering = Boolean(session.hasStartedAnswering);
+  if (activeQuizSession.direction?.timeAttack) timeAttackDirection = activeQuizSession.direction.timeAttack;
+  if (activeQuizSession.direction?.scramble) scrambleDirection = activeQuizSession.direction.scramble;
+  return true;
+}
+
+window.resumeActiveQuizSession = function() {
+  hideQuizResumePrompt();
+  if (!activeQuizSession && window.__pendingQuizResumeSession) {
+    applyStoredQuizSession(window.__pendingQuizResumeSession);
+  }
+  if (!activeQuizSession) return;
+  hideQuizPlayPanels();
+  document.getElementById('quizViewSetup').style.display = 'none';
+  const exitBtn = document.querySelector('#quizView .quiz-exit-btn');
+  if (exitBtn) exitBtn.style.display = 'none';
+  setQuizImmersive(true);
+  if (activeQuizSession.mode === 'timeAttack') {
+    document.getElementById('quizTimeAttackView').style.display = 'block';
+    renderTimeAttackQuestion();
+  } else {
+    document.getElementById('quizScrambleView').style.display = 'block';
+    updateScrambleCard();
+  }
+};
+
+window.forfeitActiveQuizSession = function() {
+  hideQuizResumePrompt();
+  hideQuizExitPrompts();
+  stopTimeAttackTimer();
+  quizSessionResults = [];
+  hasStartedAnswering = false;
+  clearActiveQuizSessionStorage();
+  window.__pendingQuizResumeSession = null;
+  resetRuntimeQuizState();
+  showToast('تم إلغاء المحاولة. لم يتم حفظ أي XP أو تقدم للكلمات، وصندوق الـ XP بقي مقفولاً.', 'warning', 5200);
+  completeQuizExitNavigation();
+};
+
 function stopTimeAttackTimer() {
   if (timeAttackTimer) {
     clearInterval(timeAttackTimer);
@@ -8297,12 +8758,7 @@ function stopTimeAttackTimer() {
 
 function cleanupQuizSessionIfActive() {
   if (currentView !== 'quiz') return;
-  stopTimeAttackTimer();
-  quizIndex = 0;
-  currentQuizWords = [];
-  currentStreak = 0;
-  currentQuizMistakes = 0;
-  timeAttackHp = 0;
+  resetRuntimeQuizState();
   hideQuizPlayPanels();
   const setup = document.getElementById('quizViewSetup');
   if (setup) setup.style.display = 'block';
@@ -8310,8 +8766,13 @@ function cleanupQuizSessionIfActive() {
   if (exitBtn) exitBtn.style.display = 'flex';
 }
 
-function showQuizModes() {
+function showQuizModes(options = {}) {
+  if (!options.force && activeQuizSession && isVerifiedQuizMode(activeQuizSession.mode) && currentQuizWords.length) {
+    window.requestQuizExit();
+    return;
+  }
   stopTimeAttackTimer();
+  setQuizImmersive(false);
   hideQuizPlayPanels();
   const setup = document.getElementById('quizViewSetup');
   if (setup) setup.style.display = 'block';
@@ -8332,6 +8793,7 @@ function openQuizModeSettings(mode) {
   document.getElementById('quizSettingsPanel').style.display = 'block';
   document.getElementById('quizSettingsTitle').textContent = QUIZ_MODE_META[selectedQuizMode].title;
   document.getElementById('quizSettingsDesc').textContent = QUIZ_MODE_META[selectedQuizMode].desc;
+  syncScrambleDirectionCopy();
   const isFlashcards = selectedQuizMode === 'flashcards';
   document.getElementById('flashcardPresetOptions').style.display = isFlashcards ? 'block' : 'none';
   document.getElementById('quizSharedSettings').style.display = isFlashcards ? 'none' : 'block';
@@ -8361,42 +8823,87 @@ function setScrambleDirection(direction, btn) {
   document.querySelectorAll('[data-scramble-direction]').forEach(el => {
     el.classList.toggle('active', el === btn);
   });
+  syncScrambleDirectionCopy();
   refreshQuizSettingsSummary();
 }
 
+function setQuizSourceScope(scope, btn) {
+  currentQuizSource = scope === 'starred' ? 'starred' : 'personal';
+  document.querySelectorAll('[data-quiz-source]').forEach(el => {
+    el.classList.toggle('active', el === btn || el.dataset.quizSource === currentQuizSource);
+  });
+  refreshQuizAvailableCount();
+  refreshQuizSettingsSummary();
+}
+window.setQuizSourceScope = setQuizSourceScope;
+
 function normalizeQuizWord(item, source, index) {
   if (!item) return null;
+  const mastery = getWordMasteryState(item);
   return {
     id: String(item.id || `${source}-${item.text || item.word || index}`),
     word: item.word || item.text || '',
     meaning: item.meaning || '',
     example: item.example || '',
     forgetCount: item.forgetCount || 0,
+    starred: Boolean(item.starred),
+    difficulty: item.difficulty || item.level || item.cefr || item.cefrLevel || '',
+    mastery_status: mastery.mastery_status,
+    mastery_streak: mastery.mastery_streak,
+    last_recalled_at: mastery.last_recalled_at,
+    first_recalled_at: mastery.first_recalled_at,
+    last_recall_day: mastery.last_recall_day,
+    last_recall_session_id: mastery.last_recall_session_id,
+    mastered_once: mastery.mastered_once,
     isGameQuizWord: false
   };
 }
 
-function getQuizSourceWords() {
-  return (window.words || []).map((w, i) => normalizeQuizWord(w, 'general', i)).filter(w => w.word && w.meaning);
+function getQuizSourceWords(scope = currentQuizSource) {
+  const source = (window.words || []).filter(w => scope === 'starred' ? Boolean(w.starred) : true);
+  return source.map((w, i) => normalizeQuizWord(w, 'personal', i)).filter(w => w.word && w.meaning);
 }
 
 function shuffleQuizWords(words) {
   return [...words].sort(() => Math.random() - 0.5);
 }
 
+function buildSmartQuizDeck(sourceWords, requestedCount) {
+  const limit = Math.max(1, Math.min(requestedCount, sourceWords.length));
+  const priority = ['Reviewing', 'Learning', 'New', 'Mastered'];
+  const buckets = priority.reduce((acc, status) => {
+    acc[status] = shuffleQuizWords(sourceWords.filter(w => getWordStateForQueue(w) === status));
+    return acc;
+  }, {});
+  const deck = [];
+  const canTake = (status) => {
+    if (!buckets[status]?.length) return false;
+    const a = deck[deck.length - 1];
+    const b = deck[deck.length - 2];
+    return !(a && b && getWordStateForQueue(a) === status && getWordStateForQueue(b) === status);
+  };
+  while (deck.length < limit) {
+    const status = priority.find(canTake) || priority.find(s => buckets[s]?.length);
+    if (!status) break;
+    deck.push(buckets[status].shift());
+  }
+  return deck;
+}
+
 function getConfiguredQuizWords() {
-  currentQuizSource = 'general';
   const sourceWords = getQuizSourceWords();
   const count = quizQuestionCount === 'all' ? sourceWords.length : parseInt(quizQuestionCount, 10);
   currentQuizPool = sourceWords;
-  return shuffleQuizWords(sourceWords).slice(0, Math.max(1, Math.min(count, sourceWords.length)));
+  return buildSmartQuizDeck(sourceWords, count);
 }
 
 function refreshQuizAvailableCount() {
   const quizCountEl = document.getElementById('quizAvailableCount');
   if (!quizCountEl) return;
-  quizCountEl.textContent = window.words.length > 0
-    ? `الكلمات المتاحة: ${window.words.length}`
+  const total = getQuizSourceWords('personal').length;
+  const starred = getQuizSourceWords('starred').length;
+  quizCountEl.textContent = total > 0
+    ? `القاموس الشخصي: ${total} كلمة، الكلمات الصعبة: ${starred}`
     : 'قاموسك الشخصي فاضي.';
 }
 
@@ -8404,7 +8911,8 @@ function refreshQuizSettingsSummary() {
   const total = getQuizSourceWords().length;
   const countText = quizQuestionCount === 'all' ? 'كل الكلمات' : `${quizQuestionCount} أسئلة`;
   const summary = document.getElementById('quizSettingsSummary');
-  if (summary) summary.textContent = `قاموسك الشخصي: ${total} كلمة متاحة، الاختبار: ${countText}.`;
+  const sourceText = currentQuizSource === 'starred' ? 'الكلمات الصعبة' : 'القاموس الشخصي';
+  if (summary) summary.textContent = `${sourceText}: ${total} كلمة متاحة، الاختبار: ${countText}.`;
 }
 
 function startConfiguredQuiz() {
@@ -8414,6 +8922,8 @@ function startConfiguredQuiz() {
 function startActualQuiz(mode, options = {}) {
   stopTimeAttackTimer();
   let words = options.configured ? getConfiguredQuizWords() : [...window.words];
+  const verifiedMode = isVerifiedQuizMode(mode);
+  const starredCount = getQuizSourceWords('starred').length;
 
   if (mode === 'recent') {
     words.sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
@@ -8429,9 +8939,17 @@ function startActualQuiz(mode, options = {}) {
     } else words = words.slice(0, 10);
   } else if (mode === 'starred') {
     words = words.filter(w => w.starred);
-    if (!words.length) { showToast("ما عندك كلمات صعبة. رح نختبرك بالكل."); words = [...window.words]; }
+    if (warnIfTooFewStarredQuizWords(starredCount)) {
+      openQuizModeSettings('flashcards');
+      return;
+    }
   } else if (!options.configured && mode !== 'flashcards' && mode !== 'timeAttack' && mode !== 'scramble') {
     words.sort(() => Math.random()-0.5);
+  }
+
+  if (options.configured && currentQuizSource === 'starred' && warnIfTooFewStarredQuizWords(starredCount)) {
+    openQuizModeSettings(selectedQuizMode);
+    return;
   }
 
   if (!words.length) {
@@ -8444,6 +8962,25 @@ function startActualQuiz(mode, options = {}) {
   quizIndex = 0;
   currentStreak = 0;
   currentQuizMistakes = 0;
+  quizSessionResults = [];
+  hasStartedAnswering = false;
+  activeQuizSession = verifiedMode ? {
+    id: makeQuizSessionId(),
+    mode,
+    source: currentQuizSource,
+    createdAt: Date.now(),
+    words,
+    pool: currentQuizPool,
+    questionCount: words.length,
+    direction: { timeAttack: timeAttackDirection, scramble: scrambleDirection }
+  } : null;
+  if (verifiedMode) {
+    setQuizImmersive(true);
+    saveActiveQuizSession();
+  } else {
+    setQuizImmersive(false);
+    clearActiveQuizSessionStorage();
+  }
 
   document.getElementById('quizViewSetup').style.display = 'none';
   hideQuizPlayPanels();
@@ -8516,12 +9053,31 @@ function updateQuizForgetState(w, nextForget) {
   return { updatedWord, prevForget };
 }
 
+function recordQuizAnswer(w, correct) {
+  if (!activeQuizSession || !isVerifiedQuizMode(activeQuizSession.mode) || !w) return;
+  hasStartedAnswering = true;
+  quizSessionResults.push({
+    wordId: w.id,
+    correct: Boolean(correct),
+    answeredAt: Date.now()
+  });
+  saveActiveQuizSession();
+}
+
 function rememberQuizWord(w) {
+  if (activeQuizSession && isVerifiedQuizMode(activeQuizSession.mode)) {
+    recordQuizAnswer(w, true);
+    return { updatedWord: w, prevForget: w.forgetCount || 0 };
+  }
   const nextForget = Math.max((w.forgetCount || 0) - 1, 0);
   return updateQuizForgetState(w, nextForget);
 }
 
 function forgetQuizWord(w) {
+  if (activeQuizSession && isVerifiedQuizMode(activeQuizSession.mode)) {
+    recordQuizAnswer(w, false);
+    return { updatedWord: { ...w, forgetCount: (w.forgetCount || 0) + 1 }, prevForget: w.forgetCount || 0 };
+  }
   const nextForget = (w.forgetCount || 0) + 1;
   return updateQuizForgetState(w, nextForget);
 }
@@ -8532,30 +9088,129 @@ function requeueForgotQuizWord(updatedWord, fromIndex) {
   currentQuizWords.splice(insertAt, 0, { ...updatedWord });
 }
 
+function computeSrsUpdate(word, correct, sessionId, answeredAt) {
+  const state = getWordMasteryState(word);
+  const wasMasteredBefore = Boolean(state.mastered_once);
+  const day = getQuizDay(answeredAt);
+  let xp = correct ? QUIZ_CORRECT_BASE_XP + getWordDifficultyBonus(word) : 0;
+  let mastered = false;
+
+  if (correct) {
+    const separateSession = state.last_recall_session_id !== sessionId;
+    const differentDay = state.last_recall_day !== day;
+    const canIncrement = separateSession && differentDay;
+    if (canIncrement) {
+      const nextStreak = Math.min(3, (state.mastery_streak || 0) + 1);
+      state.mastery_streak = nextStreak;
+      state.last_recalled_at = answeredAt;
+      state.last_recall_day = day;
+      state.last_recall_session_id = sessionId;
+      if (nextStreak === 1 && !state.first_recalled_at) state.first_recalled_at = answeredAt;
+      if (nextStreak === 1) state.mastery_status = 'Learning';
+      else if (nextStreak === 2) state.mastery_status = 'Reviewing';
+      else if (nextStreak === 3) {
+        const firstAt = Number(state.first_recalled_at) || answeredAt;
+        if (answeredAt - firstAt >= SRS_MASTERY_WINDOW_MS) {
+          state.mastery_status = 'Mastered';
+          state.mastered_once = true;
+          mastered = true;
+          xp += wasMasteredBefore ? QUIZ_REMASTERY_XP : QUIZ_MASTERY_XP;
+        } else {
+          state.mastery_status = 'Reviewing';
+          state.mastery_streak = 2;
+        }
+      }
+    }
+  } else {
+    xp = 0;
+    if (state.mastery_status === 'Mastered') {
+      state.mastery_status = 'Reviewing';
+      state.mastery_streak = 2;
+    } else if (state.mastered_once && (state.mastery_status === 'Reviewing' || state.mastery_streak >= 2)) {
+      state.mastery_status = 'Learning';
+      state.mastery_streak = 0;
+    } else {
+      const nextStreak = Math.max(0, (state.mastery_streak || 0) - 1);
+      state.mastery_streak = nextStreak;
+      state.mastery_status = nextStreak >= 2 ? 'Reviewing' : 'Learning';
+    }
+  }
+
+  return { state, xp, mastered };
+}
+
+function commitVerifiedQuizResults() {
+  if (!activeQuizSession || !isVerifiedQuizMode(activeQuizSession.mode)) return { xp: 0, masteredCount: 0, correctCount: 0, total: 0 };
+  const byWord = new Map();
+  quizSessionResults.forEach(result => byWord.set(result.wordId, result));
+  let xp = 0;
+  let masteredCount = 0;
+  let correctCount = 0;
+  const masteredIds = new Set();
+
+  window.words = (window.words || []).map(word => {
+    const result = byWord.get(String(word.id));
+    if (!result) return word;
+    if (result.correct) correctCount++;
+    const update = computeSrsUpdate(word, result.correct, activeQuizSession.id, result.answeredAt || Date.now());
+    xp += update.xp;
+    if (update.mastered && !masteredIds.has(word.id)) {
+      masteredIds.add(word.id);
+      masteredCount++;
+    }
+    const forgetCount = result.correct ? Math.max((word.forgetCount || 0) - 1, 0) : (word.forgetCount || 0) + 1;
+    const updated = { ...word, ...update.state, forgetCount };
+    if (window.updateWordInCloud) window.updateWordInCloud(word.id, { ...update.state, forgetCount });
+    return updated;
+  });
+
+  if (xp > 0) {
+    updateXP(xp);
+    showXPBadge(xp, null, false);
+  }
+  if (masteredCount > 0) recordChestMasteredWords(masteredIds);
+  persistDictionary();
+  return { xp, masteredCount, correctCount, total: quizSessionResults.length };
+}
+
 function markRemember() {
   const w = currentQuizWords[quizIndex];
   if (!w) return;
   const { prevForget } = rememberQuizWord(w);
   currentStreak++;
   showStreakMsg(currentStreak);
-  const fc = prevForget;
-  const xpGain = fc >= 3 ? 3 : fc >= 1 ? 2 : 1;
-  updateXP(xpGain);
-  showXPBadge(xpGain, null, false);
+  saveInt('lootlinguaFlashcardsReviewedToday', loadInt('lootlinguaFlashcardsReviewedToday', 0) + 1);
   if (quizIndex < currentQuizWords.length - 1) { quizIndex++; updateCard(); }
   else { finishQuizRun(); }
 }
 
 function finishQuizRun() {
   stopTimeAttackTimer();
-  if (currentQuizMistakes === 0 && currentQuizWords.length > 0) {
+  const verified = activeQuizSession && isVerifiedQuizMode(activeQuizSession.mode);
+  const commit = verified ? commitVerifiedQuizResults() : { correctCount: currentQuizWords.length - currentQuizMistakes, total: currentQuizWords.length };
+  const accuracy = commit.total > 0 ? commit.correctCount / commit.total : 0;
+  const fullyCompleted = verified && quizIndex >= currentQuizWords.length;
+  if (fullyCompleted && accuracy >= 0.9) recordHighAccuracyVerifiedQuiz(activeQuizSession.id);
+  if (currentQuizMistakes === 0 && currentQuizWords.length > 0 && verified) {
     saveInt('lootlinguaPerfectQuizzes', loadInt('lootlinguaPerfectQuizzes', 0) + 1);
     if (!hasSignedInUser()) markGuestDataDirty();
     markDailyQuestFlag('perfectQuiz');
     if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
     if (window.saveProfileToCloud) window.saveProfileToCloud();
   }
-  showToast(currentQuizMistakes === 0 ? 'اختبار كامل بدون ولا غلطة!' : 'أبدعت! 👏', 'success', 3200);
+  if (verified) {
+    playQuizCompletionSound();
+    if (accuracy >= 0.9 || commit.xp > 0) launchConfetti();
+  }
+  clearActiveQuizSessionStorage();
+  activeQuizSession = null;
+  quizSessionResults = [];
+  hasStartedAnswering = false;
+  showToast(verified
+    ? `تم حفظ الاختبار: ${Math.round(accuracy * 100)}% دقة${commit.xp ? `، +${commit.xp} XP` : ''}`
+    : 'تمت مراجعة البطاقات بدون XP. أحسنت!',
+    'success',
+    3600);
   setTimeout(closeQuiz, 600);
 }
 
@@ -8567,6 +9222,7 @@ function markForgot() {
   const w = currentQuizWords[quizIndex];
   if (!w) return;
   const { updatedWord } = forgetQuizWord(w);
+  saveInt('lootlinguaFlashcardsReviewedToday', loadInt('lootlinguaFlashcardsReviewedToday', 0) + 1);
   requeueForgotQuizWord(updatedWord, quizIndex);
 
   // حدّث عداد البطاقات في الواجهة
@@ -8673,6 +9329,7 @@ function answerTimeAttack(answerId, options = {}) {
     setTimeout(() => renderTimeAttackHearts(timeAttackHp), 680);
   }
   quizIndex++;
+  saveActiveQuizSession();
   renderTimeAttackQuestion();
 }
 
@@ -8695,19 +9352,18 @@ function updateScrambleCard() {
   document.getElementById('scrambleCounter').textContent = `${quizIndex + 1} / ${currentQuizWords.length}`;
   document.getElementById('scrambleProgress').style.width = `${(quizIndex / currentQuizWords.length) * 100}%`;
   document.querySelector('#quizScrambleView .quiz-mini-label').textContent =
-    scrambleDirection === 'en-to-ar' ? 'اكتب المعنى العربي' : 'رتب الحروف حسب المعنى';
+    getScrambleDirectionText();
   document.getElementById('scrambleMeaning').textContent =
     scrambleDirection === 'en-to-ar' ? w.word : w.meaning;
-  document.getElementById('scrambleLetters').innerHTML = scrambleDirection === 'en-to-ar'
-    ? ''
-    : scrambleWord(w.word)
+  const scrambledText = scrambleDirection === 'en-to-ar' ? w.meaning : w.word;
+  document.getElementById('scrambleLetters').innerHTML = scrambleWord(scrambledText)
       .split('')
       .map(ch => `<span>${escapeHtml(ch)}</span>`)
       .join('');
   const input = document.getElementById('scrambleInput');
   input.value = '';
   input.dir = scrambleDirection === 'en-to-ar' ? 'rtl' : 'ltr';
-  input.placeholder = scrambleDirection === 'en-to-ar' ? 'اكتب المعنى بالعربي...' : 'اكتب الكلمة هنا...';
+  input.placeholder = scrambleDirection === 'en-to-ar' ? 'اكتب المعنى هنا...' : 'اكتب الكلمة هنا...';
   setTimeout(() => input.focus(), 40);
 }
 
@@ -8731,6 +9387,7 @@ function submitScrambleAnswer() {
     showToast(`الإجابة: ${expected}`);
   }
   quizIndex++;
+  saveActiveQuizSession();
   updateScrambleCard();
 }
 
