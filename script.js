@@ -551,7 +551,6 @@ function toggleNotificationsPanel(ev) {
     updateNotificationsBadge();
     renderNotificationsPanel();
     requestAnimationFrame(positionNotifPopover);
-    setAppRoute('overlay', 'notifications');
   }
 }
 
@@ -576,8 +575,7 @@ function closeNotificationsPanel(silent) {
     btn?.setAttribute('aria-expanded', 'false');
     hub?.classList.remove('notif-open');
   };
-  if (silent) close();
-  else closeRouteEntry('overlay', 'notifications', close);
+  close();
 }
 
 document.addEventListener('click', (e) => {
@@ -832,7 +830,7 @@ function getDailyQuestStorageKey(date = todayStr()) {
 function saveDailyQuestState(state) {
   saveJSON(getDailyQuestStorageKey(), state);
   if (!hasSignedInUser()) markGuestDataDirty();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
 }
 
 function isDailyQuestDone(id) {
@@ -2589,7 +2587,7 @@ window.setTheme = function(theme, skipLockCheck = false) {
   });
   refreshThemeLockUI();
   if (!skipLockCheck && theme !== previousTheme) showThemeUseMessageOnce(theme);
-  if (!skipLockCheck && window.saveProfileToCloud) window.saveProfileToCloud();
+  if (!skipLockCheck) requestProfileCloudSave();
   return true;
 };
 
@@ -3679,6 +3677,12 @@ function saveJSON(k,v) {
 }
 function todayStr()    { return new Date().toISOString().slice(0,10); }
 
+function requestProfileCloudSave() {
+  if (!window.saveProfileToCloud) return;
+  if (window.__applyingCloudProfile || isInitialLoad || window.__suppressUnlockNotices) return;
+  window.saveProfileToCloud();
+}
+
 // بيانات الملف الشخصي للسحابة (وحدات ES تتصل بهذا بدل `let` من السكربت العادي)
 window.getLootlinguaProfilePayload = function() {
   const dailyQuestDate = todayStr();
@@ -3806,6 +3810,10 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
       totalOpens: Math.max(Number(cloudLoot.totalOpens) || 0, Number(localLoot.totalOpens) || 0),
       streak: Math.max(Number(cloudLoot.streak) || 0, Number(localLoot.streak) || 0),
       freezesEarned: Math.max(Number(cloudLoot.freezesEarned) || 0, Number(localLoot.freezesEarned) || 0),
+      lockedXP: Math.max(Number(cloudLoot.lockedXP) || 0, Number(localLoot.lockedXP) || 0),
+      lockStartedAt: Math.max(Number(cloudLoot.lockStartedAt) || 0, Number(localLoot.lockStartedAt) || 0),
+      lockMasteredWordIds: [...new Set([...(cloudLoot.lockMasteredWordIds || []), ...(localLoot.lockMasteredWordIds || [])])],
+      lockHighAccuracyQuizIds: [...new Set([...(cloudLoot.lockHighAccuracyQuizIds || []), ...(localLoot.lockHighAccuracyQuizIds || [])])],
       lastOpenDay: [cloudLoot.lastOpenDay || '', localLoot.lastOpenDay || ''].sort().pop() || '',
       rewards: [...byRewardKey.values()].sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 12),
     };
@@ -4284,7 +4292,7 @@ function updateXP(amount) {
   userXP = Math.max(0, userXP + amount);
   saveInt('userXP', userXP);
   if (!hasSignedInUser()) markGuestDataDirty();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
   checkThemeRelocksAfterXP(prevXP, userXP);
   checkThemeUnlocksAfterXP(prevXP, userXP);
   renderXPBar();
@@ -4428,7 +4436,7 @@ function checkAndUpdateStreak() {
   if (dailyStreak > maxS) saveInt('lootlinguaMaxStreak', dailyStreak);
   lastActivity = today;
   localStorage.setItem('lastActivityDate', today);
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
   renderStreak();
   renderProfileModalStats();
 }
@@ -4467,7 +4475,7 @@ function incrementDailyCountBy(amount = 1) {
   map[today]  = before + n;
   saveJSON('activityMap', map);
   if (!hasSignedInUser()) markGuestDataDirty();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
   if (typeof updateDailyQuestsBadge === 'function') updateDailyQuestsBadge();
   renderDailyGoal();
   const after = map[today];
@@ -4483,7 +4491,7 @@ function decrementDailyCount() {
     map[today]--;
     saveJSON('activityMap', map);
     if (!hasSignedInUser()) markGuestDataDirty();
-    if (window.saveProfileToCloud) window.saveProfileToCloud();
+    requestProfileCloudSave();
     renderDailyGoal();
   }
 }
@@ -4601,7 +4609,7 @@ function renderStatsNumbers() {
   s('statTotal',   window.words.length);
   s('statStreak',  dailyStreak+' يوم');
   s('statStarred', window.words.filter(w=>w.starred).length);
-  s('statForgot',  window.words.filter(w=>(w.forgetCount||0)>0).length);
+  s('statForgot',  window.words.filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length);
   s('statDays',    Object.keys(map).filter(k=>map[k]>0).length+' يوم');
   s('statBest',    (vals.length?Math.max(...vals):0)+' كلمات');
 }
@@ -4801,6 +4809,7 @@ window.editWord = function(id, event) {
   if (event) event.stopPropagation();
   const item = window.words.find(w => w.id === id);
   if (!item) return;
+  suppressStrayQuizUi();
   // Switch to personal dictionary view if not already there (inputs are there)
   if (currentView !== 'personal') loadPersonalDictionary();
   document.getElementById('wordInput').value     = item.word;
@@ -5607,6 +5616,7 @@ function setWordHunterStatus(message, loading = false) {
 window.openWordHunterModal = function() {
   const modal = document.getElementById('wordHunterModal');
   if (!modal) return;
+  suppressStrayQuizUi();
   lockBackgroundScroll('wordHunter');
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
@@ -5818,6 +5828,7 @@ async function handleWordHunterWordClick(event, btn) {
       example: fields.ex || '',
       fromCache,
       empty: !fields.ar,
+      canAskGamer: Boolean(fields.ar),
     });
   } catch (error) {
     if (error.code === 403) {
@@ -5846,6 +5857,10 @@ function showWordHunterPopover(anchor, data) {
         <i class="fa-solid fa-plus" aria-hidden="true"></i>
         <span>${disabled ? 'مضافة مسبقاً' : 'إضافة للقاموس'}</span>
       </button>
+      ${data.canAskGamer ? `<button type="button" class="word-hunter-gamer-btn" onclick="fetchWordHunterGamerMeaning(event)" data-word="${sugAttr(data.word)}">
+        <i class="fa-solid fa-gamepad" aria-hidden="true"></i>
+        <span>عرض معنى الألعاب</span>
+      </button>` : ''}
     `;
 
   const margin = 12;
@@ -5876,6 +5891,41 @@ window.addWordHunterResult = async function(event) {
     ex: decodeSugAttr(btn.dataset.ex),
     game: '',
   }, btn);
+};
+
+window.fetchWordHunterGamerMeaning = async function(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  if (!guardGuestAiSearch('gamer')) return;
+  const btn = event?.currentTarget;
+  const word = decodeSugAttr(btn?.dataset?.word || wordHunterActiveWord || '');
+  if (!word || !rateLimit('wordHunterGamerLookup', 6, 60000)) return;
+  const activeAnchor = document.querySelector('.word-hunter-word.active');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>جاري جلب معنى الألعاب...</span>';
+  }
+  try {
+    const { data, fromCache } = await fetchAiMeaningsWithCache(word, 'gamer');
+    const fields = pickSuggestionFields(data?.[0] || {});
+    if (!fields.ar) {
+      showToast('ما لقينا معنى ألعاب واضح لهالكلمة.', 'info', 3200);
+      return;
+    }
+    if (activeAnchor) {
+      showWordHunterPopover(activeAnchor, {
+        word,
+        meaning: fields.ar,
+        category: fields.pos || 'مصطلح ألعاب',
+        example: fields.ex || '',
+        fromCache,
+        gameMeaning: true,
+      });
+    }
+  } catch (err) {
+    if (err.code !== 403) showToast('تعذر جلب معنى الألعاب الآن.', 'warning', 3600);
+  }
 };
 
 window.openGameGamerAiSearch = function() {
@@ -6029,11 +6079,13 @@ function showBackupHelp(type, event) {
 
   const old = document.querySelector('.backup-help-popover');
   if (old) old.remove();
+  unlockBackgroundScroll('backupHelp');
 
   const pop = document.createElement('div');
   pop.className = 'backup-help-popover';
   pop.textContent = messages[type] || 'هذه الأداة تساعدك تحفظ قاموسك أو ترجعه وقت الحاجة.';
   document.body.appendChild(pop);
+  lockBackgroundScroll('backupHelp');
 
   const btn = event?.currentTarget;
   const rect = btn?.getBoundingClientRect();
@@ -6047,11 +6099,13 @@ function showBackupHelp(type, event) {
   const close = (e) => {
     if (e?.target === btn || pop.contains(e?.target)) return;
     pop.remove();
+    unlockBackgroundScroll('backupHelp');
     document.removeEventListener('click', close, true);
   };
   setTimeout(() => document.addEventListener('click', close, true), 0);
   setTimeout(() => {
     pop.remove();
+    unlockBackgroundScroll('backupHelp');
     document.removeEventListener('click', close, true);
   }, 6500);
 }
@@ -6428,6 +6482,22 @@ const TITLE_DEFS = [
     unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => w.starred).length >= 10,
   },
   {
+    id: 'first_mastery',
+    icon: 'fa-solid fa-gem',
+    color: '#22d3ee',
+    name: 'صاقل الجوهرة',
+    how: 'أتقن أول كلمة في قاموسك.',
+    unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length >= 1,
+  },
+  {
+    id: 'mastery_circle',
+    icon: 'fa-solid fa-crown',
+    color: '#eab308',
+    name: 'تاج الإتقان',
+    how: 'أتقن 10 كلمات في قاموسك.',
+    unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length >= 10,
+  },
+  {
     id: 'strategist',
     icon: 'fa-solid fa-chess-knight',
     color: '#f472b6',
@@ -6499,7 +6569,7 @@ window.setActiveLootlinguaTitle = function(titleId) {
   if (next) localStorage.setItem(ACTIVE_TITLE_KEY, next);
   else localStorage.setItem(ACTIVE_TITLE_KEY, ACTIVE_TITLE_NONE);
   markGuestProfileDataDirty(ACTIVE_TITLE_KEY);
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
   syncHeroAvatar();
 };
 
@@ -6559,7 +6629,7 @@ function renderProfileTitlePicker() {
 function saveLootState(state) {
   saveJSON(LOOT_STATE_KEY, state);
   if (!hasSignedInUser()) markGuestDataDirty();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
 }
 
 function getTitleState() {
@@ -6569,7 +6639,7 @@ function getTitleState() {
 function saveTitleState(state) {
   saveJSON(TITLE_STATE_KEY, state);
   if (!hasSignedInUser()) markGuestDataDirty();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
 }
 
 function formatLootTime(ms) {
@@ -6584,9 +6654,10 @@ function formatLootTime(ms) {
 
 function getLootAvailability() {
   const state = getLootState();
+  const lockedXP = Number(state.lockedXP) || 0;
   const nextAt = (state.lastOpenAt || 0) + LOOT_BOX_COOLDOWN_MS;
   const remaining = nextAt - Date.now();
-  return { state, ready: !state.lastOpenAt || remaining <= 0, remaining: Math.max(0, remaining) };
+  return { state, ready: lockedXP <= 0 && (!state.lastOpenAt || remaining <= 0), remaining: Math.max(0, remaining), lockedXP };
 }
 
 function pickDailyLootReward() {
@@ -6612,14 +6683,14 @@ function getStreakFreezeCount() {
 function saveStreakFreezeCount(count) {
   saveInt(STREAK_FREEZE_KEY, Math.max(0, Number(count) || 0));
   if (!hasSignedInUser()) markGuestDataDirty();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
 }
 
 function recordGameDictionaryAdd() {
   saveInt(GAME_DICT_ADDS_KEY, loadInt(GAME_DICT_ADDS_KEY, 0) + 1);
   if (!hasSignedInUser()) markGuestDataDirty();
   if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
 }
 
 function describeLootReward(reward) {
@@ -6680,6 +6751,11 @@ function recordHighAccuracyVerifiedQuiz(sessionId) {
 }
 
 function revealDailyLootReward(state, reward) {
+  if ((Number(state.lockedXP) || 0) > 0) {
+    showToast(`عندك ${Number(state.lockedXP) || 0} XP مقفولة. افتح المكافأة الحالية أولا قبل صندوق جديد.`, 'warning', 5200);
+    renderTreasureRoom();
+    return;
+  }
   state.streak = updateLootStreak(state);
   state.totalOpens = (state.totalOpens || 0) + 1;
   state.lastOpenAt = Date.now();
@@ -6703,7 +6779,7 @@ function revealDailyLootReward(state, reward) {
   markDailyQuestFlag('openLoot');
   updateDailyQuestsBadge();
   renderTreasureRoom();
-  if (window.saveProfileToCloud) window.saveProfileToCloud();
+  requestProfileCloudSave();
 }
 
 window.startLootChestCharge = function(event) {
@@ -6712,6 +6788,11 @@ window.startLootChestCharge = function(event) {
   const chest = document.getElementById('dailyLootChest');
   const preview = document.getElementById('lootRewardPreview');
   const availability = getLootAvailability();
+  if (availability.lockedXP > 0) {
+    window.__lootPointerStart = null;
+    window.openDailyLootBox();
+    return;
+  }
   if (!availability.ready) {
     window.__lootPointerStart = null;
     window.openDailyLootBox();
@@ -6756,6 +6837,11 @@ window.cancelLootChestCharge = function(event) {
 
 window.openDailyLootBox = function() {
   const availability = getLootAvailability();
+  if (availability.lockedXP > 0) {
+    showToast(`عندك ${availability.lockedXP} XP مقفولة. افتح المكافأة الحالية أولا قبل صندوق جديد.`, 'warning', 5200);
+    renderTreasureRoom();
+    return;
+  }
   if (!availability.ready) {
     showToast(`الصندوق يستنى الرسبون: ${formatLootTime(availability.remaining)}`, 'info', 3600);
     renderTreasureRoom();
@@ -6788,6 +6874,7 @@ function getTitleProgress(def) {
   const gameAdds = loadInt(GAME_DICT_ADDS_KEY, 0);
   const level = getLevelFromXP(loadInt('userXP', 0));
   const streak = loadInt('dailyStreak', 0);
+  const masteredWords = words.filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length;
   const map = {
     first_spark: `${Math.min(loot.totalOpens || 0, 1)} / 1`,
     loot_hunter: `${Math.min(loot.streak || 0, 7)} / 7`,
@@ -6796,6 +6883,8 @@ function getTitleProgress(def) {
     word_collector: `${Math.min(words.length, 25)} / 25`,
     dictionary_keeper: `${Math.min(words.length, 50)} / 50`,
     star_chaser: `${Math.min(starred, 10)} / 10`,
+    first_mastery: `${Math.min(masteredWords, 1)} / 1`,
+    mastery_circle: `${Math.min(masteredWords, 10)} / 10`,
     strategist: `${Math.min(perfect, 10)} / 10`,
     streak_guard: `${Math.min(streak, 7)} / 7`,
     level_climber: `${Math.min(level, 5)} / 5`,
@@ -6821,7 +6910,7 @@ function evaluateTitleUnlocks(celebrate = false) {
     localStorage.removeItem(ACTIVE_TITLE_KEY);
   }
   saveTitleState(state);
-  if (newly.length && window.saveProfileToCloud) window.saveProfileToCloud();
+  if (newly.length) requestProfileCloudSave();
   if (newly.length && celebrate && !isJsonImportBatchActive()) {
     const first = newly[0];
     launchConfetti();
@@ -6864,7 +6953,7 @@ function renderLootSummary() {
   const preview = document.getElementById('lootRewardPreview');
   const slots = document.getElementById('treasureSlots');
   const lockedXP = Number(state.lockedXP) || 0;
-  if (chest) chest.classList.toggle('is-locked', !ready);
+  if (chest) chest.classList.toggle('is-locked', lockedXP > 0 || !ready);
   if (status) status.innerHTML = lockedXP > 0
     ? `<i class="fa-solid fa-lock" aria-hidden="true"></i> ${lockedXP} XP مقفولة`
     : (ready
@@ -7751,7 +7840,11 @@ window.loadQuizView = function() {
   document.getElementById('quizView').style.display = 'block';
   showQuizModes();
   loadStoredActiveQuizSession().then((session) => {
-    if (currentView !== 'quiz' || !session || !isVerifiedQuizMode(session.mode)) return;
+    if (currentView !== 'quiz') return;
+    if (!isResumableQuizSession(session)) {
+      if (session) clearActiveQuizSessionStorage();
+      return;
+    }
     window.__pendingQuizResumeSession = session;
     showQuizResumePrompt();
   });
@@ -8398,9 +8491,11 @@ let pendingQuizExitTarget = 'quiz';
 const ACTIVE_QUIZ_SESSION_KEY = 'active_quiz_session';
 const SRS_STATUSES = ['New', 'Learning', 'Reviewing', 'Mastered'];
 const SRS_MASTERY_WINDOW_MS = 72 * 60 * 60 * 1000;
-const QUIZ_CORRECT_BASE_XP = 10;
-const QUIZ_MASTERY_XP = 40;
-const QUIZ_REMASTERY_XP = 10;
+const SRS_MASTERED_REVIEW_DUE_MS = 7 * 24 * 60 * 60 * 1000;
+const QUIZ_LEARNING_XP = 2;
+const QUIZ_REVIEWING_XP = 4;
+const QUIZ_MASTERY_XP = 20;
+const QUIZ_REMASTERY_XP = 5;
 const MIN_STARRED_QUIZ_WORDS = 10;
 const SCRAMBLE_DIRECTION_COPY = {
   'ar-to-en': 'رتب حروف الكلمة الإنجليزية اعتماداً على معناها العربي.',
@@ -8415,6 +8510,8 @@ function getDefaultMasteryState() {
     first_recalled_at: null,
     last_recall_day: '',
     last_recall_session_id: '',
+    last_quizzed_at: null,
+    quiz_seen_count: 0,
     mastered_once: false
   };
 }
@@ -8432,14 +8529,16 @@ function getWordMasteryState(word = {}) {
     first_recalled_at: word.first_recalled_at || word.firstRecalledAt || null,
     last_recall_day: word.last_recall_day || word.lastRecallDay || '',
     last_recall_session_id: word.last_recall_session_id || word.lastRecallSessionId || '',
+    last_quizzed_at: word.last_quizzed_at || word.lastQuizzedAt || null,
+    quiz_seen_count: Math.max(0, Number(word.quiz_seen_count ?? word.quizSeenCount ?? 0) || 0),
     mastered_once: Boolean(word.mastered_once || word.masteredOnce)
   };
 }
 
 function getWordDifficultyBonus(word = {}) {
   const raw = String(word.difficulty || word.level || word.cefr || word.cefrLevel || '').toUpperCase();
-  if (/C1|C2/.test(raw)) return 4;
-  if (/B1|B2/.test(raw)) return 2;
+  if (/C1|C2/.test(raw)) return 2;
+  if (/B1|B2/.test(raw)) return 1;
   return 0;
 }
 
@@ -8464,13 +8563,15 @@ function renderMasteryIndicator(word = {}) {
   const level = getMasteryLevel(word);
   const label = getMasteryLabel(word);
   const dots = [1, 2, 3].map(i => `<span class="mastery-dot${i <= level ? ' filled' : ''}" aria-hidden="true"></span>`).join('');
-  return `<span class="mastery-meter mastery-${level}" title="الإتقان: ${escapeHtml(label)}" aria-label="الإتقان: ${escapeHtml(label)}">${dots}</span>`;
+  const id = sugAttr(String(word.id || ''));
+  return `<span class="mastery-meter mastery-${level}" role="button" tabindex="0" data-word-id="${id}" onclick="showWordMasteryPopover(event, '${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){showWordMasteryPopover(event, '${id}')}" title="الإتقان: ${escapeHtml(label)}" aria-label="الإتقان: ${escapeHtml(label)}">${dots}</span>`;
 }
 
 window.showMasteryHelp = function(event) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
   document.getElementById('masteryHelpPopover')?.remove();
+  unlockBackgroundScroll('masteryHelp');
   const pop = document.createElement('div');
   pop.id = 'masteryHelpPopover';
   pop.className = 'mastery-help-popover';
@@ -8481,17 +8582,78 @@ window.showMasteryHelp = function(event) {
     <p>إذا غلطت، المؤشر ينزل درجة. الكلمة المتقنة تحتاج خطأين عشان ترجع للصفر.</p>
   `;
   document.body.appendChild(pop);
+  pop.innerHTML = `
+    <button type="button" class="mastery-help-close" aria-label="إغلاق"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    <strong>كيف تفتح XP الصندوق؟</strong>
+    <p>أتقن كلمتين جديدتين من الاختبار، أو أنهِ اختبارين موثقين بدقة 90% أو أكثر.</p>
+    <p>الإتقان يتقدم على مراحل وفي جلسات/أيام مختلفة. إجابة صحيحة واحدة لا تكفي وحدها.</p>
+  `;
+  lockBackgroundScroll('masteryHelp');
   const target = event?.currentTarget || event?.target;
   const rect = target?.getBoundingClientRect?.();
   const top = rect ? rect.bottom + 8 : 90;
   const left = rect ? Math.min(window.innerWidth - 18, Math.max(18, rect.left + rect.width / 2)) : window.innerWidth / 2;
   pop.style.top = `${Math.min(top, window.innerHeight - 24)}px`;
   pop.style.left = `${left}px`;
-  pop.querySelector('.mastery-help-close')?.addEventListener('click', () => pop.remove());
+  const cleanupMasteryHelp = () => {
+    pop.remove();
+    unlockBackgroundScroll('masteryHelp');
+  };
+  pop.querySelector('.mastery-help-close')?.addEventListener('click', cleanupMasteryHelp);
   setTimeout(() => {
     const close = (e) => {
       if (!pop.contains(e.target)) {
-        pop.remove();
+        cleanupMasteryHelp();
+        document.removeEventListener('pointerdown', close, true);
+      }
+    };
+    document.addEventListener('pointerdown', close, true);
+  }, 0);
+};
+
+window.showWordMasteryPopover = function(event, wordId) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  document.getElementById('wordMasteryPopover')?.remove();
+  unlockBackgroundScroll('wordMasteryHelp');
+  const id = decodeSugAttr(wordId || event?.currentTarget?.dataset?.wordId || '');
+  const word = (window.words || []).find(w => String(w.id) === id) ||
+    (currentQuizWords || []).find(w => String(w.id) === id) || {};
+  const state = getWordMasteryState(word);
+  const level = getMasteryLevel(word);
+  const label = getMasteryLabel(word);
+  const nextText = state.mastery_status === 'Mastered'
+    ? 'هذه الكلمة متقنة. ستظهر لاحقا كمراجعة متباعدة حتى تثبتها.'
+    : level === 0
+      ? 'أجب عنها صح في اختبار موثق في يوم مختلف لتنتقل إلى قيد التعلم وتحصل XP بسيط.'
+      : level === 1
+        ? 'أجب عنها صح مرة أخرى في يوم/جلسة مختلفة لتصبح قريبة من الإتقان وتحصل XP أعلى.'
+        : 'بعد مرور 72 ساعة من أول إجابة صحيحة، إجابة صحيحة جديدة تجعلها متقنة وتعطي مكافأة الإتقان.';
+  const pop = document.createElement('div');
+  pop.id = 'wordMasteryPopover';
+  pop.className = 'word-mastery-popover';
+  pop.innerHTML = `
+    <strong>${escapeHtml(label)}</strong>
+    <p>${escapeHtml(nextText)}</p>
+  `;
+  document.body.appendChild(pop);
+  lockBackgroundScroll('wordMasteryHelp');
+  const rect = event?.currentTarget?.getBoundingClientRect?.();
+  const width = Math.min(300, window.innerWidth - 24);
+  pop.style.maxWidth = `${width}px`;
+  const popRect = pop.getBoundingClientRect();
+  const top = rect ? rect.top - popRect.height - 10 : 90;
+  const left = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+  pop.style.top = `${Math.max(12, Math.min(top, window.innerHeight - popRect.height - 12))}px`;
+  pop.style.left = `${Math.max(12 + popRect.width / 2, Math.min(left, window.innerWidth - 12 - popRect.width / 2))}px`;
+  const cleanupWordMasteryHelp = () => {
+    pop.remove();
+    unlockBackgroundScroll('wordMasteryHelp');
+  };
+  setTimeout(() => {
+    const close = (e) => {
+      if (!pop.contains(e.target) && !event?.currentTarget?.contains?.(e.target)) {
+        cleanupWordMasteryHelp();
         document.removeEventListener('pointerdown', close, true);
       }
     };
@@ -8560,6 +8722,20 @@ function hideQuizPlayPanels() {
   });
 }
 
+function suppressStrayQuizUi() {
+  if (currentView === 'quiz') return;
+  stopTimeAttackTimer();
+  hideQuizPlayPanels();
+  hideQuizResumePrompt();
+  hideQuizExitPrompts();
+  setQuizImmersive(false);
+}
+
+document.addEventListener('focusin', (e) => {
+  if (currentView === 'quiz') return;
+  if (e.target?.closest?.('#personalControls, #wordHunterModal')) suppressStrayQuizUi();
+});
+
 function setQuizImmersive(active) {
   document.body.classList.toggle('quiz-active', Boolean(active));
 }
@@ -8592,6 +8768,14 @@ async function loadStoredActiveQuizSession() {
     return await window.loadActiveQuizSessionFromCloud();
   }
   return loadJSON(ACTIVE_QUIZ_SESSION_KEY, null);
+}
+
+function isResumableQuizSession(session) {
+  if (!session || !isVerifiedQuizMode(session.mode) || !Array.isArray(session.words) || !session.words.length) return false;
+  const index = Math.max(0, Number(session.quizIndex) || 0);
+  if (index >= session.words.length) return false;
+  if (session.completedAt || session.finishedAt) return false;
+  return true;
 }
 
 function clearActiveQuizSessionStorage() {
@@ -8691,7 +8875,7 @@ function resetRuntimeQuizState() {
 }
 
 function applyStoredQuizSession(session) {
-  if (!session || !isVerifiedQuizMode(session.mode) || !Array.isArray(session.words) || !session.words.length) return false;
+  if (!isResumableQuizSession(session)) return false;
   activeQuizSession = {
     id: session.id || makeQuizSessionId(),
     mode: session.mode,
@@ -8854,6 +9038,8 @@ function normalizeQuizWord(item, source, index) {
     first_recalled_at: mastery.first_recalled_at,
     last_recall_day: mastery.last_recall_day,
     last_recall_session_id: mastery.last_recall_session_id,
+    last_quizzed_at: mastery.last_quizzed_at,
+    quiz_seen_count: mastery.quiz_seen_count,
     mastered_once: mastery.mastered_once,
     isGameQuizWord: false
   };
@@ -8870,22 +9056,61 @@ function shuffleQuizWords(words) {
 
 function buildSmartQuizDeck(sourceWords, requestedCount) {
   const limit = Math.max(1, Math.min(requestedCount, sourceWords.length));
-  const priority = ['Reviewing', 'Learning', 'New', 'Mastered'];
-  const buckets = priority.reduce((acc, status) => {
-    acc[status] = shuffleQuizWords(sourceWords.filter(w => getWordStateForQueue(w) === status));
-    return acc;
-  }, {});
+  const now = Date.now();
+  const priorityWeight = { Reviewing: 4000, Learning: 3000, New: 2000, Mastered: 900 };
+  const minNewSlots = sourceWords.some(w => getWordStateForQueue(w) === 'New')
+    ? Math.max(1, Math.floor(limit * 0.2))
+    : 0;
+  const minMasteredSlots = sourceWords.some(w => getWordStateForQueue(w) === 'Mastered')
+    ? Math.max(1, Math.floor(limit * 0.1))
+    : 0;
+  const decorated = sourceWords.map((word, index) => {
+    const state = getWordMasteryState(word);
+    const status = state.mastery_status;
+    const lastQuizAt = Number(state.last_quizzed_at || state.last_recalled_at || 0) || 0;
+    const ageDays = lastQuizAt ? Math.min(30, (now - lastQuizAt) / 864e5) : 30;
+    const neglectBoost = ageDays * 16;
+    const seenPenalty = Math.min(180, state.quiz_seen_count * 12);
+    const forgetBoost = Math.min(180, (word.forgetCount || 0) * 45);
+    const masteredDueBoost = status === 'Mastered' && (!lastQuizAt || now - lastQuizAt >= SRS_MASTERED_REVIEW_DUE_MS) ? 700 : 0;
+    return {
+      word,
+      status,
+      score: (priorityWeight[status] || 0) + neglectBoost + forgetBoost + masteredDueBoost - seenPenalty + Math.random() * 60,
+      index
+    };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+  const reserved = new Set();
+  const reserveBest = (predicate) => {
+    const idx = decorated.findIndex(item => !reserved.has(item.word.id) && predicate(item));
+    if (idx === -1) return false;
+    reserved.add(decorated[idx].word.id);
+    return true;
+  };
+  for (let i = 0; i < minNewSlots; i++) {
+    if (!reserveBest(item => item.status === 'New')) break;
+  }
+  for (let i = 0; i < minMasteredSlots; i++) {
+    if (!reserveBest(item => item.status === 'Mastered')) break;
+  }
   const deck = [];
-  const canTake = (status) => {
-    if (!buckets[status]?.length) return false;
+  const picked = new Set();
+  const canTake = (item) => {
     const a = deck[deck.length - 1];
     const b = deck[deck.length - 2];
-    return !(a && b && getWordStateForQueue(a) === status && getWordStateForQueue(b) === status);
+    return !(a && b && getWordStateForQueue(a) === item.status && getWordStateForQueue(b) === item.status);
   };
   while (deck.length < limit) {
-    const status = priority.find(canTake) || priority.find(s => buckets[s]?.length);
-    if (!status) break;
-    deck.push(buckets[status].shift());
+    const remainingSlots = limit - deck.length;
+    const reservedLeft = [...reserved].filter(id => !picked.has(id)).length;
+    const mustTakeReserved = reservedLeft >= remainingSlots;
+    const next = decorated.find(item => !picked.has(item.word.id) && (!mustTakeReserved || reserved.has(item.word.id)) && canTake(item)) ||
+      decorated.find(item => !picked.has(item.word.id) && (!mustTakeReserved || reserved.has(item.word.id))) ||
+      decorated.find(item => !picked.has(item.word.id) && reserved.has(item.word.id) && canTake(item)) ||
+      decorated.find(item => !picked.has(item.word.id));
+    if (!next) break;
+    picked.add(next.word.id);
+    deck.push(next.word);
   }
   return deck;
 }
@@ -9092,8 +9317,12 @@ function computeSrsUpdate(word, correct, sessionId, answeredAt) {
   const state = getWordMasteryState(word);
   const wasMasteredBefore = Boolean(state.mastered_once);
   const day = getQuizDay(answeredAt);
-  let xp = correct ? QUIZ_CORRECT_BASE_XP + getWordDifficultyBonus(word) : 0;
+  let xp = 0;
   let mastered = false;
+  let advanced = false;
+  const previousStatus = state.mastery_status;
+  state.last_quizzed_at = answeredAt;
+  state.quiz_seen_count = Math.max(0, Number(state.quiz_seen_count) || 0) + 1;
 
   if (correct) {
     const separateSession = state.last_recall_session_id !== sessionId;
@@ -9106,8 +9335,16 @@ function computeSrsUpdate(word, correct, sessionId, answeredAt) {
       state.last_recall_day = day;
       state.last_recall_session_id = sessionId;
       if (nextStreak === 1 && !state.first_recalled_at) state.first_recalled_at = answeredAt;
-      if (nextStreak === 1) state.mastery_status = 'Learning';
-      else if (nextStreak === 2) state.mastery_status = 'Reviewing';
+      if (nextStreak === 1) {
+        state.mastery_status = 'Learning';
+        xp += QUIZ_LEARNING_XP + getWordDifficultyBonus(word);
+        advanced = true;
+      }
+      else if (nextStreak === 2) {
+        state.mastery_status = 'Reviewing';
+        xp += QUIZ_REVIEWING_XP + getWordDifficultyBonus(word);
+        advanced = true;
+      }
       else if (nextStreak === 3) {
         const firstAt = Number(state.first_recalled_at) || answeredAt;
         if (answeredAt - firstAt >= SRS_MASTERY_WINDOW_MS) {
@@ -9115,11 +9352,17 @@ function computeSrsUpdate(word, correct, sessionId, answeredAt) {
           state.mastered_once = true;
           mastered = true;
           xp += wasMasteredBefore ? QUIZ_REMASTERY_XP : QUIZ_MASTERY_XP;
+          advanced = true;
         } else {
           state.mastery_status = 'Reviewing';
           state.mastery_streak = 2;
+          xp += QUIZ_REVIEWING_XP;
+          advanced = previousStatus !== 'Reviewing';
         }
       }
+    }
+    if (xp === 0 && (Number(word.forgetCount) || 0) > 0) {
+      xp += 1;
     }
   } else {
     xp = 0;
@@ -9136,17 +9379,26 @@ function computeSrsUpdate(word, correct, sessionId, answeredAt) {
     }
   }
 
-  return { state, xp, mastered };
+  return { state, xp, mastered, advanced, previousStatus, nextStatus: state.mastery_status };
 }
 
 function commitVerifiedQuizResults() {
   if (!activeQuizSession || !isVerifiedQuizMode(activeQuizSession.mode)) return { xp: 0, masteredCount: 0, correctCount: 0, total: 0 };
   const byWord = new Map();
-  quizSessionResults.forEach(result => byWord.set(result.wordId, result));
+  quizSessionResults.forEach(result => {
+    const key = String(result.wordId);
+    const existing = byWord.get(key);
+    byWord.set(key, {
+      wordId: key,
+      correct: existing ? Boolean(existing.correct && result.correct) : Boolean(result.correct),
+      answeredAt: Math.max(Number(existing?.answeredAt) || 0, Number(result.answeredAt) || 0) || Date.now()
+    });
+  });
   let xp = 0;
   let masteredCount = 0;
   let correctCount = 0;
   const masteredIds = new Set();
+  const advancedWords = [];
 
   window.words = (window.words || []).map(word => {
     const result = byWord.get(String(word.id));
@@ -9154,6 +9406,9 @@ function commitVerifiedQuizResults() {
     if (result.correct) correctCount++;
     const update = computeSrsUpdate(word, result.correct, activeQuizSession.id, result.answeredAt || Date.now());
     xp += update.xp;
+    if (update.advanced && update.xp > 0) {
+      advancedWords.push({ word: word.word, nextStatus: update.nextStatus });
+    }
     if (update.mastered && !masteredIds.has(word.id)) {
       masteredIds.add(word.id);
       masteredCount++;
@@ -9164,13 +9419,24 @@ function commitVerifiedQuizResults() {
     return updated;
   });
 
+  const totalUnique = byWord.size;
+  const accuracy = totalUnique > 0 ? correctCount / totalUnique : 0;
+  const xpCap = accuracy >= 1 ? 10 : Math.max(0, Math.floor(10 * accuracy * accuracy));
+  xp = Math.min(xp, xpCap);
+
   if (xp > 0) {
     updateXP(xp);
     showXPBadge(xp, null, false);
+    if (advancedWords.length > 0) {
+      const first = advancedWords[0];
+      const statusLabel = first.nextStatus === 'Mastered' ? 'متقنة' : first.nextStatus === 'Reviewing' ? 'قريبة من الإتقان' : 'قيد التعلم';
+      const extra = advancedWords.length > 1 ? ` و${advancedWords.length - 1} كلمة أخرى` : '';
+      pushNotification(`زاد مؤشر الإتقان: ${first.word} أصبحت ${statusLabel}${extra}. +${xp} XP`, 'success');
+    }
   }
   if (masteredCount > 0) recordChestMasteredWords(masteredIds);
   persistDictionary();
-  return { xp, masteredCount, correctCount, total: quizSessionResults.length };
+  return { xp, masteredCount, correctCount, total: totalUnique };
 }
 
 function markRemember() {
@@ -9196,7 +9462,7 @@ function finishQuizRun() {
     if (!hasSignedInUser()) markGuestDataDirty();
     markDailyQuestFlag('perfectQuiz');
     if (typeof evaluateTitleUnlocks === 'function') evaluateTitleUnlocks(true);
-    if (window.saveProfileToCloud) window.saveProfileToCloud();
+    requestProfileCloudSave();
   }
   if (verified) {
     playQuizCompletionSound();
@@ -9233,6 +9499,13 @@ function markForgot() {
 function playQuizSound(event) {
   if (currentQuizWords[quizIndex]) playSound(currentQuizWords[quizIndex].word, event);
 }
+
+window.playQuizChoiceSound = function(event, encodedWord) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  const word = decodeSugAttr(encodedWord);
+  if (word) playSound(word, event);
+};
 
 function startTimeAttackQuiz() {
   timeAttackHp = 3;
@@ -9282,9 +9555,17 @@ function renderTimeAttackQuestion() {
 
   const distractors = shuffleQuizWords(currentQuizPool.filter(x => x.id !== w.id)).slice(0, 3);
   const choices = shuffleQuizWords([w, ...distractors]);
-  document.getElementById('timeAttackChoices').innerHTML = choices.map(choice =>
-    `<button type="button" onclick="answerTimeAttack('${choice.id.replace(/'/g, "\\'")}')">${escapeHtml(timeAttackDirection === 'en-to-ar' ? choice.meaning : choice.word)}</button>`
-  ).join('');
+  const choicesAreEnglish = timeAttackDirection !== 'en-to-ar';
+  document.getElementById('timeAttackChoices').innerHTML = choices.map(choice => {
+    const label = timeAttackDirection === 'en-to-ar' ? choice.meaning : choice.word;
+    const answerId = choice.id.replace(/'/g, "\\'");
+    return choicesAreEnglish
+      ? `<div class="quiz-choice-with-sound">
+          <button type="button" class="quiz-choice-answer" onclick="answerTimeAttack('${answerId}')">${escapeHtml(label)}</button>
+          <button type="button" class="quiz-choice-sound btn-icon-tip" data-tip="نطق" onclick="playQuizChoiceSound(event, '${sugAttr(choice.word)}')" aria-label="نطق ${escapeHtml(choice.word)}"><i class="fa-solid fa-volume-up" aria-hidden="true"></i></button>
+        </div>`
+      : `<button type="button" onclick="answerTimeAttack('${answerId}')">${escapeHtml(label)}</button>`;
+  }).join('');
 
   timeAttackSeconds = 15;
   const timerStartEl = document.getElementById('timeAttackTimer');
