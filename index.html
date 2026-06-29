@@ -1081,6 +1081,8 @@
         first_recalled_at: d.data().first_recalled_at || null,
         last_recall_day: d.data().last_recall_day || '',
         last_recall_session_id: d.data().last_recall_session_id || '',
+        last_quizzed_at: d.data().last_quizzed_at || null,
+        quiz_seen_count: Number(d.data().quiz_seen_count) || 0,
         mastered_once: Boolean(d.data().mastered_once),
         order:       Number.isFinite(d.data().order) ? d.data().order : null,
         createdAt:   d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null)
@@ -1131,6 +1133,8 @@
         first_recalled_at: null,
         last_recall_day: '',
         last_recall_session_id: '',
+        last_quizzed_at: null,
+        quiz_seen_count: 0,
         mastered_once: false,
         order:       Number.isFinite(order) ? order : 0,
         createdAt: new Date()
@@ -1157,16 +1161,26 @@
     if ('first_recalled_at' in data) update.first_recalled_at = data.first_recalled_at;
     if ('last_recall_day' in data) update.last_recall_day = data.last_recall_day;
     if ('last_recall_session_id' in data) update.last_recall_session_id = data.last_recall_session_id;
+    if ('last_quizzed_at' in data) update.last_quizzed_at = data.last_quizzed_at;
+    if ('quiz_seen_count' in data) update.quiz_seen_count = data.quiz_seen_count;
     if ('mastered_once' in data) update.mastered_once = data.mastered_once;
     try { await updateDoc(doc(db, "users", user.uid, "words", docId), update); }
     catch (e) { console.error("خطأ في التحديث:", e); }
   };
 
+  let activeQuizSessionWriteChain = Promise.resolve();
+
   window.saveActiveQuizSessionToCloud = async function(session) {
     const user = auth.currentUser;
     if (!user || !session) return;
-    try { await setDoc(doc(db, "users", user.uid, "meta", "active_quiz_session"), session, { merge: false }); }
-    catch (e) { console.warn("activeQuizSession save:", e.message); }
+    activeQuizSessionWriteChain = activeQuizSessionWriteChain
+      .catch(() => {})
+      .then(async () => {
+        if (auth.currentUser?.uid !== user.uid) return;
+        try { await setDoc(doc(db, "users", user.uid, "meta", "active_quiz_session"), session, { merge: false }); }
+        catch (e) { console.warn("activeQuizSession save:", e.message); }
+      });
+    return activeQuizSessionWriteChain;
   };
 
   window.loadActiveQuizSessionFromCloud = async function() {
@@ -1184,8 +1198,14 @@
   window.clearActiveQuizSessionFromCloud = async function() {
     const user = auth.currentUser;
     if (!user) return;
-    try { await deleteDoc(doc(db, "users", user.uid, "meta", "active_quiz_session")); }
-    catch (e) { console.warn("activeQuizSession clear:", e.message); }
+    activeQuizSessionWriteChain = activeQuizSessionWriteChain
+      .catch(() => {})
+      .then(async () => {
+        if (auth.currentUser?.uid !== user.uid) return;
+        try { await deleteDoc(doc(db, "users", user.uid, "meta", "active_quiz_session")); }
+        catch (e) { console.warn("activeQuizSession clear:", e.message); }
+      });
+    return activeQuizSessionWriteChain;
   };
 
   window.deleteWordFromCloud = async function(id) {
@@ -1292,7 +1312,7 @@
       <div class="stat-card"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">كلمة مضافة</div></div>
       <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">أكبر سلسلة</div></div>
       <div class="stat-card"><div class="stat-val" id="statStarred">0</div><div class="stat-lbl">كلمة صعبة</div></div>
-      <div class="stat-card"><div class="stat-val" id="statForgot">0</div><div class="stat-lbl">تحتاج مراجعة 🔁</div></div>
+      <div class="stat-card"><div class="stat-val" id="statForgot">0</div><div class="stat-lbl">كلمات متقنة</div></div>
       <div class="stat-card"><div class="stat-val" id="statDays">0 يوم</div><div class="stat-lbl">أيام نشاط</div></div>
       <div class="stat-card"><div class="stat-val" id="statBest">0 كلمات</div><div class="stat-lbl">أفضل يوم 🏅</div></div>
     </div>
@@ -1325,9 +1345,10 @@ let profileDb   = getFirestore(profileApp);
 let profileAuth = getAuth(profileApp);
 
 let _saveProfileDebounce = null;
-async function performProfileSave() {
+async function performProfileSave(force = false) {
   const user = profileAuth.currentUser;
   if (!user) return;
+  if (!force && (window.__applyingCloudProfile || window.isInitialLoad || window.__suppressUnlockNotices)) return;
   const get = window.getLootlinguaProfilePayload;
   if (typeof get !== "function") return;
   const base = get();
@@ -1339,13 +1360,14 @@ async function performProfileSave() {
 
 // حفظ مؤجل — يتجنب استدعاءات كثيرة ويأخذ القيم من script.js
 window.saveProfileToCloud = function() {
+  if (window.__applyingCloudProfile || window.isInitialLoad || window.__suppressUnlockNotices) return;
   clearTimeout(_saveProfileDebounce);
   _saveProfileDebounce = setTimeout(performProfileSave, 450);
 };
 
 window._saveProfileToCloudNow = function() {
   clearTimeout(_saveProfileDebounce);
-  return performProfileSave();
+  return performProfileSave(true);
 };
 
 // ── loadProfileFromCloud ────────────────────────────
