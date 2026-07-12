@@ -5281,7 +5281,7 @@ window.addWord = async function() {
     if (!rateLimit('addWord', 30, 60000)) { btn.disabled=false; return; }
     if (activeDictionaryWordExists(w)) { showToast('هذه الكلمة موجودة بالفعل في هذا القاموس!'); btn.disabled=false; return; }
     const xpGain  = 3;
-    const newWord = { id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:xpGain, order:0 };
+    const newWord = applyKnownSharedMastery({ id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:xpGain, order:0 });
     window.words.unshift(newWord);
     reindexWordOrder(window.words);
     const realId = await saveActiveWordToCloud(newWord);
@@ -5813,13 +5813,13 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
 
   try {
     if (window.auth?.currentUser) {
-      const tempWord = { id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain };
+      const tempWord = applyKnownSharedMastery({ id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain });
       const realId = await saveActiveWordToCloud(tempWord);
       if (realId) {
-        window.words.unshift({
+        window.words.unshift(applyKnownSharedMastery({
           id: realId, word, meaning: ar, example: ex || '', category,
           starred: false, forgetCount: 0, xpValue: xpGain,
-        });
+        }));
         persistDictionary();
         if (isEditableDictionaryView()) render();
         updateXP(xpGain);
@@ -5830,7 +5830,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
         added = true;
       } else {
-        const nw = { id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain };
+        const nw = applyKnownSharedMastery({ id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain });
         window.words.unshift(nw);
         persistDictionary();
         if (isEditableDictionaryView()) render();
@@ -5840,7 +5840,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         added = true;
       }
     } else {
-      const nw = { id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain };
+      const nw = applyKnownSharedMastery({ id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain });
       window.words.unshift(nw);
       persistDictionary();
       if (isEditableDictionaryView()) render();
@@ -8470,12 +8470,44 @@ function getSelectedWordsForWorldManage() {
 }
 
 function makeCopiedWord(word) {
-  return {
+  return applyKnownSharedMastery({
     ...word,
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     order: 0,
     createdAt: new Date().toISOString(),
-  };
+  });
+}
+
+function getTargetDictionaryWords(targetId) {
+  const uid = window.auth?.currentUser?.uid;
+  if (targetId === 'personal') return readWordsFromStorage('normal', uid);
+  return window.isActiveCustomWorld?.(targetId)
+    ? getActiveDictionaryWords()
+    : readCustomWorldWordsFromStorage(targetId, uid);
+}
+
+function getTargetDictionaryLabel(targetId) {
+  if (targetId === 'personal') return 'القاموس الشخصي';
+  const world = customWorlds.find(item => String(item.id) === String(targetId));
+  return world ? `${world.emoji || '📘'} ${world.name || 'العالم'}` : 'العالم المحدد';
+}
+
+function splitWordsByExistingInTarget(targetId, words) {
+  const existing = new Set(getTargetDictionaryWords(targetId)
+    .map(word => normalizeWord(word.word || word.text))
+    .filter(Boolean));
+  const movable = [];
+  const skipped = [];
+  words.forEach((word) => {
+    const key = normalizeWord(word.word || word.text);
+    if (key && existing.has(key)) {
+      skipped.push(word);
+      return;
+    }
+    movable.push(word);
+    if (key) existing.add(key);
+  });
+  return { movable, skipped };
 }
 
 function getWorldManageTargets() {
@@ -8578,29 +8610,11 @@ async function saveWordsToTarget(targetId, wordsToAdd) {
   return next;
 }
 
-function splitWordsByExistingInPersonal(words) {
-  const uid = window.auth?.currentUser?.uid;
-  const personalWords = readWordsFromStorage('normal', uid);
-  const existing = new Set(personalWords.map(word => normalizeWord(word.word)).filter(Boolean));
-  const movable = [];
-  const skipped = [];
-  words.forEach((word) => {
-    const key = normalizeWord(word.word);
-    if (key && existing.has(key)) {
-      skipped.push(word);
-    } else {
-      movable.push(word);
-      if (key) existing.add(key);
-    }
-  });
-  return { movable, skipped };
-}
-
-function showSkippedDuplicateWordsNotice(skipped) {
+function showSkippedDuplicateWordsNotice(skipped, targetId = 'personal') {
   if (!skipped?.length) return;
   const names = skipped.map(word => word.word).filter(Boolean).slice(0, 5).join('، ');
   const more = skipped.length > 5 ? ` و${skipped.length - 5} غيرها` : '';
-  showToast(`لم يتم نقل ${skipped.length} كلمة لأنها موجودة في قاموسك الشخصي: ${names}${more}`, 'warning', 6200);
+  showToast(`لم يتم نقل ${skipped.length} كلمة لأنها موجودة مسبقاً في ${getTargetDictionaryLabel(targetId)}: ${names}${more}`, 'warning', 6200);
 }
 
 window.applyWorldManageToTarget = async function(targetId, action = pendingWorldManageAction) {
@@ -8608,11 +8622,16 @@ window.applyWorldManageToTarget = async function(targetId, action = pendingWorld
   if (!selected.length) return;
   const mode = action === 'copy' ? 'copy' : 'move';
   try {
-    const copiedWords = selected.map(makeCopiedWord);
+    const { movable, skipped } = splitWordsByExistingInTarget(targetId, selected);
+    if (!movable.length) {
+      showSkippedDuplicateWordsNotice(skipped, targetId);
+      return;
+    }
+    const copiedWords = movable.map(makeCopiedWord);
     await saveWordsToTarget(targetId, copiedWords);
     if (mode === 'move') {
-      const selectedSet = new Set(selected.map(word => String(word.id)));
-      const sourceIds = [...bulkSelectedWordIds];
+      const selectedSet = new Set(movable.map(word => String(word.id)));
+      const sourceIds = movable.map(word => String(word.id));
       window.words = window.words.filter(word => !selectedSet.has(String(word.id)));
       reindexWordOrder(window.words);
       writeActiveWordsToStorage(window.words);
@@ -8625,7 +8644,8 @@ window.applyWorldManageToTarget = async function(targetId, action = pendingWorld
     renderCustomWorldCards();
     renderLimit = 20;
     render();
-    showToast(mode === 'copy' ? 'تم نسخ الكلمات' : 'تم نقل الكلمات', 'success');
+    if (skipped.length) showSkippedDuplicateWordsNotice(skipped, targetId);
+    showToast(mode === 'copy' ? `تم نسخ ${movable.length} كلمة` : `تم نقل ${movable.length} كلمة`, 'success');
   } catch (err) {
     console.warn('worldManage:', err);
     showToast('ما قدرنا نكمل العملية سحابياً. الكلمات بقيت في مكانها.', 'danger', 5200);
@@ -8651,7 +8671,7 @@ window.confirmDeleteCustomWorld = async function(action) {
       : readCustomWorldWordsFromStorage(worldId, uid);
     let skippedDuplicates = [];
     if (action === 'move' && worldWords.length) {
-      const { movable, skipped } = splitWordsByExistingInPersonal(worldWords);
+      const { movable, skipped } = splitWordsByExistingInTarget('personal', worldWords);
       skippedDuplicates = skipped;
       if (movable.length) await saveWordsToTarget('personal', movable.map(makeCopiedWord));
     }
@@ -8667,7 +8687,7 @@ window.confirmDeleteCustomWorld = async function(action) {
     pendingDeleteWorldId = null;
     renderCustomWorldCards();
     if (window.isActiveCustomWorld?.(worldId)) loadWorldsView();
-    if (skippedDuplicates.length) showSkippedDuplicateWordsNotice(skippedDuplicates);
+    if (skippedDuplicates.length) showSkippedDuplicateWordsNotice(skippedDuplicates, 'personal');
     else showToast(action === 'move' ? 'تم نقل كل الكلمات وحذف العالم' : 'تم حذف العالم', 'success');
   } catch (err) {
     console.warn('deleteCustomWorld:', err);
@@ -9502,6 +9522,8 @@ const QUIZ_REVIEWING_XP = 4;
 const QUIZ_MASTERY_XP = 20;
 const QUIZ_REMASTERY_XP = 5;
 const MIN_STARRED_QUIZ_WORDS = 10;
+const MIN_QUIZ_SOURCE_WORDS = 10;
+const WORD_MASTERY_STORAGE_PREFIX = 'lootlinguaWordMastery_';
 const SCRAMBLE_DIRECTION_COPY = {
   'ar-to-en': 'رتب حروف الكلمة الإنجليزية اعتماداً على معناها العربي.',
   'en-to-ar': 'رتب حروف المعنى العربي اعتماداً على الكلمة الإنجليزية.'
@@ -9525,8 +9547,7 @@ function normalizeMasteryStatus(status) {
   return SRS_STATUSES.includes(status) ? status : 'New';
 }
 
-function getWordMasteryState(word = {}) {
-  const base = getDefaultMasteryState();
+function getInlineWordMasteryState(word = {}) {
   return {
     mastery_status: normalizeMasteryStatus(word.mastery_status || word.masteryStatus || word.status),
     mastery_streak: Math.max(0, Math.min(3, Number(word.mastery_streak ?? word.masteryStreak ?? 0) || 0)),
@@ -9539,6 +9560,112 @@ function getWordMasteryState(word = {}) {
     mastered_once: Boolean(word.mastered_once || word.masteredOnce)
   };
 }
+
+function getWordMasteryStorageKey(uid) {
+  return WORD_MASTERY_STORAGE_PREFIX + getStorageUserId(uid);
+}
+
+function readSharedWordMasteryStore(uid) {
+  return loadJSON(getWordMasteryStorageKey(uid), {});
+}
+
+function writeSharedWordMasteryStore(entries, uid) {
+  localStorage.setItem(getWordMasteryStorageKey(uid), JSON.stringify(entries && typeof entries === 'object' ? entries : {}));
+}
+
+function getWordMasteryKey(wordOrText) {
+  const text = typeof wordOrText === 'object'
+    ? (wordOrText.word || wordOrText.text || '')
+    : wordOrText;
+  return normalizeWord(text)
+    .replace(/[^a-z0-9\u0600-\u06ff]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 180);
+}
+
+function masteryProgressScore(state = {}) {
+  const statusScore = { New: 0, Learning: 10, Reviewing: 20, Mastered: 30 }[state.mastery_status] || 0;
+  return statusScore * 1e12 + (Number(state.mastery_streak) || 0) * 1e9 + (Number(state.last_quizzed_at || state.last_recalled_at) || 0);
+}
+
+function getBestKnownMasteryState(wordOrText) {
+  const key = getWordMasteryKey(wordOrText);
+  if (!key) return null;
+  const stored = readSharedWordMasteryStore()[key];
+  if (stored) return getInlineWordMasteryState(stored);
+  const uid = window.auth?.currentUser?.uid;
+  const allCopies = [
+    ...readWordsFromStorage('normal', uid),
+    ...customWorlds.flatMap(world => readCustomWorldWordsFromStorage(world.id, uid))
+  ].filter(word => getWordMasteryKey(word) === key);
+  if (!allCopies.length) return null;
+  return allCopies
+    .map(getInlineWordMasteryState)
+    .sort((a, b) => masteryProgressScore(b) - masteryProgressScore(a))[0];
+}
+
+function applyMasteryStateToWord(word, state) {
+  return { ...word, ...getInlineWordMasteryState(state) };
+}
+
+function applyKnownSharedMastery(word) {
+  const known = getBestKnownMasteryState(word);
+  return known ? applyMasteryStateToWord(word, known) : word;
+}
+
+function getWordMasteryState(word = {}) {
+  return getBestKnownMasteryState(word) || getInlineWordMasteryState(word);
+}
+
+function propagateMasteryStateAcrossAccount(wordText, state, options = {}) {
+  const key = getWordMasteryKey(wordText);
+  if (!key) return;
+  const normalizedState = getInlineWordMasteryState(state);
+  const uid = window.auth?.currentUser?.uid;
+  const entries = readSharedWordMasteryStore(uid);
+  entries[key] = normalizedState;
+  writeSharedWordMasteryStore(entries, uid);
+  if (!options.skipMetaSave) window.saveGlobalWordMasteryToCloud?.(key, normalizedState);
+
+  const updateCopies = (words) => (Array.isArray(words) ? words : []).map((word) =>
+    getWordMasteryKey(word) === key ? applyMasteryStateToWord(word, normalizedState) : word
+  );
+  const personal = updateCopies(readWordsFromStorage('normal', uid));
+  writeWordsToStorage(personal, 'normal', uid);
+  const worldCopies = new Map();
+  customWorlds.forEach((world) => {
+    const worldWords = updateCopies(readCustomWorldWordsFromStorage(world.id, uid));
+    worldCopies.set(String(world.id), worldWords);
+    writeCustomWorldWordsToStorage(world.id, worldWords, uid);
+  });
+  if (isEditableDictionaryView()) window.words = updateCopies(window.words);
+
+  if (!hasSignedInUser() || options.skipCloudCopies) return;
+  personal.forEach((word) => {
+    if (getWordMasteryKey(word) === key) window.updateWordInCloud?.(word.id, normalizedState);
+  });
+  worldCopies.forEach((worldWords, worldId) => {
+    worldWords.forEach((word) => {
+      if (getWordMasteryKey(word) === key) {
+        window.updateCustomWorldWordInCloud?.(worldId, word.id, normalizedState);
+      }
+    });
+  });
+}
+
+window.applyGlobalWordMasterySnapshot = function(entries) {
+  if (!entries || typeof entries !== 'object') return;
+  const current = readSharedWordMasteryStore();
+  writeSharedWordMasteryStore({ ...current, ...entries });
+  Object.entries(entries).forEach(([key, state]) => {
+    const word = [
+      ...readWordsFromStorage('normal'),
+      ...customWorlds.flatMap(world => readCustomWorldWordsFromStorage(world.id))
+    ].find(item => getWordMasteryKey(item) === key);
+    if (word) propagateMasteryStateAcrossAccount(word.word || word.text, state, { skipMetaSave: true, skipCloudCopies: true });
+  });
+  if (isEditableDictionaryView()) render();
+};
 
 function getWordDifficultyBonus(word = {}) {
   const raw = String(word.difficulty || word.level || word.cefr || word.cefrLevel || '').toUpperCase();
@@ -10141,7 +10268,21 @@ function updateQuizWordInSource(wordId, updater, source = 'personal') {
       window.updateWordInCloud(wordId, cloudData);
     }
   }
+  propagateMasteryStateAcrossAccount(
+    updatedWord.word || updatedWord.text,
+    getInlineWordMasteryState(updatedWord)
+  );
   return updatedWord;
+}
+
+function warnIfTooFewQuizSourceWords(scope = currentQuizSource, count = getQuizSourceWords(scope).length) {
+  if (count >= MIN_QUIZ_SOURCE_WORDS) return false;
+  const source = getQuizSourceLabel(scope);
+  const message = count === 0
+    ? `ما عندك كلمات متاحة في ${source} حالياً. أضف كلمات أولاً، ولازم يكون عندك على الأقل ${MIN_QUIZ_SOURCE_WORDS} كلمات عشان تبدأ الاختبار.`
+    : `${source} فيه ${count} كلمات فقط. أقل شيء ${MIN_QUIZ_SOURCE_WORDS} كلمات عشان تبدأ الاختبار.`;
+  showToast(message, 'warning', 5600);
+  return true;
 }
 
 function shuffleQuizWords(words) {
@@ -10247,6 +10388,12 @@ function startActualQuiz(mode, options = {}) {
   if (!options.configured) currentQuizPool = words;
   const verifiedMode = isVerifiedQuizMode(mode);
   const starredCount = getQuizSourceWords('starred').length;
+
+  if ((options.configured || mode === 'flashcards' || mode === 'timeAttack' || mode === 'scramble') &&
+      warnIfTooFewQuizSourceWords(currentQuizSource, getQuizSourceWords(currentQuizSource).length)) {
+    openQuizModeSettings(options.configured ? selectedQuizMode : mode);
+    return;
+  }
 
   if (mode === 'recent') {
     words.sort((a, b) => new Date(b.createdAt||0) - new Date(a.createdAt||0));
