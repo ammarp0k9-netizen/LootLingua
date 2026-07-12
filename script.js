@@ -790,7 +790,7 @@ document.addEventListener('keydown', (e) => {
 function renderProfileModalStats() {
   const wordsEl = document.getElementById('profileStatWords');
   const streakEl = document.getElementById('profileStatStreak');
-  if (wordsEl) wordsEl.textContent = (window.words || []).length;
+  if (wordsEl) wordsEl.textContent = getPersonalDictionaryWordsSnapshot().length;
   if (streakEl) streakEl.textContent = loadInt('lootlinguaMaxStreak', dailyStreak) + ' يوم';
 }
 
@@ -1557,10 +1557,22 @@ function readCustomWorldsFromStorage(uid) {
 }
 
 function writeCustomWorldsToStorage(worlds = customWorlds, uid) {
-  localStorage.setItem(getCustomWorldsStorageKey(uid), JSON.stringify(Array.isArray(worlds) ? worlds : []));
+  const uniqueWorlds = dedupeCustomWorlds(worlds);
+  localStorage.setItem(getCustomWorldsStorageKey(uid), JSON.stringify(uniqueWorlds));
   if (getStorageUserId(uid) === 'guest' && Array.isArray(worlds) && worlds.length > 0) {
     markGuestDataDirty();
   }
+}
+
+function dedupeCustomWorlds(worlds = []) {
+  const byId = new Map();
+  (Array.isArray(worlds) ? worlds : []).forEach((world) => {
+    if (!world?.id) return;
+    const key = String(world.id);
+    const previous = byId.get(key);
+    byId.set(key, previous ? { ...previous, ...world } : world);
+  });
+  return [...byId.values()];
 }
 
 function getPendingCustomWorldsStorageKey(uid) {
@@ -1600,7 +1612,7 @@ function clearPendingCustomWorld(worldId, uid) {
 }
 
 function mergeCloudAndPendingCustomWorlds(cloudWorlds = [], uid, options = {}) {
-  const cloud = Array.isArray(cloudWorlds) ? cloudWorlds : [];
+  const cloud = dedupeCustomWorlds(cloudWorlds);
   const cloudIds = new Set(cloud.map(world => String(world.id)));
   const pending = readPendingCustomWorldsFromStorage(uid);
   const canConfirmSynced = options.confirmedServer === true;
@@ -1609,7 +1621,7 @@ function mergeCloudAndPendingCustomWorlds(cloudWorlds = [], uid, options = {}) {
   if (remainingPending.length !== pending.length) {
     writePendingCustomWorldsToStorage(remainingPending, uid);
   }
-  return [...cloud, ...unresolvedPending].sort((a, b) => {
+  return dedupeCustomWorlds([...cloud, ...unresolvedPending]).sort((a, b) => {
     const at = Date.parse(a.createdAt || '') || 0;
     const bt = Date.parse(b.createdAt || '') || 0;
     return at - bt;
@@ -4971,13 +4983,14 @@ function renderHeatmap() {
   container.appendChild(frag);
 }
 function renderStatsNumbers() {
+  const personalWords = getPersonalDictionaryWordsSnapshot();
   const map =loadJSON('activityMap',{});
   const vals=Object.values(map).filter(v=>v>0);
   const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
-  s('statTotal',   window.words.length);
+  s('statTotal',   personalWords.length);
   s('statStreak',  dailyStreak+' يوم');
-  s('statStarred', window.words.filter(w=>w.starred).length);
-  s('statForgot',  window.words.filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length);
+  s('statStarred', personalWords.filter(w=>w.starred).length);
+  s('statForgot',  personalWords.filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length);
   s('statDays',    Object.keys(map).filter(k=>map[k]>0).length+' يوم');
   s('statBest',    (vals.length?Math.max(...vals):0)+' كلمات');
 }
@@ -5102,10 +5115,21 @@ async function updateActiveWordInCloud(id, data) {
 
 async function deleteActiveWordFromCloud(id) {
   if (isCustomWorldView()) {
-    if (window.deleteCustomWorldWordFromCloud) await window.deleteCustomWorldWordFromCloud(activeCustomWorldId, id);
-    return;
+    if (!window.deleteCustomWorldWordFromCloud) return !hasSignedInUser();
+    return await window.deleteCustomWorldWordFromCloud(activeCustomWorldId, id);
   }
-  if (window.deleteWordFromCloud) await window.deleteWordFromCloud(id);
+  if (!window.deleteWordFromCloud) return !hasSignedInUser();
+  return await window.deleteWordFromCloud(id);
+}
+
+async function deleteWordFromCapturedScope(id, customWorldId) {
+  if (!hasSignedInUser()) return true;
+  if (customWorldId) {
+    if (!window.deleteCustomWorldWordFromCloud) return false;
+    return await window.deleteCustomWorldWordFromCloud(customWorldId, id);
+  }
+  if (!window.deleteWordFromCloud) return false;
+  return await window.deleteWordFromCloud(id);
 }
 
 let isExpanded = false;
@@ -5398,6 +5422,8 @@ function confirmDeleteWords(ids, { fromBulk = false } = {}) {
 
   pendingDeleteId = uniqueIds[0];
   const xpLoss = configureDeleteModal(wordsToDelete);
+  const deleteCustomWorldId = isCustomWorldView() ? String(activeCustomWorldId) : null;
+  const deleteScopeKey = deleteCustomWorldId ? `custom:${deleteCustomWorldId}` : 'personal';
 
   document.getElementById('deleteConfirmBtn').onclick = async function() {
     hideModal('deleteModal');
@@ -5411,19 +5437,44 @@ function confirmDeleteWords(ids, { fromBulk = false } = {}) {
     });
 
     setTimeout(async () => {
+      const results = await Promise.all(uniqueIds.map(id => deleteWordFromCapturedScope(id, deleteCustomWorldId)));
+      if (results.some(result => result !== true)) {
+        uniqueIds.forEach((id) => {
+          const card = document.querySelector(`.word-card[data-id="${cssEscapeValue(id)}"]`);
+          if (card) {
+            card.style.opacity = '';
+            card.style.transform = '';
+          }
+        });
+        showToast('تعذر حذف الكلمة من السحابة. لم نخصم XP ولم نغيّر قاموسك.', 'danger', 5200);
+        pendingDeleteId = null;
+        return;
+      }
+
       if (xpLoss > 0) { updateXP(-xpLoss); showXPBadge(xpLoss, null, true); }
       wordsToDelete.forEach(() => decrementDailyCount());
       const deleteSet = new Set(uniqueIds);
-      window.words = window.words.filter(w => !deleteSet.has(String(w.id)));
-      await Promise.all(uniqueIds.map(id => deleteActiveWordFromCloud(id)));
+      const stillInDeleteScope = getActiveDictionaryStorageScope() === deleteScopeKey;
+      if (stillInDeleteScope) {
+        window.words = window.words.filter(w => !deleteSet.has(String(w.id)));
+        persistDictionary();
+      } else if (deleteCustomWorldId) {
+        const stored = readCustomWorldWordsFromStorage(deleteCustomWorldId)
+          .filter(w => !deleteSet.has(String(w.id)));
+        writeCustomWorldWordsToStorage(deleteCustomWorldId, reindexWordOrder(stored));
+      } else {
+        const stored = readWordsFromStorage('normal')
+          .filter(w => !deleteSet.has(String(w.id)));
+        writeWordsToStorage(reindexWordOrder(stored), 'normal');
+      }
       pendingDeleteId = null;
       document.querySelector('#deleteModal .xp-delete-warn')?.remove();
       resetDeleteModalCopy();
       if (fromBulk || isBulkDeleteMode) window.exitBulkDeleteMode();
-      persistDictionary();
       if (typeof reconcileEmptyGuestSessionState === 'function') reconcileEmptyGuestSessionState();
       if (currentView === 'starred') renderStarredWords();
-      else render();
+      else if (stillInDeleteScope) render();
+      refreshFeatureUnlockUI();
     }, 300);
   };
 
@@ -8215,6 +8266,7 @@ function renderCustomWorldCards() {
   if (!grid) return;
   grid.querySelectorAll('.custom-world-generated, .world-card-add').forEach(el => el.remove());
   const frag = document.createDocumentFragment();
+  customWorlds = dedupeCustomWorlds(customWorlds);
   customWorlds.forEach((world) => {
     const card = document.createElement('button');
     card.type = 'button';
@@ -8326,7 +8378,7 @@ window.saveCustomWorldFromModal = async function() {
   if (existing) {
     customWorlds = customWorlds.map(world => String(world.id) === String(existing.id) ? next : world);
   } else {
-    customWorlds = [...customWorlds, next];
+    customWorlds = dedupeCustomWorlds([...customWorlds, next]);
   }
   writeCustomWorldsToStorage(customWorlds, uid);
   console.info('[LootLingua customWorlds] local state saved', {
@@ -8360,8 +8412,8 @@ function updateCustomWorldHeader() {
   title.innerHTML = `
     <span class="custom-world-title-emoji">${escapeHtml(world.emoji || '📘')}</span>
     <span>${escapeHtml(world.name || 'عالم جديد')}</span>
-    <button type="button" class="custom-world-title-action" onclick="openCustomWorldModal({ mode: 'edit', worldId: '${escapeHtml(String(world.id))}' })" aria-label="تعديل العالم" title="تعديل العالم">✎</button>
-    <button type="button" class="custom-world-title-action danger" onclick="openDeleteCustomWorldModal('${escapeHtml(String(world.id))}')" aria-label="حذف العالم" title="حذف العالم">🗑</button>
+    <button type="button" class="custom-world-title-action" onclick="openCustomWorldModal({ mode: 'edit', worldId: '${escapeHtml(String(world.id))}' })" aria-label="تعديل العالم" title="تعديل العالم"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+    <button type="button" class="custom-world-title-action danger" onclick="openDeleteCustomWorldModal('${escapeHtml(String(world.id))}')" aria-label="حذف العالم" title="حذف العالم"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
   `;
 }
 
@@ -8608,6 +8660,7 @@ window.confirmDeleteCustomWorld = async function(action) {
       if (!deleted) throw new Error('delete-world-cloud-failed');
     }
     customWorlds = customWorlds.filter(world => String(world.id) !== String(worldId));
+    clearPendingCustomWorld(worldId, uid);
     writeCustomWorldsToStorage(customWorlds, uid);
     removeCustomWorldWordsFromStorage(worldId, uid);
     hideModal('deleteWorldModal');
