@@ -31,17 +31,17 @@
     gtag('config', 'G-C06S6C7JYT');
   </script>
 
-  <title>LootLingua | قاموس إنجليزي عربي للألعاب</title>
+  <title>LootLingua | قاموس الأساطير</title>
   <meta name="description" content="LootLingua قاموس إنجليزي عربي مع قواميس Minecraft وPUBG، كويزات، XP، مستويات، وصندوق كنز يومي لتعلم الكلمات.">
   <meta name="keywords" content="LootLingua, قاموس إنجليزي عربي, قاموس ألعاب, Minecraft dictionary, PUBG terms, تعلم الإنجليزية, كلمات إنجليزية, كويزات, XP, مستويات, صندوق كنز">
   <meta name="author" content="LootLingua">
   <meta name="robots" content="index, follow">
-  <meta property="og:title" content="LootLingua | قاموس إنجليزي عربي للألعاب">
+  <meta property="og:title" content="LootLingua | قاموس الأساطير">
   <meta property="og:description" content="قاموس إنجليزي عربي مع قواميس Minecraft وPUBG، كويزات، XP، مستويات، وصندوق كنز يومي.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://lootlingua.vercel.app/">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="LootLingua | قاموس إنجليزي عربي للألعاب">
+  <meta name="twitter:title" content="LootLingua | قاموس الأساطير">
   <meta name="twitter:description" content="تعلم الكلمات الإنجليزية عبر قاموس ألعاب، كويزات، XP، مستويات، وصندوق كنز يومي.">
   <!-- Dictionary API on Render: POST /api/dictionary (عادي) + POST /api/gamer-dictionary (جيمر→جيمر). Backend: dictionary-server/index.js -->
   <link rel="icon" type="image/png" href="ammar1.png">
@@ -68,7 +68,7 @@
       </span>
   </button>
   <div class="legend-top-widgets">
-    <div id="streakWrap" class="streak-wrap" onclick="openStatsPanel()" title="إحصائياتك">
+    <div id="streakWrap" class="streak-wrap" onclick="openStatsPanel()" title="السلسلة اليومية"> <style>  </style>
       <span id="streakIcon" class="streak-icon"><i class="fa-solid fa-fire" aria-hidden="true"></i></span>
       <span id="streakCount" class="streak-count">0 يوم</span>
     </div>
@@ -280,8 +280,16 @@
         </div>
       </div>
     </div>
-    <div class="search-bar-divider"></div>
-    <button id="reorderBtn" class="btn-icon-tip" onclick="toggleReorderMode()" data-tip="ترتيب"><i class="fas fa-sort-amount-down"></i></button>
+    <button id="selectionModeBtn" class="btn-text-tool selection-mode-entry" type="button" onclick="enterSelectionMode()" data-tip="تحديد">تحديد</button>
+  </div>
+
+  <div id="selectionActionBar" class="selection-action-bar" hidden>
+    <button type="button" onclick="confirmBulkDeleteSelection()">حذف</button>
+    <button type="button" id="selectionReorderBtn" onclick="toggleReorderMode()">ترتيب يدوي</button>
+    <button type="button" class="selection-reorder-step" onclick="moveSelectedWordsByStep(-1)" hidden>أعلى</button>
+    <button type="button" class="selection-reorder-step" onclick="moveSelectedWordsByStep(1)" hidden>أسفل</button>
+    <button type="button" onclick="openWorldManageModal()">إدارة العالم</button>
+    <button type="button" onclick="exitSelectionMode()">إلغاء</button>
   </div>
 
   <div id="bulkDeleteBar" class="bulk-delete-bar" hidden>
@@ -465,7 +473,7 @@
     <div class="worlds-hero">
       <span class="worlds-kicker"><i class="fa-solid fa-earth-americas" aria-hidden="true"></i> Legend Worlds</span>
       <h2>عوالم الأساطير</h2>
-      <p>اختر عالمك: قواميس الألعاب أو تحدي الكلمات الصعبة.</p>
+      <p>اختر عالمك.</p>
     </div>
     <div class="worlds-grid" id="worldsGrid">
       <button type="button" class="world-card world-card-minecraft" data-feature="minecraft" onclick="return onWorldCardClick(event, 'minecraft', function () { loadGameDictionary('minecraft'); });">
@@ -810,12 +818,66 @@
   </div>
 </div>
 
+<!-- ══ MODAL: إنشاء / تعديل عالم خاص ══ -->
+<div id="customWorldModal" class="custom-modal custom-world-modal" role="dialog" aria-modal="true" aria-labelledby="customWorldModalTitle" onclick="if (event.target === this) closeCustomWorldModal()">
+  <div class="modal-content custom-world-content" onclick="event.stopPropagation()">
+    <div class="modal-icon custom-world-icon"><span id="customWorldModalIcon">+</span></div>
+    <h2 id="customWorldModalTitle">إنشاء عالم جديد</h2>
+    <div class="custom-world-form">
+      <input type="text" id="customWorldNameInput" maxlength="40" placeholder="اسم العالم" autocomplete="off">
+      <textarea id="customWorldDescInput" maxlength="140" placeholder="وصف العالم (اختياري)" rows="3"></textarea>
+      <input type="hidden" id="customWorldEmojiInput" value="📘">
+      <div class="emoji-picker" id="customWorldEmojiPicker" aria-label="اختيار رمز العالم">
+        <button type="button" data-emoji="📘">📘</button>
+        <button type="button" data-emoji="🎮">🎮</button>
+        <button type="button" data-emoji="⚔️">⚔️</button>
+        <button type="button" data-emoji="🧪">🧪</button>
+        <button type="button" data-emoji="📖">📖</button>
+        <button type="button" data-emoji="🎬">🎬</button>
+        <button type="button" data-emoji="🌍">🌍</button>
+        <button type="button" data-emoji="🎵">🎵</button>
+      </div>
+    </div>
+    <div class="modal-buttons">
+      <button type="button" class="btn-cancel" onclick="closeCustomWorldModal()">إلغاء</button>
+      <button type="button" id="customWorldSaveBtn" class="btn-confirm" onclick="saveCustomWorldFromModal()">إنشاء عالم</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: إدارة العالم للكلمات المحددة ══ -->
+<div id="worldManageModal" class="custom-modal world-manage-modal" role="dialog" aria-modal="true" aria-labelledby="worldManageTitle" onclick="if (event.target === this) hideModal('worldManageModal')">
+  <div class="modal-content world-manage-content" onclick="event.stopPropagation()">
+    <div class="modal-icon"><i class="fa-solid fa-layer-group" aria-hidden="true"></i></div>
+    <h2 id="worldManageTitle">إدارة العالم</h2>
+    <p id="worldManageSummary">اختر العملية والوجهة.</p>
+    <div class="world-manage-tabs" role="group" aria-label="نوع العملية">
+      <button type="button" class="active" data-world-action="move" onclick="setWorldManageAction('move')">نقل إلى عالم</button>
+      <button type="button" data-world-action="copy" onclick="setWorldManageAction('copy')">نسخ إلى عالم</button>
+    </div>
+    <div id="worldManageTargets" class="world-manage-targets"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: حذف عالم خاص ══ -->
+<div id="deleteWorldModal" class="custom-modal delete-world-modal" role="dialog" aria-modal="true" aria-labelledby="deleteWorldTitle" onclick="if (event.target === this) hideModal('deleteWorldModal')">
+  <div class="modal-content delete-world-content" onclick="event.stopPropagation()">
+    <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
+    <h2 id="deleteWorldTitle">حذف العالم</h2>
+    <p>ماذا تريد أن تفعل بالكلمات الموجودة داخل هذا العالم؟</p>
+    <div class="modal-buttons delete-world-actions">
+      <button type="button" class="btn-confirm" onclick="confirmDeleteCustomWorld('move')">نقل جميع الكلمات إلى القاموس الشخصي</button>
+      <button type="button" class="btn-cancel danger-choice" onclick="confirmDeleteCustomWorld('delete')">حذف الكلمات مع حذف العالم</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL: خروج ══ -->
 <div id="logoutModal" class="custom-modal">
   <div class="modal-content">
     <div class="modal-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></div>
     <h2>متأكد أنك تريد تسجيل الخروج؟</h2>
-    <p>لن تذهب الكلمات، لكن لن تستطيع تخزين كلماتك سحابياً</p>
+    <p>ستبقى الكلمات محفوظة في الحساب</p>
     <div class="modal-buttons">
       <button onclick="confirmLogout()" class="btn-confirm">نعم، سجل خروج</button>
       <button onclick="hideModal('logoutModal')" class="btn-cancel">إلغاء</button>
@@ -846,7 +908,7 @@
   <div class="modal-content">
     <div class="modal-icon"><i class="fa-solid fa-bolt" aria-hidden="true"></i></div>
     <h2>الأداء</h2>
-    <p>اختر مستوى التأثيرات حسب جهازك: أقصى جرافيك يشغّل كل المؤثرات، متوازن يخفف البلور والحركة، أداء مستقر يبقي الانتقالات الأساسية، وتربو يوقف المؤثرات الثقيلة بالكامل.</p>
+    <p>اختر مستوى التأثيرات حسب جهازك: "أقصى جرافيك" يشغّل كل المؤثرات، "متوازن" يخفف البلور والحركة، "أداء مستقر" يبقي الانتقالات الأساسية، و"تربو" يوقف المؤثرات بالكامل.</p>
     <div class="modal-buttons">
       <button type="button" onclick="hideModal('performanceModeInfoModal')" class="btn-confirm">تمام</button>
     </div>
@@ -900,7 +962,7 @@
   import {
     getFirestore, collection, addDoc, query,
     orderBy, deleteDoc, doc, updateDoc, onSnapshot, serverTimestamp,
-    getDoc, setDoc
+    getDoc, setDoc, getDocs
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -919,6 +981,8 @@
   window.db = db;
   window.auth = auth;
   let wordsUnsubscribe = null;
+  let customWorldsUnsubscribe = null;
+  let customWorldWordsUnsubscribe = null;
   let suppressNextGuestLoad = false;
   const LOGIN_REDIRECT_PENDING_KEY = 'lootlinguaLoginRedirectPending';
 
@@ -978,6 +1042,14 @@
       wordsUnsubscribe();
       wordsUnsubscribe = null;
     }
+    if (customWorldsUnsubscribe) {
+      customWorldsUnsubscribe();
+      customWorldsUnsubscribe = null;
+    }
+    if (customWorldWordsUnsubscribe) {
+      customWorldWordsUnsubscribe();
+      customWorldWordsUnsubscribe = null;
+    }
     document.getElementById('logoutBtn').style.display = user ? 'block' : 'none';
     document.getElementById('loginBtn').style.display  = user ? 'none'  : 'block';
     if (user) setLoginLoading(false);
@@ -1001,6 +1073,7 @@
       else window.words = [];
       if (typeof window.render === 'function') window.render();
       loadWordsFromCloud(user);
+      loadCustomWorldsFromCloud(user);
     } else {
       if (suppressNextGuestLoad) {
         suppressNextGuestLoad = false;
@@ -1118,26 +1191,209 @@
     });
   }
 
-  window.saveWordToCloud = async function(wordText, wordCategory, meaning, example, order = 0) {
+  function mapWordDoc(d) {
+    return {
+      id:          d.id,
+      word:        d.data().text   || d.data().word || '',
+      meaning:     d.data().meaning     || '',
+      example:     d.data().example     || '',
+      category:    d.data().category    || 'عام',
+      starred:     d.data().starred     || false,
+      forgetCount: d.data().forgetCount || 0,
+      xpValue:     d.data().xpValue ?? 3,
+      mastery_status: d.data().mastery_status || 'New',
+      mastery_streak: Number(d.data().mastery_streak) || 0,
+      last_recalled_at: d.data().last_recalled_at || null,
+      first_recalled_at: d.data().first_recalled_at || null,
+      last_recall_day: d.data().last_recall_day || '',
+      last_recall_session_id: d.data().last_recall_session_id || '',
+      last_quizzed_at: d.data().last_quizzed_at || null,
+      quiz_seen_count: Number(d.data().quiz_seen_count) || 0,
+      mastered_once: Boolean(d.data().mastered_once),
+      order:       Number.isFinite(d.data().order) ? d.data().order : null,
+      createdAt:   d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null)
+    };
+  }
+
+  function loadCustomWorldsFromCloud(user) {
+    if (!user) return;
+    const listenerUid = user.uid;
+    const q = query(collection(db, "users", user.uid, "customWorlds"), orderBy("createdAt", "asc"));
+    customWorldsUnsubscribe = onSnapshot(q, (snapshot) => {
+      if (auth.currentUser?.uid !== listenerUid) return;
+      const worlds = snapshot.docs.map(d => ({
+        id: d.id,
+        name: d.data().name || 'عالم جديد',
+        description: d.data().description || '',
+        emoji: d.data().emoji || '📘',
+        createdAt: d.data().createdAt?.toDate ? d.data().createdAt.toDate().toISOString() : (d.data().createdAt || null),
+        updatedAt: d.data().updatedAt?.toDate ? d.data().updatedAt.toDate().toISOString() : (d.data().updatedAt || null),
+      }));
+      if (typeof window.applyCustomWorldsFromCloud === 'function') {
+        window.applyCustomWorldsFromCloud(worlds);
+      }
+    }, (error) => {
+      console.warn("loadCustomWorldsFromCloud:", error.code || error.message, error);
+    });
+  }
+
+  window.listenCustomWorldWordsFromCloud = function(worldId) {
+    const user = auth.currentUser;
+    if (!user || !worldId) return;
+    if (customWorldWordsUnsubscribe) {
+      customWorldWordsUnsubscribe();
+      customWorldWordsUnsubscribe = null;
+    }
+    const listenerUid = user.uid;
+    const listenerWorldId = String(worldId);
+    const q = query(collection(db, "users", user.uid, "customWorlds", listenerWorldId, "words"), orderBy("createdAt", "desc"));
+    customWorldWordsUnsubscribe = onSnapshot(q, (snapshot) => {
+      if (auth.currentUser?.uid !== listenerUid) return;
+      if (window.__suppressCloudWordsSnapshot) return;
+      if (typeof window.isActiveCustomWorld !== 'function' || !window.isActiveCustomWorld(listenerWorldId)) return;
+      const cloudWords = snapshot.docs.map(mapWordDoc);
+      if (typeof window.applyCustomWorldWordsFromSnapshot === 'function') {
+        window.applyCustomWorldWordsFromSnapshot(listenerWorldId, cloudWords);
+      }
+    }, (error) => {
+      console.warn("listenCustomWorldWordsFromCloud:", error.code || error.message, error);
+    });
+  };
+
+  window.stopCustomWorldWordsCloudListener = function() {
+    if (customWorldWordsUnsubscribe) {
+      customWorldWordsUnsubscribe();
+      customWorldWordsUnsubscribe = null;
+    }
+  };
+
+  window.saveCustomWorldToCloud = async function(world) {
+    const user = auth.currentUser;
+    if (!user || !world?.id) return false;
+    try {
+      await setDoc(doc(db, "users", user.uid, "customWorlds", String(world.id)), {
+        name: world.name || 'عالم جديد',
+        description: world.description || '',
+        emoji: world.emoji || '📘',
+        userId: user.uid,
+        createdAt: world.createdAt || new Date(),
+        updatedAt: new Date(),
+      }, { merge: true });
+      return true;
+    } catch (e) {
+      console.warn("saveCustomWorldToCloud:", e.message);
+      return false;
+    }
+  };
+
+  window.deleteCustomWorldFromCloud = async function(worldId) {
+    const user = auth.currentUser;
+    if (!user || !worldId) return false;
+    try {
+      const wordsRef = collection(db, "users", user.uid, "customWorlds", String(worldId), "words");
+      const snap = await getDocs(wordsRef);
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      await deleteDoc(doc(db, "users", user.uid, "customWorlds", String(worldId)));
+      return true;
+    } catch (e) {
+      console.warn("deleteCustomWorldFromCloud:", e.message);
+      return false;
+    }
+  };
+
+  window.saveCustomWorldWordToCloud = async function(worldId, word = {}) {
+    const user = auth.currentUser;
+    if (!user || !worldId) return null;
+    const docId = String(word.id || `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`)
+      .replace(/\//g, '_')
+      .slice(0, 500);
+    try {
+      await setDoc(doc(db, "users", user.uid, "customWorlds", String(worldId), "words", docId), {
+        text: word.word || word.text || '',
+        category: word.category || 'عام',
+        meaning: word.meaning || '',
+        example: word.example || '',
+        starred: Boolean(word.starred),
+        forgetCount: Number(word.forgetCount) || 0,
+        userId: user.uid,
+        xpValue: word.xpValue ?? 3,
+        mastery_status: word.mastery_status || 'New',
+        mastery_streak: Number(word.mastery_streak) || 0,
+        last_recalled_at: word.last_recalled_at || null,
+        first_recalled_at: word.first_recalled_at || null,
+        last_recall_day: word.last_recall_day || '',
+        last_recall_session_id: word.last_recall_session_id || '',
+        last_quizzed_at: word.last_quizzed_at || null,
+        quiz_seen_count: Number(word.quiz_seen_count) || 0,
+        mastered_once: Boolean(word.mastered_once),
+        order: Number.isFinite(word.order) ? word.order : 0,
+        createdAt: word.createdAt || new Date()
+      }, { merge: false });
+      return docId;
+    } catch (e) {
+      console.error("saveCustomWorldWordToCloud:", e);
+      return null;
+    }
+  };
+
+  window.updateCustomWorldWordInCloud = async function(worldId, docId, data) {
+    const user = auth.currentUser;
+    if (!user || !worldId || !docId) return;
+    const update = { userId: user.uid };
+    if ('word'        in data) update.text        = data.word;
+    if ('meaning'     in data) update.meaning     = data.meaning;
+    if ('example'     in data) update.example     = data.example;
+    if ('category'    in data) update.category    = data.category;
+    if ('starred'     in data) update.starred     = data.starred;
+    if ('forgetCount' in data) update.forgetCount = data.forgetCount;
+    if ('xpValue'     in data) update.xpValue     = data.xpValue;
+    if ('order'       in data) update.order       = data.order;
+    if ('mastery_status' in data) update.mastery_status = data.mastery_status;
+    if ('mastery_streak' in data) update.mastery_streak = data.mastery_streak;
+    if ('last_recalled_at' in data) update.last_recalled_at = data.last_recalled_at;
+    if ('first_recalled_at' in data) update.first_recalled_at = data.first_recalled_at;
+    if ('last_recall_day' in data) update.last_recall_day = data.last_recall_day;
+    if ('last_recall_session_id' in data) update.last_recall_session_id = data.last_recall_session_id;
+    if ('last_quizzed_at' in data) update.last_quizzed_at = data.last_quizzed_at;
+    if ('quiz_seen_count' in data) update.quiz_seen_count = data.quiz_seen_count;
+    if ('mastered_once' in data) update.mastered_once = data.mastered_once;
+    try { await updateDoc(doc(db, "users", user.uid, "customWorlds", String(worldId), "words", docId), update); }
+    catch (e) { console.error("updateCustomWorldWordInCloud:", e); }
+  };
+
+  window.deleteCustomWorldWordFromCloud = async function(worldId, id) {
+    const user = auth.currentUser;
+    if (!user || !worldId || !id) return;
+    try { await deleteDoc(doc(db, "users", user.uid, "customWorlds", String(worldId), "words", id)); }
+    catch (e) { console.error("deleteCustomWorldWordFromCloud:", e); }
+  };
+
+  window.saveWordToCloud = async function(wordText, wordCategory, meaning, example, order = 0, extra = {}) {
     const user = auth.currentUser;
     if (!user) return null;
+    const source = extra && typeof extra === 'object' ? extra : {};
+    const createdAt = source.createdAt || new Date();
     try {
       const ref = await addDoc(collection(db, "users", user.uid, "words"), {
-        text: wordText, category: wordCategory,
-        meaning, example, starred: false, forgetCount: 0,
+        text: wordText || source.word || source.text || '',
+        category: wordCategory || source.category || 'عام',
+        meaning: meaning || source.meaning || '',
+        example: example || source.example || '',
+        starred: Boolean(source.starred),
+        forgetCount: Number(source.forgetCount) || 0,
         userId: user.uid,
-        xpValue: 3,
-        mastery_status: 'New',
-        mastery_streak: 0,
-        last_recalled_at: null,
-        first_recalled_at: null,
-        last_recall_day: '',
-        last_recall_session_id: '',
-        last_quizzed_at: null,
-        quiz_seen_count: 0,
-        mastered_once: false,
-        order:       Number.isFinite(order) ? order : 0,
-        createdAt: new Date()
+        xpValue: source.xpValue ?? 3,
+        mastery_status: source.mastery_status || 'New',
+        mastery_streak: Number(source.mastery_streak) || 0,
+        last_recalled_at: source.last_recalled_at || null,
+        first_recalled_at: source.first_recalled_at || null,
+        last_recall_day: source.last_recall_day || '',
+        last_recall_session_id: source.last_recall_session_id || '',
+        last_quizzed_at: source.last_quizzed_at || null,
+        quiz_seen_count: Number(source.quiz_seen_count) || 0,
+        mastered_once: Boolean(source.mastered_once),
+        order: Number.isFinite(order) ? order : (Number.isFinite(source.order) ? source.order : 0),
+        createdAt
       });
       return ref.id;
     } catch (e) { console.error("فشل الرفع:", e); return null; }
@@ -1310,11 +1566,11 @@
     </div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">كلمة مضافة</div></div>
-      <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">أكبر سلسلة</div></div>
+      <div class="stat-card"><div class="stat-val" id="statStreak">0 يوم</div><div class="stat-lbl">السلسلة اليومية</div></div>
       <div class="stat-card"><div class="stat-val" id="statStarred">0</div><div class="stat-lbl">كلمة صعبة</div></div>
       <div class="stat-card"><div class="stat-val" id="statForgot">0</div><div class="stat-lbl">كلمات متقنة</div></div>
       <div class="stat-card"><div class="stat-val" id="statDays">0 يوم</div><div class="stat-lbl">أيام نشاط</div></div>
-      <div class="stat-card"><div class="stat-val" id="statBest">0 كلمات</div><div class="stat-lbl">أفضل يوم 🏅</div></div>
+      <div class="stat-card"><div class="stat-val" id="statBest">0 كلمات</div><div class="stat-lbl">أفضل يوم </div></div>
     </div>
     <div class="heatmap-section">
       <div class="heatmap-title">نشاطك خلال السنة</div>
