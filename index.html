@@ -983,6 +983,7 @@
   let wordsUnsubscribe = null;
   let customWorldsUnsubscribe = null;
   let customWorldWordsUnsubscribe = null;
+  let wordMasteryUnsubscribe = null;
   let suppressNextGuestLoad = false;
   const LOGIN_REDIRECT_PENDING_KEY = 'lootlinguaLoginRedirectPending';
 
@@ -1050,6 +1051,10 @@
       customWorldWordsUnsubscribe();
       customWorldWordsUnsubscribe = null;
     }
+    if (wordMasteryUnsubscribe) {
+      wordMasteryUnsubscribe();
+      wordMasteryUnsubscribe = null;
+    }
     document.getElementById('logoutBtn').style.display = user ? 'block' : 'none';
     document.getElementById('loginBtn').style.display  = user ? 'none'  : 'block';
     if (user) setLoginLoading(false);
@@ -1074,6 +1079,7 @@
       if (typeof window.render === 'function') window.render();
       loadWordsFromCloud(user);
       loadCustomWorldsFromCloud(user);
+      loadGlobalWordMasteryFromCloud(user);
       setTimeout(() => {
         if (typeof window.retryPendingCustomWorlds === 'function') {
           window.retryPendingCustomWorlds('auth-state');
@@ -1263,6 +1269,37 @@
       }, error);
     });
   }
+
+  function loadGlobalWordMasteryFromCloud(user) {
+    if (!user) return;
+    const listenerUid = user.uid;
+    wordMasteryUnsubscribe = onSnapshot(
+      doc(db, "users", user.uid, "meta", "word_mastery"),
+      (snapshot) => {
+        if (auth.currentUser?.uid !== listenerUid || !snapshot.exists()) return;
+        const entries = snapshot.data()?.entries;
+        if (entries && typeof window.applyGlobalWordMasterySnapshot === 'function') {
+          window.applyGlobalWordMasterySnapshot(entries);
+        }
+      },
+      (error) => console.warn('loadGlobalWordMasteryFromCloud:', error.code || error.message)
+    );
+  }
+
+  window.saveGlobalWordMasteryToCloud = async function(wordKey, state) {
+    const user = auth.currentUser;
+    if (!user || !wordKey || !state) return false;
+    try {
+      await setDoc(doc(db, "users", user.uid, "meta", "word_mastery"), {
+        entries: { [String(wordKey)]: state },
+        updatedAt: new Date(),
+      }, { merge: true });
+      return true;
+    } catch (error) {
+      console.warn('saveGlobalWordMasteryToCloud:', error.code || error.message);
+      return false;
+    }
+  };
 
   window.listenCustomWorldWordsFromCloud = function(worldId) {
     const user = auth.currentUser;
