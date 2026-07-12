@@ -7573,6 +7573,11 @@ body.low-end-device .game-card img {
   border-radius: 50%;
   background: var(--surface-bg);
   color: var(--text-gray);
+  -webkit-text-fill-color: currentColor;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  position: relative;
+  z-index: 2;
   font: inherit;
   font-size: 13px;
   font-weight: 800;
@@ -7582,12 +7587,20 @@ body.low-end-device .game-card img {
 .custom-world-title-action > i {
   display: block;
   color: currentColor;
+  -webkit-text-fill-color: currentColor;
+  background: none;
+  -webkit-background-clip: border-box;
   font-size: 13px;
   line-height: 1;
+  font-family: "Font Awesome 6 Free" !important;
+  font-weight: 900 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
   pointer-events: none;
 }
 .custom-world-title-action.danger {
   color: var(--danger);
+  -webkit-text-fill-color: var(--danger);
 }
 .custom-world-title-action {
   line-height: 1;
