@@ -1328,6 +1328,7 @@ const WORDS_NORMAL_PREFIX = 'words_normal_';
 const WORDS_GAMER_PREFIX = 'words_gamer_';
 const WORDS_CUSTOM_PREFIX = 'words_custom_';
 const CUSTOM_WORLDS_PREFIX = 'custom_worlds_';
+const PENDING_CUSTOM_WORLDS_PREFIX = 'pending_custom_worlds_';
 const GUEST_MIGRATION_HANDLED_KEY = 'lootlinguaGuestMigrationHandled';
 const GUEST_MIGRATION_COMPLETE_KEY = 'lootlingua_migration_complete';
 const GUEST_DATA_DIRTY_KEY = 'lootlinguaGuestDataDirty';
@@ -1562,6 +1563,84 @@ function writeCustomWorldsToStorage(worlds = customWorlds, uid) {
   }
 }
 
+function getPendingCustomWorldsStorageKey(uid) {
+  return PENDING_CUSTOM_WORLDS_PREFIX + getStorageUserId(uid);
+}
+
+function readPendingCustomWorldsFromStorage(uid) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getPendingCustomWorldsStorageKey(uid)) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingCustomWorldsToStorage(worlds = [], uid) {
+  localStorage.setItem(getPendingCustomWorldsStorageKey(uid), JSON.stringify(Array.isArray(worlds) ? worlds : []));
+}
+
+function upsertPendingCustomWorld(world, error, uid) {
+  if (!world?.id) return;
+  const key = String(world.id);
+  const pending = readPendingCustomWorldsFromStorage(uid).filter(item => String(item.id) !== key);
+  pending.push({
+    ...world,
+    syncStatus: 'pending',
+    lastSyncError: error ? String(error).slice(0, 240) : '',
+    pendingAt: new Date().toISOString(),
+  });
+  writePendingCustomWorldsToStorage(pending, uid);
+}
+
+function clearPendingCustomWorld(worldId, uid) {
+  if (!worldId) return;
+  const pending = readPendingCustomWorldsFromStorage(uid).filter(item => String(item.id) !== String(worldId));
+  writePendingCustomWorldsToStorage(pending, uid);
+}
+
+function mergeCloudAndPendingCustomWorlds(cloudWorlds = [], uid, options = {}) {
+  const cloud = Array.isArray(cloudWorlds) ? cloudWorlds : [];
+  const cloudIds = new Set(cloud.map(world => String(world.id)));
+  const pending = readPendingCustomWorldsFromStorage(uid);
+  const canConfirmSynced = options.confirmedServer === true;
+  const remainingPending = pending.filter(world => !cloudIds.has(String(world.id)) || !canConfirmSynced);
+  const unresolvedPending = pending.filter(world => !cloudIds.has(String(world.id)));
+  if (remainingPending.length !== pending.length) {
+    writePendingCustomWorldsToStorage(remainingPending, uid);
+  }
+  return [...cloud, ...unresolvedPending].sort((a, b) => {
+    const at = Date.parse(a.createdAt || '') || 0;
+    const bt = Date.parse(b.createdAt || '') || 0;
+    return at - bt;
+  });
+}
+
+let pendingCustomWorldRetryInFlight = false;
+async function retryPendingCustomWorlds(reason = 'manual') {
+  const user = window.auth?.currentUser;
+  if (!user || pendingCustomWorldRetryInFlight || typeof window.saveCustomWorldToCloud !== 'function') return;
+  const pending = readPendingCustomWorldsFromStorage(user.uid);
+  if (!pending.length) return;
+  pendingCustomWorldRetryInFlight = true;
+  console.info('[LootLingua customWorlds] retry pending worlds', { reason, uid: user.uid, count: pending.length });
+  try {
+    for (const world of pending) {
+      const ok = await window.saveCustomWorldToCloud(world);
+      if (ok === true) clearPendingCustomWorld(world.id, user.uid);
+      else upsertPendingCustomWorld(world, window.__lastCustomWorldSaveError || 'retry-failed', user.uid);
+    }
+    const merged = mergeCloudAndPendingCustomWorlds(customWorlds, user.uid);
+    customWorlds = merged;
+    writeCustomWorldsToStorage(customWorlds, user.uid);
+    renderCustomWorldCards();
+  } finally {
+    pendingCustomWorldRetryInFlight = false;
+  }
+}
+window.retryPendingCustomWorlds = retryPendingCustomWorlds;
+window.addEventListener('online', () => retryPendingCustomWorlds('online'));
+
 function getCustomWorldWordsStorageKey(worldId, uid) {
   return `${WORDS_CUSTOM_PREFIX}${getStorageUserId(uid)}_${String(worldId || '')}`;
 }
@@ -1651,9 +1730,11 @@ window.loadGuestDictionaryState = function({ renderView = true } = {}) {
   if (renderView && typeof render === 'function') render();
 };
 
-window.applyCustomWorldsFromCloud = function(worlds) {
-  customWorlds = Array.isArray(worlds) ? worlds : [];
-  writeCustomWorldsToStorage(customWorlds, window.auth?.currentUser?.uid);
+window.applyCustomWorldsFromCloud = function(worlds, meta = {}) {
+  const uid = window.auth?.currentUser?.uid;
+  const confirmedServer = meta.fromCache === false && meta.hasPendingWrites === false;
+  customWorlds = mergeCloudAndPendingCustomWorlds(worlds, uid, { confirmedServer });
+  writeCustomWorldsToStorage(customWorlds, uid);
   renderCustomWorldCards();
   if (isCustomWorldView() && !getActiveCustomWorld()) {
     loadWorldsView();
@@ -1665,6 +1746,7 @@ window.applyCustomWorldsFromCloud = function(worlds) {
     refreshQuizAvailableCount();
     refreshQuizSettingsSummary();
   }
+  retryPendingCustomWorlds('worlds-snapshot');
 };
 
 window.applyCustomWorldWordsFromSnapshot = function(worldId, cloudWords) {
@@ -1826,6 +1908,7 @@ function setCategoryDropdownValue(value) {
     btn.classList.toggle('active', btn.dataset.value === value);
   });
   syncAppDropdownLabels();
+  if (typeof window.saveActiveAddFormDraft === 'function') window.saveActiveAddFormDraft();
 }
 
 function initAppDropdowns() {
@@ -4823,8 +4906,18 @@ function normalizeWord(w) {
   return String(w||'').toLowerCase().trim().replace(/\s+/g,' ');
 }
 function wordExists(text) {
-  const k=normalizeWord(text);
-  return getPersonalDictionaryWordsSnapshot().some(w=>normalizeWord(w.word)===k);
+  return wordExistsInWords(text, getPersonalDictionaryWordsSnapshot());
+}
+function wordExistsInWords(text, sourceWords) {
+  const k = normalizeWord(text);
+  return Boolean(k) && (Array.isArray(sourceWords) ? sourceWords : [])
+    .some(w => normalizeWord(w.word || w.text) === k);
+}
+function activeDictionaryWordExists(text) {
+  return wordExistsInWords(text, getActiveDictionaryWords());
+}
+function getActiveDictionaryMessageLabel() {
+  return isCustomWorldView() ? 'هذا العالم' : 'قاموسك الشخصي';
 }
 
 function escapeHtml(v) {
@@ -4985,6 +5078,7 @@ function clearInputs() {
   if (list) list.innerHTML = '';
   const box = document.getElementById('suggestionsBox');
   if (box) box.style.display = 'none';
+  resetActiveAddFormDraft();
 }
 
 async function saveActiveWordToCloud(word) {
@@ -5016,6 +5110,74 @@ async function deleteActiveWordFromCloud(id) {
 
 let isExpanded = false;
 window.isExpanded = isExpanded;
+const addFormDrafts = new Map();
+
+function getAddFormDraftScope() {
+  return isCustomWorldView() ? `custom:${activeCustomWorldId}` : 'personal';
+}
+
+function readAddFormDraftFromDom() {
+  return {
+    word: document.getElementById('wordInput')?.value || '',
+    meaning: document.getElementById('meaningInput')?.value || '',
+    example: document.getElementById('exampleInput')?.value || '',
+    category: document.getElementById('categoryInput')?.value || 'عام',
+    expanded: Boolean(isExpanded),
+  };
+}
+
+function writeAddFormDraftToDom(draft = {}) {
+  window.__restoringAddFormDraft = true;
+  try {
+    const wordInput = document.getElementById('wordInput');
+    const meaningInput = document.getElementById('meaningInput');
+    const exampleInput = document.getElementById('exampleInput');
+    if (wordInput) wordInput.value = draft.word || '';
+    if (meaningInput) meaningInput.value = draft.meaning || '';
+    if (exampleInput) exampleInput.value = draft.example || '';
+    setCategoryDropdownValue(draft.category || 'عام');
+    setAddFormExpanded(Boolean(draft.expanded));
+    const list = document.getElementById('suggestionsList');
+    if (list) list.innerHTML = '';
+    const box = document.getElementById('suggestionsBox');
+    if (box) box.style.display = 'none';
+    resetAddFormEditState();
+  } finally {
+    window.__restoringAddFormDraft = false;
+  }
+}
+
+function resetAddFormEditState() {
+  editId = null;
+  const btn = document.getElementById('addBtn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.innerHTML = 'إضافة للقاموس <i class="fa-solid fa-floppy-disk"></i>';
+  btn.style.background = '';
+}
+
+window.saveActiveAddFormDraft = function() {
+  if (window.__restoringAddFormDraft || !isEditableDictionaryView()) return;
+  addFormDrafts.set(getAddFormDraftScope(), readAddFormDraftFromDom());
+};
+
+function restoreActiveAddFormDraft() {
+  writeAddFormDraftToDom(addFormDrafts.get(getAddFormDraftScope()) || {});
+}
+
+function resetActiveAddFormDraft() {
+  addFormDrafts.delete(getAddFormDraftScope());
+}
+
+function initAddFormDraftTracking() {
+  ['wordInput', 'meaningInput', 'exampleInput'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.draftTracked === '1') return;
+    el.dataset.draftTracked = '1';
+    el.addEventListener('input', () => window.saveActiveAddFormDraft());
+    el.addEventListener('change', () => window.saveActiveAddFormDraft());
+  });
+}
 
 function syncAddFormExpanded() {
   const form = document.getElementById('personalControls');
@@ -5047,6 +5209,7 @@ function setAddFormExpanded(expanded) {
   isExpanded = Boolean(expanded);
   window.isExpanded = isExpanded;
   syncAddFormExpanded();
+  if (typeof window.saveActiveAddFormDraft === 'function') window.saveActiveAddFormDraft();
 }
 
 window.setAddFormExpanded = setAddFormExpanded;
@@ -5057,10 +5220,12 @@ window.toggleAddFormExpanded = function() {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     setAddFormExpanded(false);
+    initAddFormDraftTracking();
     initWordHunterUI();
   });
 } else {
   setAddFormExpanded(false);
+  initAddFormDraftTracking();
   initWordHunterUI();
 }
 
@@ -5090,7 +5255,7 @@ window.addWord = async function() {
   } else {
     // Spam: max 30 words per minute
     if (!rateLimit('addWord', 30, 60000)) { btn.disabled=false; return; }
-    if (wordExists(w)) { showToast('هذه الكلمة موجودة بالفعل في قاموسك!'); btn.disabled=false; return; }
+    if (activeDictionaryWordExists(w)) { showToast('هذه الكلمة موجودة بالفعل في هذا القاموس!'); btn.disabled=false; return; }
     const xpGain  = 3;
     const newWord = { id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:xpGain, order:0 };
     window.words.unshift(newWord);
@@ -5577,8 +5742,8 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
     pushNotification('بيانات ناقصة للإضافة', 'warning');
     return;
   }
-  if (wordExists(word)) {
-    pushNotification('هذه الكلمة موجودة أصلاً بقاموسك', 'warning');
+  if (activeDictionaryWordExists(word)) {
+    pushNotification('هذه الكلمة موجودة أصلاً في هذا القاموس', 'warning');
     if (btn) {
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>مضافة مسبقاً</span>';
@@ -5611,7 +5776,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         checkAndUpdateStreak();
         incrementDailyCount();
         if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
-        pushNotification('تمت الإضافة لقاموسك الشخصي!', 'success');
+        pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
         added = true;
       } else {
         const nw = { id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain };
@@ -5620,7 +5785,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         if (isEditableDictionaryView()) render();
         updateXP(xpGain);
         if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
-        pushNotification('تمت الإضافة محلياً — سجّل دخول للمزامنة', 'success');
+        pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()} محلياً — سجّل دخول للمزامنة`, 'success');
         added = true;
       }
     } else {
@@ -5630,7 +5795,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
       if (isEditableDictionaryView()) render();
       updateXP(xpGain);
       if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
-      pushNotification('تمت الإضافة لقاموسك الشخصي!', 'success');
+      pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
       added = true;
     }
     if (added && btn) {
@@ -6157,7 +6322,7 @@ function showWordHunterPopover(anchor, data) {
   if (!popover || !anchor) return;
   const anchorRect = anchor.getBoundingClientRect();
   popover.hidden = false;
-  const disabled = data.local || data.empty || wordExists(data.word);
+  const disabled = data.local || data.empty || activeDictionaryWordExists(data.word);
   popover.innerHTML = data.loading
     ? `<div class="word-hunter-popover-loading"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i><strong>${escapeHtml(data.word)}</strong></div>`
     : `
@@ -7831,6 +7996,7 @@ function initTreasureSwipeNavigation() {
 initTreasureSwipeNavigation();
 
 window.loadGameDictionary = function(gameKey) {
+  window.saveActiveAddFormDraft?.();
   cleanupQuizSessionIfActive();
   if (!isFeatureUnlocked(gameKey)) {
     openUnlockExplainModal(gameKey);
@@ -7994,6 +8160,7 @@ function hideAllViewElements() {
 
 // ── Worlds Hub ──
 window.loadWorldsView = function() {
+  window.saveActiveAddFormDraft?.();
   cleanupQuizSessionIfActive();
   if (currentView === 'personal') animateWorldsRoute('next');
   else if (WORLDS_VIEWS.has(currentView) && currentView !== 'worlds') animateWorldsRoute('back');
@@ -8030,8 +8197,11 @@ window.loadWorldsView = function() {
 
 function normalizeCustomWorldPayload({ name, description, emoji, id } = {}) {
   const cleanName = String(name || '').trim().slice(0, 40);
+  const cleanId = String(id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`)
+    .replace(/\//g, '_')
+    .slice(0, 500);
   return {
-    id: id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: cleanId,
     name: cleanName,
     description: String(description || '').trim().slice(0, 140),
     emoji: String(emoji || '📘').trim().slice(0, 4) || '📘',
@@ -8107,6 +8277,7 @@ window.saveCustomWorldFromModal = async function() {
   const nameInput = document.getElementById('customWorldNameInput');
   const descInput = document.getElementById('customWorldDescInput');
   const emojiInput = document.getElementById('customWorldEmojiInput');
+  const saveBtn = document.getElementById('customWorldSaveBtn');
   const name = String(nameInput?.value || '').trim();
   if (!name) {
     showToast('اسم العالم مطلوب');
@@ -8125,14 +8296,48 @@ window.saveCustomWorldFromModal = async function() {
     }),
     createdAt: existing?.createdAt || new Date().toISOString(),
   };
+  const uid = window.auth?.currentUser?.uid;
+  const signedIn = Boolean(uid);
+  let cloudSaved = !signedIn;
+  let cloudError = '';
+  const offlineAtSave = signedIn && navigator.onLine === false;
+  if (saveBtn) saveBtn.disabled = true;
+  if (signedIn) {
+    console.info('[LootLingua customWorlds] save requested', {
+      uid,
+      worldId: next.id,
+      path: `users/${uid}/customWorlds/${next.id}`,
+      mode: existing ? 'edit' : 'create',
+    });
+    cloudSaved = window.saveCustomWorldToCloud
+      ? await window.saveCustomWorldToCloud(next)
+      : false;
+    if (cloudSaved === true && !offlineAtSave) {
+      clearPendingCustomWorld(next.id, uid);
+      delete next.syncStatus;
+      delete next.lastSyncError;
+    } else {
+      cloudError = offlineAtSave ? 'offline-pending-server-confirmation' : (window.__lastCustomWorldSaveError || 'cloud-save-failed');
+      next.syncStatus = 'pending';
+      next.lastSyncError = cloudError;
+      upsertPendingCustomWorld(next, cloudError, uid);
+    }
+  }
   if (existing) {
     customWorlds = customWorlds.map(world => String(world.id) === String(existing.id) ? next : world);
   } else {
     customWorlds = [...customWorlds, next];
   }
-  writeCustomWorldsToStorage(customWorlds);
+  writeCustomWorldsToStorage(customWorlds, uid);
+  console.info('[LootLingua customWorlds] local state saved', {
+    uid: uid || 'guest',
+    worldId: next.id,
+    cloudSaved,
+    syncStatus: next.syncStatus || 'synced-or-guest',
+    cloudError,
+  });
   renderCustomWorldCards();
-  if (window.saveCustomWorldToCloud) await window.saveCustomWorldToCloud(next);
+  if (saveBtn) saveBtn.disabled = false;
   hideModal('customWorldModal');
   if (pendingWorldManageCreateAction) {
     const action = pendingWorldManageCreateAction;
@@ -8141,7 +8346,11 @@ window.saveCustomWorldFromModal = async function() {
     return;
   }
   if (isCustomWorldView() && String(activeCustomWorldId) === String(next.id)) updateCustomWorldHeader();
-  showToast(existing ? 'تم تعديل العالم' : 'تم إنشاء العالم', 'success');
+  if (signedIn && (cloudSaved !== true || offlineAtSave)) {
+    showToast('تم حفظ العالم على هذا الجهاز، لكن تعذرت مزامنته مع السحابة. سنحتفظ به حتى تنجح المزامنة.', 'warning', 6200);
+  } else {
+    showToast(existing ? 'تم تعديل العالم' : 'تم إنشاء العالم', 'success');
+  }
 };
 
 function updateCustomWorldHeader() {
@@ -8157,6 +8366,7 @@ function updateCustomWorldHeader() {
 }
 
 window.loadCustomWorld = function(worldId) {
+  window.saveActiveAddFormDraft?.();
   const world = customWorlds.find(item => String(item.id) === String(worldId));
   if (!world) {
     showToast('هذا العالم غير موجود');
@@ -8187,6 +8397,7 @@ window.loadCustomWorld = function(worldId) {
   document.getElementById('bulkDeleteBar').style.display    = 'none';
   document.querySelector('.backup-zone').style.display      = '';
   document.getElementById('list').style.display             = '';
+  restoreActiveAddFormDraft();
   setViewBackBar(true, 'رجوع لعوالم الأساطير');
   setTreasureEntryVisible(true);
   setTreasureDockActive('worlds');
@@ -8413,6 +8624,7 @@ window.confirmDeleteCustomWorld = async function(action) {
 
 // ── Treasure Full-Page View ──
 window.loadTreasureView = function() {
+  window.saveActiveAddFormDraft?.();
   cleanupQuizSessionIfActive();
   if (!isFeatureUnlocked('treasure')) {
     openUnlockExplainModal('treasure');
@@ -8449,6 +8661,7 @@ window.loadTreasureView = function() {
 
 // ── Starred Words View ──
 window.loadStarredView = function() {
+  window.saveActiveAddFormDraft?.();
   cleanupQuizSessionIfActive();
   if (!isFeatureUnlocked('starred')) {
     openUnlockExplainModal('starred');
@@ -8553,6 +8766,7 @@ function renderStarredWords() {
 
 // ── Quiz Full-Page View ──
 window.loadQuizView = function() {
+  window.saveActiveAddFormDraft?.();
   if (!isFeatureUnlocked('quiz')) {
     openUnlockExplainModal('quiz');
     refreshFeatureUnlockUI();
@@ -8599,6 +8813,7 @@ window.loadQuizView = function() {
 };
 
 window.loadPersonalDictionary = function() {
+  window.saveActiveAddFormDraft?.();
   cleanupQuizSessionIfActive();
   if (isBulkDeleteMode) window.exitBulkDeleteMode();
   const returningFromTreasure = currentView === 'treasure';
@@ -8632,6 +8847,7 @@ window.loadPersonalDictionary = function() {
   document.getElementById('bulkDeleteBar').style.display    = '';
   document.querySelector('.backup-zone').style.display      = '';
   document.getElementById('list').style.display             = '';
+  restoreActiveAddFormDraft();
 
   // إخفاء search bar الألعاب والكلمات الصعبة والكويز
   document.getElementById('gameSearchBar').style.display    = 'none';
