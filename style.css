@@ -7574,10 +7574,20 @@ body.low-end-device .game-card img {
   background: var(--surface-bg);
   color: var(--text-gray);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   cursor: pointer;
   vertical-align: middle;
+}
+.custom-world-title-action > i {
+  display: block;
+  color: currentColor;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+}
+.custom-world-title-action.danger {
+  color: var(--danger);
 }
 .custom-world-title-action {
   line-height: 1;
