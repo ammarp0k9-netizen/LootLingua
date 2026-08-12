@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>LootLingua</title>
-  <title>TEST1 ROUTER V2</title>
-  
+
   <script>
     (function () {
       var location = window.location;
@@ -28,10 +27,12 @@
         params.set('q', location.search.slice(1));
       }
 
+      // GitHub Pages cannot define rewrites. Send app/deep links directly to
+      // the app document so the public landing page never consumes `p`.
       location.replace(
         location.origin +
         projectBase +
-        '/?' +
+        '/index.html?' +
         params.toString() +
         location.hash
       );
