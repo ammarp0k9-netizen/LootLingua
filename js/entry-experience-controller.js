@@ -237,6 +237,10 @@
     }));
   }
 
+  function completeStartup() {
+    root.SmartLoadingOverlay?.completeStartup?.();
+  }
+
   function srsEntryCount(user) {
     const owner = user?.uid || 'guest';
     const entries = readJson(`lootlinguaWordMastery_${owner}`, {});
@@ -456,15 +460,21 @@
     runtime.legacyPreferences = user
       ? api().normalizeLegacyPreferences(readJson(api().entryStorageKey(identityFor(user), 1), null))
       : (runtime.capturedGuest?.legacyPreferences || null);
+    const learningPromise = readLearningSignals(user, token);
+    let learning;
     if (user) {
-      const loaded = await loadAccountEntry(user, token);
+      const [loaded, learningResult] = await Promise.all([
+        loadAccountEntry(user, token),
+        learningPromise,
+      ]);
       if (token !== runtime.bootToken) return;
       entryState = loaded.state;
       runtime.legacyPreferences = loaded.legacyPreferences || runtime.legacyPreferences;
       entryCloudReadFailed = loaded.cloudReadFailed;
+      learning = learningResult;
+    } else {
+      learning = await learningPromise;
     }
-
-    const learning = await readLearningSignals(user, token);
     if (!learning || token !== runtime.bootToken) return;
     const guest = runtime.capturedGuest || captureGuestSnapshot() || {};
     const profileData = user ? (profileSnapshot.data || {}) : (guest.profile || {});
@@ -551,6 +561,7 @@
       runtime.state = entryState;
       announceEntryState();
       close({ silent: true });
+      completeStartup();
       queueMicrotask(() => consumePendingJourneyIntent());
       return;
     }
@@ -565,6 +576,7 @@
     );
     announceEntryState();
     open();
+    completeStartup();
     if (user && runtime.state.currentStep === 'destination') {
       const resumed = await consumePendingJourneyIntent({ allowWhileOpen: true });
       if (resumed && token === runtime.bootToken && runtime.state?.status === 'in-progress') {
@@ -908,7 +920,7 @@
         const selected = String(rank.rankId || '') === selectedRankId;
         return `<button type="button" role="tab" aria-selected="${selected}" class="entry-route-node entry-route-rank${selected ? ' selected' : ''}" data-entry-preview-rank="${escapeHtml(rank.rankId)}">
           <i class="fa-solid fa-ranking-star" aria-hidden="true"></i>
-          <span><small>${selected ? 'الرتبة المعروضة الآن' : `الرتبة ${index + 1}`}</small><strong>${escapeHtml(rank.title || `الرتبة ${index + 1}`)}</strong></span>
+          <span><small>${selected ? ' الرتبة المعروضة الآن' : `الرتبة ${index + 1}`}</small><strong>${escapeHtml(rank.title || `الرتبة ${index + 1}`)}</strong></span>
           <i class="fa-solid fa-circle-check entry-route-selected-icon" aria-hidden="true"></i>
         </button>`;
       }).join('')
@@ -941,7 +953,7 @@
     </div>
     <div class="entry-route-line" aria-hidden="true"></div>
     <div class="entry-preview-stage">
-      <div class="entry-preview-stage-heading"><span>2</span><div><small>البوابة</small><strong>${state.selectedGateId ? 'هذه هي البوابة المحددة الآن' : 'اختر بوابة لتظهر معاينتها'}</strong></div></div>
+      <div class="entry-preview-stage-heading"><span>2</span><div><small>البوابة</small><strong>${state.selectedGateId ? ' هذه هي البوابة المحددة الآن' : ' اختر بوابة لتظهر معاينتها'}</strong></div></div>
       <div class="entry-route-gates" role="listbox" aria-label="بوابات الرتبة">${gateNodes}</div>
     </div>`;
   }
@@ -995,7 +1007,7 @@
     if (!state.selectedGateId) {
       return `<section class="entry-gate-preview entry-gate-preview-empty" aria-live="polite">
         <i class="fa-regular fa-hand-pointer" aria-hidden="true"></i>
-        <div><small>معاينة البوابة</small><strong>لم تختر بوابة بعد</strong><span>اضغط على أي بوابة أعلاه لترى محتواها، ولن يتغير تقدمك.</span></div>
+        <div><small> معاينة البوابة</small><strong> لم تختر بوابة بعد</strong><span>اضغط على أي بوابة أعلاه لترى محتواها، ولن يتغير تقدمك.</span></div>
       </section>`;
     }
     const gate = state.gatePreview?.gate || selectedGate || {};
@@ -1787,6 +1799,17 @@
   function showJourneyAuthPrompt(intent) {
     closeJourneyAuthPrompt({ silent: true });
     runtime.authPromptFocus = document.activeElement;
+    const guidedState = root.LootLinguaGuidedFirstJourney?.getState?.();
+    const isGuidedGuestFallback = Boolean(
+      guidedState?.guestDictionaryAvailable &&
+      !root.auth?.currentUser
+    );
+    const title = isGuidedGuestFallback
+      ? 'سجّل دخولك لتتابع رحلتك'
+      : 'سجّل دخولك لبدء الرحلة';
+    const body = isGuidedGuestFallback
+      ? 'يمكنك المتابعة كضيف واستكشاف الموقع كاملاً، بما فيه إضافة الكلمات يدويًا من قاموسك الشخصي، أو تسجيل الدخول لحفظ تقدمك والعودة إلى العالم نفسه.'
+      : 'سنحفظ بيانات الضيف أولًا، ثم نعيدك إلى العالم نفسه ونكمل طلبك مرة واحدة.';
     const prompt = document.createElement('div');
     prompt.id = 'journeyAuthPrompt';
     prompt.className = 'journey-auth-prompt';
@@ -1794,8 +1817,8 @@
       <div class="journey-auth-backdrop" aria-hidden="true"></div>
       <section class="journey-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="journeyAuthTitle" aria-describedby="journeyAuthBody">
         <span class="entry-eyebrow">خطوتك محفوظة</span>
-        <h2 id="journeyAuthTitle">سجّل دخولك لبدء الرحلة</h2>
-        <p id="journeyAuthBody">سنحفظ بيانات الضيف أولًا، ثم نعيدك إلى العالم نفسه ونكمل طلبك مرة واحدة.</p>
+        <h2 id="journeyAuthTitle">${title}</h2>
+        <p id="journeyAuthBody">${body}</p>
         <p class="journey-auth-status" id="journeyAuthStatus" role="status" aria-live="polite"></p>
         <div class="journey-auth-actions">
           <button type="button" class="entry-primary" data-journey-auth="login">اختيار طريقة تسجيل الدخول</button>
@@ -1839,6 +1862,7 @@
     }, now);
     if (!intent) return null;
     writeJson(api().pendingIntentStorageKey({}), intent);
+    root.dispatchEvent(new CustomEvent('lootlingua:journey-auth-requested', { detail: { intent } }));
     showJourneyAuthPrompt(intent);
     return intent;
   }
@@ -2013,7 +2037,17 @@
 
     setBusy(true, 'جارٍ فتح وجهتك…');
     try {
+      const startsGuidedFirstJourney = id === 'open-selected-world' &&
+        root.LootLinguaGuidedFirstJourneyContract?.shouldStartForPresentation(runtime.presentation);
       const destination = await openEntryDestination(id, expected);
+      if (startsGuidedFirstJourney && destination?.type === 'world') {
+        // Kept separate from Entry v2: this is temporary in-product guidance,
+        // not a new Product Entry state or learning/progression mutation.
+        await root.LootLinguaGuidedFirstJourney?.beginFromEntry({
+          presentation: runtime.presentation,
+          worldId: destination.worldId,
+        });
+      }
       const completed = api().transitionState(runtime.state, { type: 'complete' }, Date.now());
       await commitTerminalState(completed, 'جارٍ حفظ اكتمال التجربة…', { applyAppearance: true });
       close();

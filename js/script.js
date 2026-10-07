@@ -821,10 +821,10 @@ const UNLOCK_EXPLAIN = {
   },
   treasure: {
     title: 'صندوق المكافآت',
-    why: 'صندوق المكافآت يفتح بعد ما تضيف أول كلمة لقاموسك.',
-    how: 'ابحث عن كلمة وأضفها لقاموسك الشخصي.',
+    why: 'صندوق المكافآت يفتح بعد ما تضيف 5 كلمات لقاموسك عشان يكون له قيمة.',
+    how: 'ابحث عن 5 كلمات وأضفها لقاموسك الشخصي أو ابدأ رحلة عالم.',
     progress: (p) => {
-      const need = 1;
+      const need = 5;
       return p.wordCount >= need
         ? `تقدّمك: ${p.wordCount} كلمة (تم استيفاء الشرط).`
         : `تقدّمك: ${p.wordCount} من ${need} كلمة في القاموس.`;
@@ -852,6 +852,7 @@ function openUnlockExplainModal(featureId) {
 }
 
 function handleLockedFeatureClick(featureId, fn, options = {}) {
+  if (window.LootLinguaGuidedFirstJourney?.shouldAllowSurface?.(featureId) === false) return false;
   if (!isFeatureUnlocked(featureId)) {
     openUnlockExplainModal(featureId);
     return false;
@@ -1394,7 +1395,70 @@ function openRouteOverlay(kind, key) {
   }
 }
 
+let adminFeatureLoadPromise = null;
+let adminRouteLoadPromise = null;
+let adminAccessLoadPromise = null;
+
+function loadFeatureScript(src, options = {}) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    if (options.module) script.type = 'module';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`feature-load-failed:${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function loadLootLinguaAdminAccess() {
+  if (window.LootLinguaAdminCloud) return Promise.resolve();
+  if (adminAccessLoadPromise) return adminAccessLoadPromise;
+  adminAccessLoadPromise = loadFeatureScript('js/admin-cloud.js?v=20260729-1', { module: true }).catch((error) => {
+    adminAccessLoadPromise = null;
+    throw error;
+  });
+  return adminAccessLoadPromise;
+}
+
+window.loadLootLinguaAdminFeature = function() {
+  if (window.loadAdminView && window.LootLinguaAdminCloud) return Promise.resolve();
+  if (adminFeatureLoadPromise) return adminFeatureLoadPromise;
+  adminFeatureLoadPromise = (async () => {
+    await loadLootLinguaAdminAccess();
+    await loadFeatureScript('js/admin-word-import.js?v=20260729-1');
+    await loadFeatureScript('js/admin.js?v=20260729-1');
+    await loadFeatureScript('js/test-clock.js?v=20260729-2', { module: true });
+  })().catch((error) => {
+    adminFeatureLoadPromise = null;
+    throw error;
+  });
+  return adminFeatureLoadPromise;
+};
+
+window.prepareLootLinguaAdminEntry = function() {
+  return loadLootLinguaAdminAccess()
+    .then(async () => {
+      const state = await window.ensureLootLinguaAdminAccess?.();
+      if (state?.resolved && state.isAdmin) await window.loadLootLinguaAdminFeature();
+    })
+    .catch((error) => console.warn('admin access check:', error));
+};
+
+function showAdminRouteMessage(messageText) {
+  currentView = 'admin';
+  const adminView = document.getElementById('adminView');
+  if (!adminView) return;
+  adminView.hidden = false;
+  adminView.style.display = 'block';
+  adminView.replaceChildren();
+  const message = document.createElement('p');
+  message.className = 'admin-route-error';
+  message.textContent = messageText;
+  adminView.append(message);
+}
+
 function openRouteView(viewKey) {
+  if (window.LootLinguaGuidedFirstJourney?.shouldAllowSurface?.(viewKey) === false) return;
   if (viewKey === 'treasure') loadTreasureView();
   else if (viewKey === 'worlds') loadWorldsView();
   else if (viewKey === 'minecraft') loadGameDictionary('minecraft');
@@ -1405,17 +1469,17 @@ function openRouteView(viewKey) {
     if (typeof window.loadAdminView === 'function') {
       window.loadAdminView();
     } else {
-      currentView = 'admin';
-      const adminView = document.getElementById('adminView');
-      if (adminView) {
-        adminView.hidden = false;
-        adminView.style.display = 'block';
-        adminView.replaceChildren();
-        const message = document.createElement('p');
-        message.className = 'admin-route-error';
-        message.textContent = 'تعذر تحميل واجهة الإدارة. لم يتم منح أي صلاحية.';
-        adminView.append(message);
-      }
+      if (adminRouteLoadPromise) return;
+      showAdminRouteMessage('جارٍ تجهيز واجهة الإدارة...');
+      adminRouteLoadPromise = window.loadLootLinguaAdminFeature()
+        .then(() => window.loadAdminView?.())
+        .catch((error) => {
+          console.error('admin feature load:', error);
+          showAdminRouteMessage('تعذر تحميل واجهة الإدارة. حاول مرة أخرى.');
+        })
+        .finally(() => {
+          adminRouteLoadPromise = null;
+        });
     }
   }
   else loadPersonalDictionary();
@@ -1743,6 +1807,9 @@ window.getLootlinguaProfilePayload = function() {
     gameDictAdds:     loadInt('lootlinguaGameDictAdds', 0),
     perfectQuizzes:   loadInt('lootlinguaPerfectQuizzes', 0),
     extraChests:      loadJSON('lootlinguaExtraChests', []),
+    // Runner rewards are cosmetic-only and deliberately separate from XP/SRS.
+    runnerCoins:      loadInt('lootlingua.runner.coins.v1', 0),
+    runnerBestDistance: loadInt('lootlingua.runner.best-distance.v1', 0),
   };
 };
 
@@ -1772,6 +1839,8 @@ window.resetLootlinguaProfileState = function(options = {}) {
     'lootlinguaGameDictAdds',
     'lootlinguaPerfectQuizzes',
     'lootlinguaExtraChests',
+    'lootlingua.runner.coins.v1',
+    'lootlingua.runner.best-distance.v1',
   ].forEach((key) => localStorage.removeItem(key));
   clearDailyQuestStorage();
   if (clearDisplayName) localStorage.removeItem('lootlinguaDisplayName');
@@ -1885,6 +1954,8 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   if (d.freezeSaves !== undefined) saveInt('lootlinguaFreezeSaves', Math.max(loadInt('lootlinguaFreezeSaves', 0), Number(d.freezeSaves) || 0));
   if (d.gameDictAdds !== undefined) saveInt('lootlinguaGameDictAdds', Math.max(loadInt('lootlinguaGameDictAdds', 0), Number(d.gameDictAdds) || 0));
   if (d.perfectQuizzes !== undefined) saveInt('lootlinguaPerfectQuizzes', Math.max(loadInt('lootlinguaPerfectQuizzes', 0), Number(d.perfectQuizzes) || 0));
+  if (d.runnerCoins !== undefined) saveInt('lootlingua.runner.coins.v1', Math.max(loadInt('lootlingua.runner.coins.v1', 0), Number(d.runnerCoins) || 0));
+  if (d.runnerBestDistance !== undefined) saveInt('lootlingua.runner.best-distance.v1', Math.max(loadInt('lootlingua.runner.best-distance.v1', 0), Number(d.runnerBestDistance) || 0));
   if (Array.isArray(d.extraChests)) {
     const localExtra = loadJSON('lootlinguaExtraChests', []);
     const seen = new Set();
@@ -2001,6 +2072,21 @@ function resetGuestProgressState() {
   }
 }
 
+function setGuestMigrationBusy(busy, message = 'جارٍ نقل اللوت بأمان...') {
+  const modal = document.getElementById('guestMigrationModal');
+  const progress = document.getElementById('guestMigrationProgress');
+  const progressText = document.getElementById('guestMigrationProgressText');
+  const accept = document.getElementById('guestMigrationAcceptBtn');
+  const decline = document.getElementById('guestMigrationDeclineBtn');
+  if (modal) modal.setAttribute('aria-busy', String(Boolean(busy)));
+  if (progressText) progressText.textContent = message;
+  if (progress) progress.hidden = !busy;
+  [accept, decline].filter(Boolean).forEach((button) => {
+    button.disabled = Boolean(busy);
+    button.setAttribute('aria-disabled', String(Boolean(busy)));
+  });
+}
+
 function renderGuestMigrationModal(summary) {
   const wordCount = summary.words.length;
   const progressStats = getGuestProgressSummary(summary.profile);
@@ -2009,6 +2095,7 @@ function renderGuestMigrationModal(summary) {
   const confirm = document.getElementById('guestMigrationConfirm');
   const decline = document.getElementById('guestMigrationDeclineBtn');
   const accept = document.getElementById('guestMigrationAcceptBtn');
+  setGuestMigrationBusy(false);
   if (msg) {
     const progressText = progressStats.length ? ' ولقينا كمان XP وتقدم وألقاب مخزنة' : '';
     msg.textContent = `يا بطل! لقينا ${wordCount} كلمات مخبأة في جهازك${progressText}.. بدك تنقلهم لحسابك الأسطوري الجديد عشان ما يضيعوا؟`;
@@ -2075,14 +2162,13 @@ window.confirmGuestMigration = async function() {
   const summary = window.__guestMigrationSummary;
   const user = summary?.user || window.auth?.currentUser;
   if (!summary || !user) return;
+  if (window.__guestMigrationRunning) return;
+  window.__guestMigrationRunning = true;
+  let stage = 'preparing';
 
   const accept = document.getElementById('guestMigrationAcceptBtn');
   const decline = document.getElementById('guestMigrationDeclineBtn');
-  if (accept) {
-    accept.disabled = true;
-    accept.textContent = 'جاري نقل اللوت...';
-  }
-  if (decline) decline.disabled = true;
+  setGuestMigrationBusy(true, 'نجهّز اللوت للنقل الآمن...');
 
   try {
     if (window.auth?.currentUser?.uid !== user.uid) {
@@ -2098,23 +2184,26 @@ window.confirmGuestMigration = async function() {
       return true;
     });
 
-    let uploaded = 0;
-    for (const word of toMove) {
-      const realId = window.saveWordToCloud
-        ? await window.saveWordToCloud(
-          word.word || word.text,
-          word.category || 'عام',
-          word.meaning || '',
-          word.example || '',
-          word.order ?? 0,
-          {
-            ...word,
-            lifecycleSource: { type: 'import', importId: 'guest-migration' },
-            operationId: 'guest-migration',
-          }
-        )
-        : null;
-      if (!realId) throw new Error('cloud-upload-failed');
+    stage = 'words';
+    setGuestMigrationBusy(true, toMove.length
+      ? `جارٍ نقل كلماتك بأمان (0/${toMove.length})...`
+      : 'نتحقق من الكلمات الموجودة في حسابك...');
+    if (typeof window.migrateGuestWordsToCloud !== 'function') {
+      const unavailable = new Error('Guest word migration is unavailable.');
+      unavailable.code = 'guest-migration/unavailable';
+      throw unavailable;
+    }
+    const wordResults = await window.migrateGuestWordsToCloud(toMove, {
+      importId: 'guest-migration',
+      operationId: 'guest-migration',
+      onProgress: ({ completed, total }) => {
+        setGuestMigrationBusy(true, `جارٍ نقل كلماتك بأمان (${completed}/${total})...`);
+      },
+    });
+    const uploadedByIndex = new Map(wordResults.map((result) => [result.wordIndex, result.wordId]));
+    toMove.forEach((word, index) => {
+      const realId = uploadedByIndex.get(index);
+      if (!realId) return;
       window.words.unshift({
         ...word,
         id: realId,
@@ -2122,9 +2211,11 @@ window.confirmGuestMigration = async function() {
         category: word.category || 'عام',
         userId: user.uid,
       });
-      uploaded++;
-    }
+    });
+    const uploaded = wordResults.length;
 
+    stage = 'custom-worlds';
+    setGuestMigrationBusy(true, 'جارٍ نقل عوالمك وكلماتها...');
     const guestWorlds = dedupeCustomWorlds([
       ...readCustomWorldsFromStorage('guest'),
       ...(Array.isArray(summary.pendingCustomWorlds) ? summary.pendingCustomWorlds : []),
@@ -2159,6 +2250,8 @@ window.confirmGuestMigration = async function() {
       renderCustomWorldCards();
     }
 
+    stage = 'learning-state';
+    setGuestMigrationBusy(true, 'جارٍ حفظ تقدّم التعلّم...');
     const guestMastery = summary.wordMastery && typeof summary.wordMastery === 'object'
       ? summary.wordMastery
       : {};
@@ -2192,6 +2285,8 @@ window.confirmGuestMigration = async function() {
       }
     }
 
+    stage = 'profile';
+    setGuestMigrationBusy(true, 'جارٍ حفظ XP والتقدّم في حسابك...');
     writeWordsToStorage(window.words, 'normal', user.uid);
     const profileMigrationKey = window.LootLinguaEntryExperience?.profileMigrationStorageKey({ uid: user.uid }) ||
       `lootlingua:guest-profile-migration:v1:user:${user.uid}`;
@@ -2238,6 +2333,8 @@ window.confirmGuestMigration = async function() {
       profileError.code = window.__lootlinguaLastProfileSaveFailure?.code || 'profile/commit-failed';
       throw profileError;
     }
+    stage = 'notifications';
+    setGuestMigrationBusy(true, 'اللمسات الأخيرة على اللوت...');
     const notificationsMigrated = await window.LootLinguaNotificationStore?.migrateGuestToOwner?.(user.uid);
     if (notificationsMigrated === false) {
       const notificationError = new Error('guest-notification-migration-failed');
@@ -2251,7 +2348,15 @@ window.confirmGuestMigration = async function() {
     showToast(uploaded > 0 ? `تم نقل ${uploaded} كلمات لحسابك` : 'ما في كلمات جديدة للنقل، وتم حفظ تقدمك', 'success', 4200);
     window.__resolveGuestMigration?.('accepted');
   } catch (err) {
-    console.error('guestMigration:', err);
+    const diagnostic = {
+      stage,
+      code: String(err?.firestoreCode || err?.cause?.code || err?.code || 'guest-migration/failed'),
+      message: String(err?.cause?.message || err?.message || err || ''),
+      word: String(err?.word || ''),
+      wordIndex: Number.isInteger(err?.wordIndex) ? err.wordIndex : null,
+    };
+    window.__lastGuestMigrationFailure = diagnostic;
+    console.error('guestMigration failed:', diagnostic, err);
     localStorage.removeItem(GUEST_MIGRATION_COMPLETE_KEY);
     localStorage.removeItem(GUEST_MIGRATION_HANDLED_KEY);
     window.__guestMigrationSessionComplete = false;
@@ -2260,16 +2365,20 @@ window.confirmGuestMigration = async function() {
       guestSnapshotId: summary.guestSnapshotId,
       status: 'failed',
     };
+    setGuestMigrationBusy(false);
     if (accept) {
       accept.disabled = false;
       accept.textContent = 'نعم، انقل اللوت!';
     }
     if (decline) decline.disabled = false;
     showToast('ما قدرنا ننقل اللوت الآن. خليناه محفوظ على الجهاز.', 'danger', 4600);
+  } finally {
+    window.__guestMigrationRunning = false;
   }
 };
 
 window.declineGuestMigration = function() {
+  if (window.__guestMigrationRunning) return;
   const summary = window.__guestMigrationSummary;
   const user = window.auth?.currentUser;
   if (!user?.uid || summary?.user?.uid !== user.uid || !summary?.guestSnapshotId) return;

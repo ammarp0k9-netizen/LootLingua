@@ -1275,6 +1275,8 @@ async function evaluateActiveJourneyReadiness() {
     const unchanged = progress.status === readiness.status &&
       Number(progress.readyWordCount) === readiness.readyWordCount &&
       Number(progress.requiredWordCount) === readiness.requiredWordCount &&
+      Number(progress.evidenceStepCount) === readiness.evidenceStepCount &&
+      Number(progress.totalEvidenceSteps) === readiness.totalEvidenceSteps &&
       Number(progress.availableForReviewNowCount) === readiness.availableForReviewNow &&
       Number(progress.waitingLaterTodayCount) === readiness.waitingLaterToday &&
       Number(progress.waitingNextDayCount) === readiness.waitingNextDay;
@@ -1289,6 +1291,8 @@ async function evaluateActiveJourneyReadiness() {
         readyEvidenceCount: readiness.readyWordCount,
         readyWordCount: readiness.readyWordCount,
         requiredWordCount: readiness.requiredWordCount,
+        evidenceStepCount: readiness.evidenceStepCount,
+        totalEvidenceSteps: readiness.totalEvidenceSteps,
         needsEvidenceWordCount: readiness.needsEvidenceWordCount,
         availableForReviewNowCount: readiness.availableForReviewNow,
         waitingLaterTodayCount: readiness.waitingLaterToday,
@@ -1423,8 +1427,32 @@ async function resumeGateClearAttempt(worldId, rankId, gateId) {
   const attemptId = String(progress?.activeClearAttemptId || '');
   if (!attemptId) return null;
   const attempt = await getGateClearAttempt(worldId, attemptId, { force: true });
-  if (!attempt || !['active', 'submitting'].includes(attempt.status)) return null;
+  if (!attempt) return null;
+  if (attempt.status === 'submitting') {
+    return finalizeResumedGateClearAttempt(worldId, rankId, gateId, attemptId, attempt);
+  }
+  if (attempt.status !== 'active') return null;
   return gateClearBundle(worldId, rankId, gateId, attempt);
+}
+
+async function finalizeResumedGateClearAttempt(worldId, rankId, gateId, attemptId, fallbackAttempt) {
+  const result = await finalizeGateClearAttempt(worldId, rankId, gateId, attemptId);
+  try {
+    const attempt = await getGateClearAttempt(worldId, attemptId, { force: true });
+    if (!attempt) {
+      throw journeyCloudError('gate-clear/not-found', 'Gate Clear attempt was not found after finalization.');
+    }
+    return { ...await gateClearBundle(worldId, rankId, gateId, attempt), result };
+  } catch (error) {
+    console.warn('[Journey] Gate Clear committed; result decoration failed.', {
+      code: error?.code || error?.message || 'unavailable',
+      worldId: String(worldId),
+      rankId: String(rankId),
+      gateId: String(gateId),
+      attemptId: String(attemptId),
+    });
+    return { attempt: fallbackAttempt || { attemptId }, words: [], question: null, result };
+  }
 }
 
 async function finalizeGateClearAttempt(worldId, rankId, gateId, attemptId) {
@@ -1629,6 +1657,10 @@ async function finalizeGateClearAttempt(worldId, rankId, gateId, attemptId) {
 async function answerGateClearQuestion(worldId, rankId, gateId, attemptId, selectedContentWordId) {
   const user = requireUser();
   const attemptRef = gateClearAttemptRef(user.uid, worldId, attemptId);
+  const persisted = await getGateClearAttempt(worldId, attemptId, { force: true });
+  if (persisted?.status === 'submitting') {
+    return finalizeResumedGateClearAttempt(worldId, rankId, gateId, attemptId, persisted);
+  }
   let nextSession = null;
   await runTransaction(db, async (transaction) => {
     const snapshot = await transaction.get(attemptRef);
@@ -1645,19 +1677,13 @@ async function answerGateClearQuestion(worldId, rankId, gateId, attemptId, selec
   });
   cache.gateClearAttempts.set(`${String(worldId)}/${String(attemptId)}`, nextSession);
   if (nextSession.status === 'submitting') {
-    const result = await finalizeGateClearAttempt(worldId, rankId, gateId, attemptId);
-    try {
-      return { ...await gateClearBundle(worldId, rankId, gateId, nextSession), result };
-    } catch (error) {
-      console.warn('[Journey] Gate Clear committed; result decoration failed.', {
-        code: error?.code || error?.message || 'unavailable',
-        worldId: String(worldId),
-        rankId: String(rankId),
-        gateId: String(gateId),
-        attemptId: String(attemptId),
-      });
-      return { attempt: nextSession, words: [], question: null, result };
-    }
+    return finalizeResumedGateClearAttempt(
+      worldId,
+      rankId,
+      gateId,
+      attemptId,
+      nextSession
+    );
   }
   return gateClearBundle(worldId, rankId, gateId, nextSession);
 }
@@ -2058,6 +2084,65 @@ async function getGateMasteryView(worldId, rankId, gateId, options) {
       newContentWordIds.has(String(word?.contentWordId || ''))
     ),
   };
+}
+
+// The Gate quiz is intentionally restricted to the immutable loaded cohort.
+// Each returned word is also verified against its exact user-word source link.
+// This gives the quiz a stable legacy id for its SRS updates and prevents an
+// unrelated account-wide word from entering a Gate-specific quiz.
+async function getGateQuizWords(worldId, rankId, gateId, options) {
+  const user = requireUser();
+  const progress = options?.progress || await getGateProgress(worldId, rankId, gateId, options);
+  if (!progress?.loadedAt || !['learning', 'ready', 'cleared'].includes(String(progress.status || ''))) {
+    return [];
+  }
+  const words = await listAllGateWords(worldId, rankId, gateId, options);
+  const effective = core().effectiveLoadedGateWords(progress, words);
+  const trustedWords = await Promise.all(effective.map(async (word) => {
+    const wordKey = String(word?.wordKey || '');
+    const contentWordId = String(word?.contentWordId || '');
+    if (!wordKey || !contentWordId) return null;
+    const source = {
+      worldId: core().cleanId(worldId, 'World'),
+      rankId: core().cleanId(rankId, 'Rank'),
+      gateId: core().cleanId(gateId, 'Gate'),
+      contentWordId: core().cleanId(contentWordId, 'Word'),
+    };
+    const canonicalRef = doc(
+      db,
+      'users',
+      user.uid,
+      'contentWords',
+      core().cleanId(wordKey, 'Word key')
+    );
+    const [canonicalSnapshot, sourceSnapshot] = await Promise.all([
+      getDoc(canonicalRef),
+      getDoc(doc(canonicalRef, 'sources', core().contentSourceId(source))),
+    ]);
+    if (!canonicalSnapshot.exists() || !sourceSnapshot.exists()) return null;
+
+    const canonical = canonicalSnapshot.data() || {};
+    const legacyWordId = String(canonical.legacyWordId || '');
+    const legacySnapshot = legacyWordId
+      ? await getDoc(doc(db, 'users', user.uid, 'words', legacyWordId))
+      : null;
+    const legacy = legacySnapshot?.exists() ? legacySnapshot.data() || {} : {};
+    return {
+      ...word,
+      ...canonical,
+      ...legacy,
+      id: legacyWordId || wordKey,
+      legacyWordId,
+      wordKey,
+      contentWordId,
+      word: canonical.word || legacy.word || legacy.text || word.word || '',
+      meaning: canonical.meaning || canonical.translation || legacy.meaning ||
+        legacy.translation || word.translation || '',
+      translation: canonical.translation || legacy.translation ||
+        legacy.meaning || word.translation || '',
+    };
+  }));
+  return trustedWords.filter(Boolean);
 }
 
 // Read-only notification projection. Practice is derived from the canonical
@@ -4505,6 +4590,7 @@ const API = Object.freeze({
   updateGateProgress,
   findNewGateWords,
   getGateMasteryView,
+  getGateQuizWords,
   getGateNotificationFacts,
   subscribeGateProgress,
   recordQuizEvidenceBatch,

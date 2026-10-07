@@ -17,25 +17,53 @@
   const SLOW_CONNECTION_TEXT = 'يبدو أن التحميل يستغرق وقتًا أطول من المعتاد. يرجى التحقق من اتصالك بالإنترنت.';
   const OVERLAY_ID = 'smartLoadingOverlay';
   const SLOW_WARNING_ID = 'smartLoadingSlowWarning';
+  const TIP_ID = 'smartLoadingTip';
+  const TIP_TEXT_ID = 'smartLoadingTipText';
+  const LOADING_TIPS = Object.freeze([
+    'لا يكفي أن تتذكر الكلمة مرة واحدة؛ تتقدم عبر مراحل التعلّم والمراجعة حتى الإتقان.',
+    'الكلمات المتقنة قد تعود لاحقًا للمراجعة حتى يبقى تقدّمها ثابتًا.',
+    'تحصل على XP عندما تنتقل الكلمة إلى مرحلة تعلّم جديدة، ومنها أول إتقان لها.',
+    'أضف كلمات البوابة إلى رحلتك، ثم راجعها من اختبار البوابة.',
+    'قد تنتظر بعض كلمات البوابة وقت مراجعتها التالي قبل أن يكتمل استعداد البوابة.',
+    'يصبح اختبار اجتياز البوابة متاحًا بعد اكتمال الاستعداد لها.',
+    'اختر بين البطاقات، التحدي الزمني، ترتيب الحروف، أو المطابقة.',
+    'ابحث في قاموسك بالكلمة أو معناها أو المثال المرتبط بها.',
+    'علّم أي كلمة بنجمة لتجدها لاحقًا في قائمة الكلمات الصعبة.',
+    'صدّر قاموسك كملف JSON، ثم استورده لاحقًا أو على جهاز آخر.'
+  ]);
 
   // Timing constants
   const SLOW_CONNECTION_THRESHOLD_MS = 5000; // Time before showing slow connection warning
   const FADE_OUT_DURATION_MS = 300;        // CSS transition duration (must match CSS)
+  const TIP_DELAY_MS = 1300;
+  const TIP_ROTATION_MS = 7000;
 
   // ============================================
   // STATE
   // ============================================
   let overlayElement = null;
   let slowWarningElement = null;
+  let tipElement = null;
+  let tipTextElement = null;
   let isOverlayVisible = false;
   let slowWarningTimer = null;
+  let tipDelayTimer = null;
+  let tipRotationTimer = null;
+  let lastTipIndex = -1;
   let dismissPending = false;
 
   // ============================================
   // CREATE OVERLAY HTML
   // ============================================
   function createOverlay() {
-    if (document.getElementById(OVERLAY_ID)) return;
+    const existing = document.getElementById(OVERLAY_ID);
+    if (existing) {
+      overlayElement = existing;
+      slowWarningElement = document.getElementById(SLOW_WARNING_ID);
+      tipElement = document.getElementById(TIP_ID);
+      tipTextElement = document.getElementById(TIP_TEXT_ID);
+      return existing;
+    }
 
     const overlay = document.createElement('div');
     overlay.id = OVERLAY_ID;
@@ -49,6 +77,10 @@
       <div class="smart-loading-content">
         <div class="smart-loading-spinner" aria-hidden="true"></div>
         <p class="smart-loading-text">${LOADING_TEXT}</p>
+        <section id="${TIP_ID}" class="smart-loading-tip" aria-live="off" aria-label="معلومة عن LootLingua">
+          <span class="smart-loading-tip-title"><span aria-hidden="true">💡</span> معلومة عن LootLingua</span>
+          <p id="${TIP_TEXT_ID}" class="smart-loading-tip-text"></p>
+        </section>
         <p id="${SLOW_WARNING_ID}" class="smart-loading-slow-warning" aria-live="assertive" style="display: none; opacity: 0;">${SLOW_CONNECTION_TEXT}</p>
       </div>
     `;
@@ -56,7 +88,37 @@
     document.body.appendChild(overlay);
     overlayElement = overlay;
     slowWarningElement = document.getElementById(SLOW_WARNING_ID);
+    tipElement = document.getElementById(TIP_ID);
+    tipTextElement = document.getElementById(TIP_TEXT_ID);
     return overlay;
+  }
+
+  function setLoadingTip() {
+    if (!tipElement || !tipTextElement || !LOADING_TIPS.length) return;
+    let index = Math.floor(Math.random() * LOADING_TIPS.length);
+    if (LOADING_TIPS.length > 1 && index === lastTipIndex) index = (index + 1) % LOADING_TIPS.length;
+    lastTipIndex = index;
+    tipTextElement.textContent = LOADING_TIPS[index];
+    tipElement.classList.add('is-visible');
+  }
+
+  function startLoadingTips() {
+    clearLoadingTips();
+    tipDelayTimer = setTimeout(() => {
+      if (!isOverlayVisible) return;
+      setLoadingTip();
+      tipRotationTimer = setInterval(() => {
+        if (isOverlayVisible) setLoadingTip();
+      }, TIP_ROTATION_MS);
+    }, TIP_DELAY_MS);
+  }
+
+  function clearLoadingTips() {
+    if (tipDelayTimer) clearTimeout(tipDelayTimer);
+    if (tipRotationTimer) clearInterval(tipRotationTimer);
+    tipDelayTimer = null;
+    tipRotationTimer = null;
+    tipElement?.classList.remove('is-visible');
   }
 
   // ============================================
@@ -103,6 +165,7 @@
     
     // Start the slow connection warning timer
     startSlowConnectionTimer();
+    startLoadingTips();
   }
 
   // ============================================
@@ -117,6 +180,7 @@
     
     slowWarningTimer = setTimeout(() => {
       if (isOverlayVisible && slowWarningElement) {
+        clearLoadingTips();
         // Fade in the slow connection warning
         slowWarningElement.style.display = 'block';
         // Force reflow for transition
@@ -161,6 +225,7 @@
     if (!isOverlayVisible || !overlayElement) return;
     
     clearSlowConnectionTimer();
+    clearLoadingTips();
     
     isOverlayVisible = false;
     overlayElement.style.transition = `opacity ${FADE_OUT_DURATION_MS}ms ease, visibility ${FADE_OUT_DURATION_MS}ms ease`;
@@ -175,6 +240,8 @@
         overlayElement.remove();
         overlayElement = null;
         slowWarningElement = null;
+        tipElement = null;
+        tipTextElement = null;
       }
       dismissPending = false;
     }, FADE_OUT_DURATION_MS);
@@ -206,23 +273,26 @@
 
     // Call this when Firebase Auth state is resolved (user or null)
     onAuthResolved: function(user) {
-      if (!user) {
-        console.log('SmartLoadingOverlay: Auth resolved - no user, dismissing');
-        scheduleDismiss();
-        return;
-      }
-      
-      console.log('SmartLoadingOverlay: Auth resolved - user found, waiting for data...');
+      console.log(user
+        ? 'SmartLoadingOverlay: Auth resolved - user found, waiting for first screen decision...'
+        : 'SmartLoadingOverlay: Auth resolved - waiting for first screen decision...');
     },
 
     // Call this when user words data is fully loaded from Firebase
     onUserDataLoaded: function() {
-      console.log('SmartLoadingOverlay: User data loaded, dismissing');
+      console.log('SmartLoadingOverlay: User data loaded, waiting for first screen decision...');
+    },
+
+    // Product Entry owns the first-screen decision. It calls this only after
+    // either its onboarding surface is open or the existing app is confirmed.
+    completeStartup: function() {
+      document.documentElement.classList.remove('startup-pending');
       scheduleDismiss();
     },
 
     // Force hide (emergency fallback)
     forceHide: function() {
+      document.documentElement.classList.remove('startup-pending');
       hideOverlay();
     },
 
@@ -728,6 +798,9 @@ window.toggleProfileModal = function() {
   renderProfileModalStats();
   renderXPBar();
   refreshFeatureUnlockUI();
+  // Admin code stays out of startup; check and expose its profile entry only
+  // after the user explicitly opens this account surface.
+  void window.prepareLootLinguaAdminEntry?.();
   closeSidebarIfOpen();
   setAppRoute('overlay', 'profile');
 };

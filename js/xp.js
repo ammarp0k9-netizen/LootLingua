@@ -1,16 +1,20 @@
 // XP & GAMIFICATION
 // ═══════════════════════════════════════════════════════
 const XP_RANKS = [
-  {min:0,   max:14,       label:'Noob',     iconClass:'fa-solid fa-seedling', color:'var(--text-gray)'},
-  {min:15,  max:39,       label:'Wanderer', iconClass:'fa-solid fa-compass', color:'var(--header-grad)'},
-  {min:40,  max:79,       label:'Learner',  iconClass:'fa-solid fa-book-open', color:'var(--accent)'},
+  {min:0,   max:25,       label:'Noob',     iconClass:'fa-solid fa-seedling', color:'var(--text-gray)'},
+  {min:26,  max:49,       label:'Wanderer', iconClass:'fa-solid fa-compass', color:'var(--header-grad)'},
+  {min:50,  max:79,       label:'Learner',  iconClass:'fa-solid fa-book-open', color:'var(--accent)'},
   {min:80,  max:149,      label:'Explorer', iconClass:'fa-solid fa-binoculars', color:'var(--accent2)'},
   {min:150, max:249,      label:'Pro',      iconClass:'fa-solid fa-award', color:'var(--success)'},
   {min:250, max:399,      label:'Veteran',  iconClass:'fa-solid fa-shield-halved', color:'var(--success)'},
   {min:400, max:599,      label:'Elite',    iconClass:'fa-solid fa-fire', color:'var(--star)'},
   {min:600, max:899,      label:'Master',   iconClass:'fa-solid fa-star', color:'var(--star)'},
   {min:900, max:1299,     label:'Legend',   iconClass:'fa-solid fa-crown', color:'var(--accent)'},
-  {min:1300,max:Infinity, label:'Linguaer', iconClass:'fa-solid fa-trophy', color:'var(--accent2)'},
+  {min:1300,max:2999, label:'Linguaer', iconClass:'fa-solid fa-brain', color:'var(--accent2)'},
+  {min:3000,max:5679, label:'Wordsmith', iconClass:'fa-solid fa-graduation-cap', color:'var(--star)'},
+  {min:5680,max:9769, label:'Linguist', iconClass:'fa-solid fa-pen-fancy', color:'var(--accent2)'},
+  {min:9770,max:Infinity, label:'Virtuoso', iconClass:'fa-solid fa-trophy', color:'var(--success)'},
+
 ];
 
 // userXP already declared in State section above — just reload from localStorage

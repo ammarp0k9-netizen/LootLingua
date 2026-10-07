@@ -1221,6 +1221,41 @@ async function startActualQuiz(mode, options = {}) {
   return true;
 }
 
+// Used by the Journey surface only. The normal Quiz setup keeps its own source
+// selector; this entry point receives an already restricted Gate cohort.
+window.startGateQuiz = async function(mode, input = {}) {
+  const selectedMode = QUIZ_MODE_META[mode] ? mode : 'scramble';
+  const sourceParts = [input.worldId, input.rankId, input.gateId]
+    .map((value) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_'))
+    .filter(Boolean);
+  const source = `journey:${sourceParts.join('~')}`.slice(0, 500);
+  const resolved = quizCore.resolveQuizCandidates({
+    scope: source,
+    mode: selectedMode,
+    rawWords: Array.isArray(input.words) ? input.words.filter(Boolean) : [],
+    wordKeyOf: (word) => window.LootLinguaWordLifecycle?.wordKeyOf?.(word) || word?.wordKey || '',
+    normalizeCandidate: (word, index) => normalizeQuizWord({
+      ...word,
+      // Published content records do not have the legacy document id. Passing
+      // one through makes matching treat every row as "undefined".
+      id: word?.id || word?.legacyWordId || word?.wordKey || `gate-word-${index}`,
+    }, source, index),
+  });
+  const words = resolved.candidates;
+  if (!words.length) {
+    showToast('لا توجد كلمات محمّلة لهذه البوابة بعد.', 'warning', 4200);
+    return false;
+  }
+  clearActiveQuizSessionStorage();
+  window.__pendingQuizResumeSession = null;
+  window.loadQuizView({ skipResume: true });
+  return startActualQuiz(selectedMode, {
+    words,
+    source,
+    skipAvailabilityCheck: true,
+  });
+};
+
 function gateGapReviewWords(wordKeys) {
   const lifecycle = window.LootLinguaWordLifecycle;
   const wanted = new Set((Array.isArray(wordKeys) ? wordKeys : []).map(String).filter(Boolean));
