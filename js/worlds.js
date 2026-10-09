@@ -1106,6 +1106,7 @@ function isMobileSwipeDevice() {
 }
 
 function isAppSwipeNavigationAvailable() {
+  if (window.__lootlinguaRunnerInputActive) return false;
   const dock = document.getElementById('legendDock');
   if (!dock || getComputedStyle(dock).display === 'none') return false;
   return document.body.classList.contains('legend-dock-visible') ||
@@ -1113,6 +1114,7 @@ function isAppSwipeNavigationAvailable() {
 }
 
 function isSwipeBlockedTarget(target) {
+  if (window.__lootlinguaRunnerInputActive) return true;
   if (!target?.closest) return false;
   return Boolean(target.closest([
     'input',
@@ -1224,6 +1226,9 @@ function initTreasureSwipeNavigation() {
   }, { passive: true });
   document.addEventListener('touchcancel', resetAppSwipeState, { passive: true });
 }
+
+window.addEventListener('lootlingua:runner-input-active', resetAppSwipeState);
+window.addEventListener('lootlingua:runner-input-inactive', resetAppSwipeState);
 
 initTreasureSwipeNavigation();
 
@@ -3792,8 +3797,7 @@ function renderPublishedLoading(message) {
 
 function logPublishedContentError(context, error) {
   const localHost = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
-  if (localHost) console.error(`[published-content:${context}]`, error);
-}
+if (localHost) console.error(`[published-content:${context}]`, error);}
 
 function publishedErrorMessage(level, error) {
   if (error?.code === 'published/not-found') return 'هذا المحتوى غير موجود أو لم يعد منشورًا.';
@@ -3807,6 +3811,10 @@ function publishedErrorMessage(level, error) {
 }
 
 function renderPublishedError(level, error, retry) {
+  console.error(`[published-content:${level}]`, error);
+  console.trace('مكان استدعاء renderPublishedError');
+
+
   const root = publishedViewRoot();
   if (!root) return;
   const notFound = error?.code === 'published/not-found';
@@ -4386,6 +4394,10 @@ async function openPublishedGateQuizPicker(world, rank, gate) {
       <div class="published-gate-quiz-modes"></div>
       <small class="published-gate-quiz-note">لرفع شريط الجاهزية اختر أحد التحديات الثلاثة وأجب صحيحًا من المحاولة الأولى. بطاقات الذاكرة، وتصحيح الخطأ داخل المطابقة، للتدريب فقط.</small>
     </div>`;
+  const officialReviewDueWordKeys = Number(progress?.availableForReviewNowCount) > 0 ? words.map((word) => {
+    const status = window.LootLinguaLearningEvidence?.getWordGateReadiness?.(word)?.status;
+    return ['needs-first-review', 'second-review-available', 'next-day-review-available'].includes(status) ? String(window.LootLinguaWordLifecycle?.wordKeyOf?.(word) || word?.wordKey || '') : '';
+  }).filter(Boolean) : [];
   const choose = async (mode) => {
     close(false);
     const started = await window.startGateQuiz?.(mode, {
@@ -4393,6 +4405,8 @@ async function openPublishedGateQuizPicker(world, rank, gate) {
       worldId: world.worldId,
       rankId: rank.rankId,
       gateId: gate.gateId,
+      officialReviewGate: officialReviewDueWordKeys.length ? { worldId: world.worldId, rankId: rank.rankId, gateId: gate.gateId } : null,
+      officialReviewDueWordKeys,
     });
     if (!started) window.openPublishedGate(world.worldId, rank.rankId, gate.gateId);
   };
@@ -5164,7 +5178,7 @@ function makePublishedGateJourneyPanel(world, rank, gate) {
     );
     const readiness = publishedElement('div', 'published-gate-readiness');
     const heading = publishedElement('div', 'published-gate-readiness-heading');
-    heading.append(publishedElement('strong', '', 'خطة فتح تحدّي البوابة'));
+    heading.append(publishedElement('strong', '', 'خطة فتح تحدّي البوابة')); 
     const info = publishedElement('button', 'published-readiness-info-btn');
     info.type = 'button';
     info.title = 'كيف يتقدم التحدّي؟';
@@ -5174,6 +5188,7 @@ function makePublishedGateJourneyPanel(world, rank, gate) {
     heading.append(info);
     const track = publishedElement('span', 'published-gate-readiness-track');
     const fill = publishedElement('span', 'published-gate-readiness-fill');
+    const counts = publishedElement('div', 'published-gate-readiness-counts');
     const completedSteps = Math.max(0, Number(progress?.evidenceStepCount) || 0);
     const totalSteps = Math.max(
       completedSteps,
@@ -5182,15 +5197,17 @@ function makePublishedGateJourneyPanel(world, rank, gate) {
     const readinessPercent = totalSteps ? Math.round((completedSteps / totalSteps) * 100) : 0;
     animatePublishedGateProgress(fill, readinessPercent);
     track.append(fill);
-    const counts = publishedElement('div', 'published-gate-readiness-counts');
     const availableToday = Math.max(0, Number(progress?.availableForReviewNowCount) || 0);
     const waitingToday = Math.max(0, Number(progress?.waitingLaterTodayCount) || 0);
     const waitingTomorrow = Math.max(0, Number(progress?.waitingNextDayCount) || 0);
-    appendMetaChip(counts, `خطوات الاستعداد: ${completedSteps} / ${totalSteps}`, 'fa-solid fa-chart-line');
+    appendMetaChip(counts, ` ${completedSteps} / ${totalSteps}`, 'fa-solid fa-chart-line');
     appendMetaChip(counts, `كلمات جاهزة للاختبار: ${readyWordCount} / ${requiredWordCount}`, 'fa-solid fa-circle-check');
-    appendMetaChip(counts, `يمكن تحسينها الآن: ${availableToday}`, 'fa-solid fa-play');
-    appendMetaChip(counts, `بانتظار ساعتين: ${waitingToday}`, 'fa-solid fa-clock');
-    appendMetaChip(counts, `بانتظار يوم جديد: ${waitingTomorrow}`, 'fa-regular fa-calendar');
+    if (availableToday > 0) {appendMetaChip(counts,`كلمات يمكن تحسينها الآن: ${availableToday}`,'fa-solid fa-play');
+    }
+    if (waitingToday > 0) {appendMetaChip(counts,`كلمات بانتظار ساعتين: ${waitingToday}`,'fa-solid fa-clock');
+    }
+    if (waitingTomorrow > 0) {appendMetaChip(counts,`كلمات بانتظار يوم جديد: ${waitingTomorrow}`,'fa-regular fa-calendar');
+    }
     const readinessCopy = publishedElement('p', 'published-gate-readiness-copy');
     if (state === 'ready') {
       readinessCopy.textContent = 'اكتمل شريط الاستعداد. أصبح اختبار اجتياز البوابة متاحًا الآن.';
@@ -5203,12 +5220,14 @@ function makePublishedGateJourneyPanel(world, rank, gate) {
     } else {
       readinessCopy.textContent = `اكتمل استعداد ${readyWordCount} من ${requiredWordCount} كلمات. لكل كلمة ثلاث إجابات صحيحة متباعدة.`;
     }
+
     readiness.append(heading, track, counts, readinessCopy);
     panel.append(readiness);
     const runner = window.LootLinguaGateRunner?.render?.({
       worldId: world.worldId,
       rankId: rank.rankId,
       gateId: gate.gateId,
+      progress,
     });
     if (runner) panel.append(runner);
     if (state !== 'ready' && availableToday === 0 && (waitingToday > 0 || waitingTomorrow > 0)) {
