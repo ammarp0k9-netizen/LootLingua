@@ -290,14 +290,58 @@ function finishQuizRun() {
       outcomes: flashcardSessionOutcomes,
     });
   }
+  // DIAGNOSTIC (temporary): log completion inputs before dispatching trusted-quiz-completed.
+  try { console.info('[GFJ-DIAG] finishQuizRun completion check', {
+    mode: activeQuizSession?.mode,
+    verified: Boolean(verified),
+    quizIndex: Number(quizIndex),
+    wordsLen: Number(currentQuizWords?.length || 0),
+    commitTotal: Number(commit?.total || 0),
+    fullyCompleted: Boolean(fullyCompleted),
+    source: String(activeQuizSession?.source || ''),
+  }); } catch (_) {}
   if (fullyCompleted && commit.total > 0) {
     incrementDailyCountBy(commit.total);
     checkAndUpdateStreak({ learningEvent: true });
+    // Capture gate context from the session BEFORE activeQuizSession is cleared
+    // below. The guided-first-journey controller needs worldId and gateId to
+    // validate that the finished quiz actually belongs to the onboarding gate.
+    //
+    // Source format for gate quizzes: "journey:worldId~rankId~gateId"
+    // officialReviewGate is only set when SRS review words are due, so it is
+    // null on a new user's very first gate pass — parse the source string too.
+    const sessionSource = String(activeQuizSession?.source || '');
+    const officialGate = activeQuizSession?.officialReviewGate || null;
+    const commitContext = window.getActiveVerifiedQuizCommitContext?.(activeQuizSession?.id);
+    const resolvedGate = officialGate || commitContext?.officialReviewGate || null;
+    let detailWorldId = resolvedGate?.worldId || '';
+    let detailGateId = resolvedGate?.gateId || '';
+    if ((!detailWorldId || !detailGateId) && sessionSource.startsWith('journey:')) {
+      // "journey:worldId~rankId~gateId" — split on '~' to get the three parts.
+      const parts = sessionSource.slice('journey:'.length).split('~');
+      if (parts.length >= 3) {
+        detailWorldId = detailWorldId || parts[0];
+        detailGateId = detailGateId || parts[2];
+      }
+    }
+    try { console.info('[GFJ-DIAG] dispatching trusted-quiz-completed', {
+      sessionId: String(activeQuizSession?.id || ''),
+      mode: activeQuizSession?.mode,
+      total: Number(commit.total) || 0,
+      source: sessionSource,
+      worldId: detailWorldId,
+      gateId: detailGateId,
+      dispatched: true,
+    }); } catch (_) {}
     dispatchTrustedQuizCompletedSafely({
       sessionId: String(activeQuizSession?.id || ''),
       completedAt: Date.now(),
       correctCount: Number(commit.correctCount) || 0,
       total: Number(commit.total) || 0,
+      source: sessionSource,
+      officialReviewGate: resolvedGate,
+      worldId: detailWorldId,
+      gateId: detailGateId,
     });
   }
   if (fullyCompleted && accuracy >= 0.9) recordHighAccuracyVerifiedQuiz(activeQuizSession.id);
