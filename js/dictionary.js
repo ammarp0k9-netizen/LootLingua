@@ -145,10 +145,12 @@ function wordsSnapshotNeedsFullRender(prev, next) {
 
 function syncWordMetaInDom() {
   if (!Array.isArray(window.words)) return;
-  window.words.forEach((word) => {
-    const safeId = cssEscapeValue(String(word.id));
-    const starBtn = document.querySelector(`[data-action="star"][data-id="${safeId}"]`);
-    if (starBtn) starBtn.classList.toggle('active', !!word.starred);
+  const byId = new Map(window.words.map(word => [String(word.id), word]));
+  document.querySelectorAll('#list [data-action="star"]').forEach((starBtn) => {
+    const word = byId.get(starBtn.dataset.id);
+    if (!word) return;
+    starBtn.classList.toggle('active', !!word.starred);
+    starBtn.setAttribute('aria-pressed', String(Boolean(word.starred)));
   });
 }
 
@@ -156,6 +158,10 @@ window.applyCloudWordsFromSnapshot = function(cloudWords) {
   const prev = Array.isArray(window.words) ? window.words : [];
   const uid = window.auth?.currentUser?.uid;
   let normalized = applyStoredWordOrder(cloudWords);
+  if (!isCustomWorldView()) {
+    const expanded = new Set(prev.filter(word => word.expanded).map(word => String(word.id)));
+    normalized = normalized.map(word => ({ ...word, expanded: expanded.has(String(word.id)) }));
+  }
   if (!isCustomWorldView()) {
     loadDictionarySortPrefs();
   }
@@ -434,6 +440,7 @@ window.addWord = async function() {
   if (!w || !m) { showToast("عبّي الكلمة ومعناها يا بطل!"); return; }
 
   const btn = document.getElementById('addBtn');
+  let savedWord = null;
   btn.disabled = true;
 
   if (editId) {
@@ -472,15 +479,40 @@ window.addWord = async function() {
     const newWord = applyKnownSharedMastery({ id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:0, order:0, createdAt:new Date().toISOString() });
     window.words.unshift(newWord);
     reindexWordOrder(window.words);
-    const realId = await saveActiveWordToCloud(newWord);
+    let realId = null;
+    try {
+      realId = await saveActiveWordToCloud(newWord);
+    } catch (error) {
+      // Do not claim the guest's mandatory first-word step when its actual
+      // persistence failed. Keep the form values so a retry is possible.
+      window.words = window.words.filter((word) => word !== newWord);
+      btn.disabled = false;
+      showToast('تعذّر حفظ الكلمة الآن. جرّب مرة ثانية.', 'danger');
+      return;
+    }
     if (realId) newWord.id = realId;
+    savedWord = newWord;
     renderLimit = 20;
   }
 
+  try {
+    saveAndRender();
+  } catch (error) {
+    if (savedWord) window.words = window.words.filter((word) => word !== savedWord);
+    btn.disabled = false;
+    showToast('تعذّر حفظ الكلمة على الجهاز. بيانات الحقول بقيت للمحاولة مجددًا.', 'danger');
+    return;
+  }
   clearInputs();
   setAddFormExpanded(false);
   btn.disabled = false;
-  saveAndRender();
+  // This event is emitted only after the active dictionary was persisted, not
+  // on opening the form or typing.  The guest first-word step consumes it.
+  if (savedWord && window.words?.some((word) => word === savedWord || String(word?.id) === String(savedWord?.id))) {
+    window.dispatchEvent(new CustomEvent('lootlingua:dictionary-word-saved', {
+      detail: { id: savedWord.id, owner: window.auth?.currentUser?.uid || 'guest', scope: isCustomWorldView() ? 'custom-world' : 'personal' },
+    }));
+  }
 };
 
 // ═══════════════════════════════════════════════════════
@@ -962,13 +994,11 @@ window.refreshGuestSearchLocks = function() {
 
 function showGuestTrialBlocked() {
   pushNotification('عذراً يا بطل! ميزة البحث مخصصة للأساطير المسجلين فقط. سجل الآن مجاناً!', 'warning');
-  if (window.__lootlinguaEntryGamerGuideActive) return;
   window.openAppAuth?.('login');
 }
 
 function showSearchLockRegisterHint() {
   pushNotification('عذراً يا بطل! ميزة البحث مخصصة للأساطير المسجلين فقط. سجل الآن مجاناً!', 'warning');
-  if (window.__lootlinguaEntryGamerGuideActive) return;
   window.openAppAuth?.('login');
 }
 
@@ -1089,13 +1119,6 @@ function clearGamerSuggestionsUI() {
   document.getElementById('gamerSuggestionsPanel')?.remove();
 }
 
-function clearGameGamerAiPanel() {
-  const panel = document.getElementById('gameGamerAiPanel');
-  if (panel) {
-    panel.style.display = 'none';
-    panel.innerHTML = '';
-  }
-}
 
 function sugAttr(str) {
   return encodeURIComponent(String(str ?? ''));
@@ -1116,8 +1139,6 @@ function pickSuggestionFields(s) {
 }
 
 function getSuggestionGameLabel() {
-  if (currentView === 'minecraft') return 'Minecraft';
-  if (currentView === 'pubg') return 'PUBG';
   return '';
 }
 
@@ -1171,8 +1192,7 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
   const xpGain = 0;
-  const inGameDict = currentView === 'minecraft' || currentView === 'pubg';
-  const category = inGameDict ? (game || 'لعبة') : (pos || 'مصطلح ألعاب');
+  const category = pos || 'مصطلح ألعاب';
   let added = false;
 
   try {
@@ -1205,7 +1225,6 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         }));
         persistDictionary();
         if (isEditableDictionaryView()) render();
-        if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
         pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
         added = true;
       } else {
@@ -1213,7 +1232,6 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         window.words.unshift(nw);
         persistDictionary();
         if (isEditableDictionaryView()) render();
-        if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
         pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()} محلياً — سجّل دخول للمزامنة`, 'success');
         added = true;
       }
@@ -1222,7 +1240,6 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
       window.words.unshift(nw);
       persistDictionary();
       if (isEditableDictionaryView()) render();
-      if (inGameDict && typeof recordGameDictionaryAdd === 'function') recordGameDictionaryAdd();
       pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
       added = true;
     }
@@ -1518,6 +1535,7 @@ function selectSuggestion(ar, pos, ex) {
   const box = document.getElementById('suggestionsBox');
   if (box) box.style.display = 'none';
   clearGamerSuggestionsUI();
+  window.dispatchEvent(new CustomEvent('lootlingua:dictionary-meaning-selected'));
 }
 
 const WORD_HUNTER_MIN_CONFIDENCE = 45;
@@ -1872,71 +1890,6 @@ window.fetchWordHunterGamerMeaning = async function(event) {
   }
 };
 
-window.openGameGamerAiSearch = function() {
-  if (!guardGuestAiSearch('gamer')) return;
-  const input = document.getElementById('gameSearchInput');
-  const word = (input?.value || '').trim();
-  if (!word) {
-    showToast('اكتب المصطلح اللي بدك تسأل عنه بالإنجليزي');
-    input?.focus();
-    return;
-  }
-  fetchGameGamerSuggestions(word);
-};
-
-window.fetchGameGamerSuggestions = async function(forcedWord) {
-  const word = (forcedWord || document.getElementById('gameSearchInput')?.value || '').trim();
-  if (!word) {
-    showToast('اكتب كلمة أولاً');
-    return;
-  }
-  if (!guardGuestAiSearch('gamer')) return;
-  if (!rateLimit('fetchGameGamerSuggestions', 4, 45000)) return;
-
-  const panel = document.getElementById('gameGamerAiPanel');
-  const askBtn = document.querySelector('.game-gamer-ask-btn');
-  if (!panel) return;
-
-  if (askBtn) { askBtn.disabled = true; askBtn.classList.add('loading'); }
-  panel.style.display = 'block';
-  panel.innerHTML = '<p class="gamer-suggestions-loading"><i class="fas fa-spinner fa-spin"></i> جاري سؤال الـ AI عن معنى الألعاب...</p>';
-
-  const gameLabel = getSuggestionGameLabel() || 'ألعاب';
-
-  try {
-    const { data, fromCache } = await fetchAiMeaningsWithCache(word, 'gamer');
-    if (!data.length) {
-      panel.innerHTML = '<p class="gamer-suggestions-empty">ما لقينا معنى جيمر واضح. جرّب تهجئة ثانية أو كلمة ثانية.</p>';
-      return;
-    }
-
-    const cacheNote = fromCache
-      ? ' <span class="ai-cache-tag">من الذاكرة المشتركة</span>'
-      : '';
-    let html = `<p class="gamer-suggestions-title"><i class="fa-solid fa-gamepad"></i> نتائج AI — ${escapeHtml(gameLabel)}${cacheNote}</p>`;
-    html += '<div class="game-gamer-results">';
-    html += renderSuggestionHtml(data, 'gamer-sug-item', {
-      sourceWord: word,
-      game: gameLabel,
-      allowSelect: false,
-      showActions: true,
-      listSelector: '.game-gamer-results',
-    });
-    html += '</div>';
-    panel.innerHTML = html;
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  } catch (err) {
-    if (err.code === 403) return;
-    const msg = String(err.message || '').includes('fetch') || err.message === 'sleeping'
-      ? 'السيرفر كان نايم.. جرّب بعد شوي.'
-      : (err.message || 'فشل جلب معنى الألعاب');
-    panel.innerHTML = `<p class="gamer-suggestions-error">${escapeHtml(msg)}</p>`;
-  } finally {
-    if (askBtn) { askBtn.disabled = false; askBtn.classList.remove('loading'); }
-  }
-};
-
-// ═══════════════════════════════════════════════════════
 // Filter
 // ═══════════════════════════════════════════════════════
 function setFilter(f) {
@@ -2040,6 +1993,7 @@ function handleLiClick(index, el) {
     const word = window.words[index];
     if (word) {
       word.expanded = !word.expanded;
+      if (word.expanded) window.ensureWordCardDetails?.(word, el);
       // Expansion is transient UI state; preserve the virtual window and scroll position.
       el.classList.toggle('show-example', word.expanded);
       el.setAttribute('aria-expanded', String(word.expanded));
@@ -2096,7 +2050,7 @@ function showBackupHelp(type, event) {
 const JSON_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const JSON_IMPORT_MAX_WORDS = 500;
 const JSON_IMPORT_MAX_FIELD = 500;
-const JSON_IMPORT_FEATURE_PRIORITY = ['quiz', 'pubg', 'minecraft', 'treasure', 'starred'];
+const JSON_IMPORT_FEATURE_PRIORITY = ['quiz', 'treasure', 'starred'];
 
 function isJsonImportBatchActive() {
   return window.__jsonImportBatchActive === true;

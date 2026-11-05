@@ -1,7 +1,10 @@
 (function attachGuidedFirstJourneyController(root) {
   'use strict';
 
-  const runtime = { state: null, loadedOwner: '', loading: null, handoff: null, lastRoute: null, handoffAttempts: 0, reengagementOwner: '' };
+  const runtime = {
+    state: null, loadedOwner: '', loading: null, persistQueue: Promise.resolve(),
+    handoff: null, lastRoute: null, handoffAttempts: 0, reengagementOwner: '',
+  };
   const COACH_ID = 'guidedFirstJourneyCoach';
   const HANDOFF_KEY = 'lootlingua:guided-first-journey:auth-handoff:v1';
 
@@ -39,36 +42,45 @@
 
   function announce() {
     const on = active();
-    // Once the guest reaches the sign-in handoff, this small UX layer must not
-    // lock any app surface. Product-owned progression locks remain untouched.
-    const guestExploring = Boolean(on && runtime.state?.guestDictionaryAvailable && !user());
     document.documentElement.classList.toggle('guided-first-journey-active', on);
     document.body.classList.toggle('guided-first-journey-active', on);
-    document.querySelectorAll('[data-feature]').forEach((element) => {
-      const feature = String(element.getAttribute('data-feature') || '');
-      const locked = on && !guestExploring && (
-        ['quiz', 'minecraft', 'pubg', 'starred', 'treasure'].includes(feature) ||
-        feature === 'personal'
-      );
-      element.classList.toggle('guided-first-journey-locked', locked);
-      if (locked) element.setAttribute('data-guided-lock', 'true');
-      else element.removeAttribute('data-guided-lock');
-    });
-    document.querySelectorAll('[data-dock-view="personal"], [data-view="personal"]').forEach((element) => {
-      element.classList.toggle('guided-first-journey-deemphasized', false);
-      element.classList.toggle('guided-first-journey-locked', on && !guestExploring);
-      if (on && !guestExploring) element.setAttribute('data-guided-lock', 'true');
-      else element.removeAttribute('data-guided-lock');
+    // A public-world gate journey must not become a global feature lock. Each
+    // feature owns its normal unlock rule and its own discovery progress.
+    document.querySelectorAll('[data-feature], [data-dock-view="personal"], [data-view="personal"]').forEach((element) => {
+      element.classList.remove('guided-first-journey-deemphasized', 'guided-first-journey-locked');
+      element.removeAttribute('data-guided-lock');
     });
     root.dispatchEvent(new CustomEvent('lootlingua:guided-first-journey-change', { detail: { state: runtime.state } }));
   }
 
   async function persist(state) {
-    saveLocal(state);
+    // A previous phase may still be awaiting Firestore while the user has
+    // already completed the quiz. Never let that older phase overwrite the
+    // newest local or cloud state.
+    const latest = runtime.state && Number(runtime.state.updatedAt) > Number(state.updatedAt)
+      ? runtime.state
+      : state;
+    saveLocal(latest);
     const current = user();
-    if (!current || !cloud()?.save) return state;
-    try { await cloud().save(state, current); } catch (_) { /* local state remains safely owner-scoped until retry */ }
-    return state;
+    if (!current || !cloud()?.save) return latest;
+    const ownerId = current.uid;
+    const write = runtime.persistQueue.catch(() => {}).then(async () => {
+      if (user()?.uid !== ownerId) return latest;
+      const currentState = runtime.state &&
+        Number(runtime.state.updatedAt) > Number(latest.updatedAt)
+        ? runtime.state
+        : latest;
+      saveLocal(currentState);
+      await cloud().save(currentState, current);
+      return currentState;
+    });
+    runtime.persistQueue = write.then(() => undefined, () => undefined);
+    try { await write; } catch (_) {
+      // Owner-scoped local state remains available if cloud persistence fails.
+    }
+    return runtime.state && Number(runtime.state.updatedAt) > Number(latest.updatedAt)
+      ? runtime.state
+      : latest;
   }
 
   async function boot() {
@@ -152,9 +164,10 @@
     const next = api().transition(runtime.state, { type: 'enable-guest-dictionary' }, Date.now());
     if (next === runtime.state) return next;
     runtime.state = next;
+    clearCoach();
     announce();
     await persist(next);
-    root.showToast?.('يمكنك الآن استكشاف الموقع كاملاً كضيف، بما فيه إضافة كلماتك يدويًا من قاموسك الشخصي. سجّل دخولك لاحقًا لحفظ الرحلة ومتابعة التعلّم من العوالم.', 'info', 6200);
+    // The explicit Continue as guest action owns the dictionary hand-off.
     return next;
   }
 
@@ -168,26 +181,17 @@
     return next;
   }
 
-  function shouldAllowSurface(surface, options) {
-    // guided:true is an explicit override for known system-initiated quiz entry
-    // points (startGateQuiz, startGateGapReview, startNotificationWordReview,
-    // openPublishedGatePractice). All four call loadQuizView, which passes
-    // surface='quiz'. Restrict the bypass to that surface only so that accidental
-    // or future callers cannot suppress guards for unrelated surfaces.
-    if (!active() || (options?.guided === true && surface === 'quiz')) return true;
-    const guestExploring = Boolean(runtime.state?.guestDictionaryAvailable && !user());
-    if (guestExploring) return true;
-    if (surface === 'personal') {
-      root.showToast?.('خطوتك الحالية داخل العالم. سيفتح القاموس عندما تحتاجه في المسار.', 'info', 3400);
-      return false;
-    }
-    const blocked = new Set(['quiz', 'minecraft', 'pubg', 'starred', 'treasure', 'custom-worlds']);
-    if (!blocked.has(surface)) return true;
-    root.showToast?.('خطوتك الحالية موجودة داخل البوابة المفتوحة. أكملها أولاً ثم ستتسع الرحلة.', 'info', 3600);
-    return false;
+  function shouldAllowSurface() {
+    // Guided First Journey is a public-world progress record, not a feature
+    // eligibility system. Keep its special gate quiz metadata, but never use
+    // it to block the ordinary quiz, private worlds, or game dictionaries.
+    return true;
   }
 
   function applyRoute(payload) {
+    const dictionary = root.LootLinguaPersonalDictionaryOnboarding?.getState?.();
+    if (dictionary && dictionary.phase !== 'awaiting-journey' && dictionary.phase !== 'completed') { clearCoach(); return; }
+    if (!user() && runtime.state?.guestDictionaryAvailable) { clearCoach(); return; }
     if (!active() || !payload?.root) return;
     runtime.lastRoute = payload;
     const state = runtime.state;
@@ -250,8 +254,19 @@
       anchor,
       content,
       labelledBy: title.id,
+      persistent: true,
     });
   }
+
+  function clearCoach() {
+    runtime.lastRoute = null;
+    document.querySelectorAll('.guided-first-journey-target').forEach((node) => node.classList.remove('guided-first-journey-target'));
+    root.LootLinguaPopover?.closeIf?.(COACH_ID, { silent: true });
+  }
+  root.addEventListener('lootlingua:personal-dictionary-onboarding-change', () => {
+    const dictionary = root.LootLinguaPersonalDictionaryOnboarding?.getState?.();
+    if (dictionary?.phase !== 'awaiting-journey') clearCoach();
+  });
 
   root.addEventListener('lootlingua:journey-auth-requested', (event) => {
     const intent = event.detail?.intent;
@@ -268,57 +283,53 @@
   root.addEventListener('lootlingua:guided-first-journey-cloud-ready', () => { runtime.loadedOwner = ''; void boot(); });
   root.addEventListener('lootlingua:initial-data-ready', () => { void boot(); });
 
-  // ── Quiz completion wiring ────────────────────────────────────────────────
-  // completeFromQuizCta must fire only when the gate quiz ACTUALLY finishes,
-  // not when the mode picker opens. quiz-runtime.js dispatches this event after
-  // the verified quiz result is durably committed and SRS state is saved.
-  //
-  // Validation rules (all must hold to accept the completion):
-  //   1. The journey must still be active (not already completed).
-  //   2. The current phase must be awaiting-quiz-cta (gate words were loaded).
-  //   3. The event must carry a journey: source (gate quiz, not a personal quiz).
-  //   4. The worldId from the event must match the onboarding world.
-  //   5. The gateId from the event must match the onboarding gate (when present).
-  //   6. A signed-in user must own this journey (guest cannot reach this phase).
-  // The contract's transition() is idempotent: a duplicate event returns the
-  // same state object unchanged, so concurrent or replayed events are harmless.
+  // ── Verified gate quiz completion ────────────────────────────────────────
+  // Wait for controller boot before evaluating the event. The page may restore
+  // the published journey and its quiz session while the cloud-backed UX state
+  // is still loading; dropping this event would leave the entire app locked.
+  async function handleTrustedQuizCompleted(detail) {
+    const source = String(detail?.source || '');
+    const eventWorldId = String(detail?.worldId || '');
+    const eventGateId = String(detail?.gateId || '');
+    const hasJourneyContext = detail?.journeyContext === true || source.startsWith('journey:');
+    if (!hasJourneyContext || !eventWorldId || !eventGateId || Number(detail?.total) < 1) return;
+    if (!user()) return;
+
+    await boot();
+    if (!active() || !user()) return;
+    if (eventWorldId !== runtime.state.worldId) return;
+    if (runtime.state.gateId && eventGateId !== runtime.state.gateId) return;
+
+    // A completed, verified gate quiz proves that its exact gate was opened
+    // and its words were loaded. Recover from a lagging persisted UX phase, but
+    // never replace a known, different gate ID.
+    if (runtime.state.phase === 'awaiting-first-gate' && !runtime.state.gateId) {
+      await gateOpened({ worldId: eventWorldId, gateId: eventGateId });
+    }
+    if (
+      runtime.state.phase === 'first-gate-opened' &&
+      runtime.state.gateId === eventGateId
+    ) {
+      await gateWordsLoaded({ worldId: eventWorldId, gateId: eventGateId });
+    }
+    if (runtime.state?.phase !== 'awaiting-quiz-cta') return;
+    if (runtime.state.gateId !== eventGateId) return;
+
+    await completeFromQuizCta({ worldId: eventWorldId, gateId: eventGateId });
+  }
+
   root.addEventListener('lootlingua:trusted-quiz-completed', (event) => {
-    const detail = event.detail || {};
-    const source = String(detail.source || '');
-    let rejectReason = '';
-    if (!source.startsWith('journey:')) rejectReason = 'source-not-journey';
-    else if (!active()) rejectReason = 'journey-not-active';
-    else if (runtime.state?.phase !== 'awaiting-quiz-cta') rejectReason = 'phase-' + String(runtime.state?.phase || '');
-    else if (!user()) rejectReason = 'no-signed-in-user';
-    else {
-      const eventWorldId = String(detail.worldId || '');
-      if (!eventWorldId) rejectReason = 'no-event-worldId';
-      else {
-        try { console.info('[GFJ-DIAG] controller accepted event -> completeFromQuizCta', {
-          phase: runtime.state?.phase, worldId: eventWorldId, gateId: String(detail.gateId || ''),
-        }); } catch (_) {}
-        void completeFromQuizCta({ worldId: eventWorldId, gateId: String(detail.gateId || '') }).then((next) => {
-          try { console.info('[GFJ-DIAG] completeFromQuizCta result', {
-            phase: next?.phase, worldId: next?.worldId, gateId: next?.gateId,
-            transitioned: next?.phase === 'completed',
-          }); } catch (_) {}
-        });
-        return;
-      }
-    }
-    if (rejectReason) {
-      try { console.info('[GFJ-DIAG] controller rejected event', {
-        rejectReason, phase: runtime.state?.phase, active: active(), hasUser: Boolean(user()),
-        source, eventWorldId: String(detail.worldId || ''), eventGateId: String(detail.gateId || ''),
-      }); } catch (_) {}
-      return;
-    }
+    void handleTrustedQuizCompleted(event.detail || {}).catch((error) => {
+      root.LootLinguaOperations?.diagnostic?.('guided-first-journey-completion-error', {
+        message: String(error?.message || error),
+      });
+    });
   });
 
   queueMicrotask(boot);
 
   Object.defineProperty(root, 'LootLinguaGuidedFirstJourney', {
-    value: Object.freeze({ boot, beginFromEntry, gateOpened, gateWordsLoaded, completeFromQuizCta, enableGuestDictionary, shouldAllowSurface, applyRoute, getState: () => runtime.state }),
+    value: Object.freeze({ boot, beginFromEntry, gateOpened, gateWordsLoaded, completeFromQuizCta, enableGuestDictionary, shouldAllowSurface, applyRoute, clearCoach, getState: () => runtime.state }),
     configurable: false, writable: false,
   });
 })(typeof window !== 'undefined' ? window : globalThis);

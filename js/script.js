@@ -1,4 +1,4 @@
-﻿let currentFilter    = 'all';
+let currentFilter    = 'all';
 let editId           = null;
 let isReorderMode    = false;
 let selectedIndices  = [];
@@ -219,7 +219,7 @@ let pendingDeleteId  = null;
 let userXP           = parseInt(localStorage.getItem('userXP')) || 0;
 let dailyStreak      = loadInt('dailyStreak', 0);
 let lastActivity     = localStorage.getItem('lastActivityDate') || '';
-let currentView      = 'personal'; // 'personal' | 'customWorld' | 'worlds' | 'minecraft' | 'pubg' | 'starred' | 'quiz' | 'treasure'
+let currentView      = 'personal'; // 'personal' | 'customWorld' | 'worlds' | 'starred' | 'quiz' | 'treasure'
 let customWorlds     = readCustomWorldsFromStorage();
 let activeCustomWorldId = null;
 let pendingCustomWorldModalMode = 'create';
@@ -712,7 +712,7 @@ function syncSelectedIndicesFromBulkSelection() {
 })();
 
 function setActiveNavLink(key) {
-  // key: 'personal' | 'minecraft' | 'pubg'
+  // key: 'personal' | 'starred' | 'quiz'
   document.querySelectorAll('.nav-link[data-view]').forEach(l => {
     l.classList.toggle('active', l.dataset.view === key);
   });
@@ -739,11 +739,9 @@ function computeDefaultUnlockedFeatures() {
   const p = getUnlockProgressSnapshot();
   const u = new Set(['personal', 'stats']);
   if (p.wordCount >= 1) {
-    u.add('starred');
     u.add('treasure');
   }
-  if (p.wordCount >= 2 || p.userXP >= 10) u.add('minecraft');
-  if (p.wordCount >= 2 || p.userXP >= 10) u.add('pubg');
+  if (p.wordCount >= 5) u.add('starred');
   if (p.wordCount >= 5) u.add('quiz');
   return u;
 }
@@ -779,33 +777,11 @@ const UNLOCK_EXPLAIN = {
   starred: {
     title: 'الكلمات الصعبة',
     why: 'نفعّل قائمة الكلمات الصعبة بعد ما يصير عندك كلمات تقدر تعلّم عليها نجمة.',
-    how: 'أضف كلمة واحدة على الأقل إلى قاموسك.',
+    how: 'أضف 5 كلمات على الأقل إلى قاموسك.',
     progress: (p) => {
-      const need = 1;
+      const need = 5;
       const n = p.wordCount;
       return n >= need ? `تقدّمك: ${n} كلمة (تم استيفاء الشرط).` : `تقدّمك: ${n} من ${need} كلمة في القاموس.`;
-    },
-  },
-  minecraft: {
-    title: 'قاموس Minecraft',
-    why: 'قاموس اللعبة يفتح بسرعة بعد شوية كلمات جديدة.',
-    how: 'أضف 2 كلمة فقط إلى قاموسك.',
-    progress: (p) => {
-      const ok = p.wordCount >= 2 || p.userXP >= 10;
-      return ok
-        ? `تقدّمك: ${p.wordCount} كلمة، ${p.userXP} XP (تم استيفاء الشرط).`
-        : `تقدّمك: ${p.wordCount} من 2 كلمات، و${p.userXP} من 10 XP.`;
-    },
-  },
-  pubg: {
-    title: 'مصطلحات PUBG',
-    why: 'قاموس PUBG يفتح بسرعة بعد شوية كلمات جديدة.',
-    how: 'أضف 2 كلمة فقط إلى قاموسك.',
-    progress: (p) => {
-      const ok = p.wordCount >= 2 || p.userXP >= 10;
-      return ok
-        ? `تقدّمك: ${p.wordCount} كلمة، ${p.userXP} XP (تم استيفاء الشرط).`
-        : `تقدّمك: ${p.wordCount} من 2 كلمات، و${p.userXP} من 10 XP.`;
     },
   },
   quiz: {
@@ -821,10 +797,10 @@ const UNLOCK_EXPLAIN = {
   },
   treasure: {
     title: 'صندوق المكافآت',
-    why: 'صندوق المكافآت يفتح بعد ما تضيف 5 كلمات لقاموسك عشان يكون له قيمة.',
-    how: 'ابحث عن 5 كلمات وأضفها لقاموسك الشخصي أو ابدأ رحلة عالم.',
+    why: 'صندوق المكافآت يفتح عند إضافة أول كلمة إلى قاموسك.',
+    how: 'أضف كلمة واحدة على الأقل إلى قاموسك الشخصي.',
     progress: (p) => {
-      const need = 5;
+      const need = 1;
       return p.wordCount >= need
         ? `تقدّمك: ${p.wordCount} كلمة (تم استيفاء الشرط).`
         : `تقدّمك: ${p.wordCount} من ${need} كلمة في القاموس.`;
@@ -1028,7 +1004,7 @@ function syncDockLockUi() {
   document.querySelectorAll('.treasure-dock-btn[data-feature]').forEach((btn) => {
     const id = btn.getAttribute('data-feature');
     if (!id) return;
-    const locked = !isFeatureUnlocked(id);
+    const locked = id !== 'custom-worlds' && !isFeatureUnlocked(id);
     btn.classList.toggle('dock-feature-locked', locked);
     btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
     const overlay = btn.querySelector('.dock-lock-overlay');
@@ -1215,8 +1191,6 @@ const APP_VIEW_ROUTES = {
   personal: 'dictionary',
   treasure: 'treasure',
   worlds: 'worlds',
-  minecraft: 'minecraft',
-  pubg: 'pubg',
   starred: 'hard-words',
   quiz: 'quiz',
   admin: 'admin',
@@ -1426,7 +1400,7 @@ window.loadLootLinguaAdminFeature = function() {
   adminFeatureLoadPromise = (async () => {
     await loadLootLinguaAdminAccess();
     await loadFeatureScript('js/admin-word-import.js?v=20260729-1');
-    await loadFeatureScript('js/admin.js?v=20260729-1');
+    await loadFeatureScript('js/admin.js?v=20261028-legacy-game-removal-fix-1');
     await loadFeatureScript('js/test-clock.js?v=20260729-2', { module: true });
   })().catch((error) => {
     adminFeatureLoadPromise = null;
@@ -1461,8 +1435,6 @@ function openRouteView(viewKey) {
   if (window.LootLinguaGuidedFirstJourney?.shouldAllowSurface?.(viewKey) === false) return;
   if (viewKey === 'treasure') loadTreasureView();
   else if (viewKey === 'worlds') loadWorldsView();
-  else if (viewKey === 'minecraft') loadGameDictionary('minecraft');
-  else if (viewKey === 'pubg') loadGameDictionary('pubg');
   else if (viewKey === 'starred') loadStarredView();
   else if (viewKey === 'quiz') loadQuizView();
   else if (viewKey === 'admin') {
@@ -1859,7 +1831,7 @@ window.resetLootlinguaProfileState = function(options = {}) {
   if (typeof renderTreasureRoom === 'function' && currentView === 'treasure') renderTreasureRoom();
 };
 
-window.mergeLootlinguaProfileFromCloud = function(d) {
+window.mergeLootlinguaProfileFromCloud = function(d, options = {}) {
   // Track if we loaded from cloud to avoid double checkAndUpdateStreak
   window._profileLoaded = true;
   if (!d) return;
@@ -1954,7 +1926,15 @@ window.mergeLootlinguaProfileFromCloud = function(d) {
   if (d.freezeSaves !== undefined) saveInt('lootlinguaFreezeSaves', Math.max(loadInt('lootlinguaFreezeSaves', 0), Number(d.freezeSaves) || 0));
   if (d.gameDictAdds !== undefined) saveInt('lootlinguaGameDictAdds', Math.max(loadInt('lootlinguaGameDictAdds', 0), Number(d.gameDictAdds) || 0));
   if (d.perfectQuizzes !== undefined) saveInt('lootlinguaPerfectQuizzes', Math.max(loadInt('lootlinguaPerfectQuizzes', 0), Number(d.perfectQuizzes) || 0));
-  if (d.runnerCoins !== undefined) saveInt('lootlingua.runner.coins.v1', Math.max(loadInt('lootlingua.runner.coins.v1', 0), Number(d.runnerCoins) || 0));
+  if (d.runnerCoins !== undefined) {
+    const guestCoins = Math.max(0, Number(d.runnerCoins) || 0);
+    const existingCoins = loadInt('lootlingua.runner.coins.v1', 0);
+    // A guest balance is distinct from the account balance. It is added only
+    // during the durable guest migration; normal cloud hydration keeps max.
+    saveInt('lootlingua.runner.coins.v1', options.guestMigration === true
+      ? existingCoins + guestCoins
+      : Math.max(existingCoins, guestCoins));
+  }
   if (d.runnerBestDistance !== undefined) saveInt('lootlingua.runner.best-distance.v1', Math.max(loadInt('lootlingua.runner.best-distance.v1', 0), Number(d.runnerBestDistance) || 0));
   if (Array.isArray(d.extraChests)) {
     const localExtra = loadJSON('lootlinguaExtraChests', []);
@@ -2047,6 +2027,7 @@ function getGuestProgressSummary(profile) {
   if (titles > 0) stats.push({ label: `${titles} ألقاب`, hint: 'إنجازات مفتوحة' });
   if (chests > 0) stats.push({ label: `${chests} صناديق`, hint: 'لوت يومي' });
   if ((Number(profile?.streakFreezes) || 0) > 0) stats.push({ label: `${profile.streakFreezes} تجميد`, hint: 'حماية الستريك' });
+  if ((Number(profile?.runnerCoins) || 0) > 0) stats.push({ label: `${profile.runnerCoins} عملة`, hint: 'رصيد لعبة الجري' });
   return stats;
 }
 
@@ -2319,6 +2300,7 @@ window.confirmGuestMigration = async function() {
         : [...uniquePreviousProfiles, currentGuestProfile],
       createdAt: Number(previousProfileMigration?.createdAt) || Date.now(),
       updatedAt: Date.now(),
+      profileCommittedAt: Number(previousProfileMigration?.profileCommittedAt) || 0,
     };
     // The learning uploads above and this account-scoped recovery record must
     // both exist before the guest namespace is purged. profile-cloud removes
@@ -2341,6 +2323,9 @@ window.confirmGuestMigration = async function() {
       notificationError.code = 'notification/migration-failed';
       throw notificationError;
     }
+    // Keep the verified profile marker until all later migration stages have
+    // succeeded. This prevents a retry from crediting the same guest balance.
+    window.finalizePendingGuestProfileMigration?.(user);
     markGuestMigrationCompleteFlag(user, 'accepted', summary.guestSnapshotId);
     purgeStaleGuestLocalData();
     saveAndRender();
@@ -2389,6 +2374,7 @@ window.declineGuestMigration = function() {
 };
 
 function beginViewSwitch() {
+  window.LootLinguaGuidedFirstJourney?.clearCoach?.();
   document.body.classList.add('view-transitioning');
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
