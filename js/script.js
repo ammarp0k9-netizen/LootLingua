@@ -46,6 +46,13 @@ function saveDictionarySortPrefs() {
   }));
 }
 
+window.getPersonalDictionaryQueryMode = function() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('lootlinguaDictSort_' + getStorageUserId() + '_personal') || '{}');
+    return ['newest', 'oldest'].includes(saved.mode) ? saved.mode : 'auto';
+  } catch { return 'auto'; }
+};
+
 function reindexWordOrder(words = window.words) {
   if (!Array.isArray(words)) return [];
   words.forEach((word, index) => { word.order = index; });
@@ -57,6 +64,8 @@ function applyStoredWordOrder(words) {
   if (!arr.length) return arr;
   if (arr.some((word) => Number.isFinite(word?.order))) {
     arr.sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+    if (window.LootLinguaDictionaryPages?.current()?.state().complete === false &&
+        words === window.LootLinguaDictionaryPages.current().words()) return arr;
     return reindexWordOrder(arr);
   }
   return reindexWordOrder(arr);
@@ -64,25 +73,41 @@ function applyStoredWordOrder(words) {
 
 function scheduleWordOrderCloudSync() {
   clearTimeout(_wordOrderSyncTimer);
+  const operation = captureWordOrderSync();
   _wordOrderSyncTimer = setTimeout(() => {
-    syncWordOrdersToCloud().catch(() => {});
+    syncWordOrdersToCloud(operation).catch(() => {
+      if (isWordOrderSyncOwnerCurrent(operation)) showToast('تعذّر حفظ الترتيب في حسابك. أعد محاولة الترتيب.', 'warning', 5000);
+    });
   }, 450);
 }
 
-async function syncWordOrdersToCloud() {
-  const user = window.auth?.currentUser;
-  if (!user || !Array.isArray(window.words)) return;
-  if (isCustomWorldView()) {
-    if (!window.updateCustomWorldWordInCloud) return;
-    await Promise.all(
-      window.words.map((word, index) => window.updateCustomWorldWordInCloud(activeCustomWorldId, word.id, { order: index }))
-    );
-    return;
+function captureWordOrderSync() {
+  return {
+    uid: window.auth?.currentUser?.uid || '',
+    generation: Number(window.__lootlinguaAuthGeneration) || 0,
+    worldId: isCustomWorldView() ? String(activeCustomWorldId) : '',
+    rows: (Array.isArray(window.words) ? window.words : []).map((word, order) => ({ id: word.id, order })),
+  };
+}
+
+function isWordOrderSyncOwnerCurrent(operation) {
+  return Boolean(operation?.uid) && window.auth?.currentUser?.uid === operation.uid &&
+    (Number(window.__lootlinguaAuthGeneration) || 0) === operation.generation;
+}
+
+async function syncWordOrdersToCloud(operation = captureWordOrderSync()) {
+  if (!isWordOrderSyncOwnerCurrent(operation)) return false;
+  const update = operation.worldId ? window.updateCustomWorldDictionaryWordInCloud : window.updateDictionaryWordInCloud;
+  if (typeof update !== 'function') throw new Error('Dictionary writer unavailable.');
+  // Bound concurrent writes; a large dictionary must not start thousands of
+  // requests at once, and a queued batch must not follow a new account.
+  for (let offset = 0; offset < operation.rows.length; offset += 20) {
+    if (!isWordOrderSyncOwnerCurrent(operation)) return false;
+    await Promise.all(operation.rows.slice(offset, offset + 20).map(row => operation.worldId
+      ? update(operation.worldId, row.id, { order: row.order })
+      : update(row.id, { order: row.order })));
   }
-  if (!window.updateWordInCloud) return;
-  await Promise.all(
-    window.words.map((word, index) => window.updateWordInCloud(word.id, { order: index }))
-  );
+  return true;
 }
 
 function closeAppDropdowns(exceptWrap = null) {
@@ -394,8 +419,11 @@ window.toggleDictionarySortMenu = function() {
   syncDictionarySortUI();
 };
 
-window.setDictionarySortMode = function(mode, category) {
+window.setDictionarySortMode = async function(mode, category) {
   const validModes = ['auto', 'newest', 'oldest', 'alpha', 'category'];
+  const pagingStore = !isCustomWorldView() && window.LootLinguaDictionaryPages?.current();
+  const paged = pagingStore && !pagingStore.state().complete && ['auto', 'newest', 'oldest'].includes(mode) && window.setPersonalDictionaryCloudSort;
+  if (!paged && await window.LootLinguaDictionaryPages?.requireComplete({ personal: !isCustomWorldView() }) === false) return;
   dictionarySortMode = validModes.includes(mode) ? mode : 'auto';
   if (mode === 'category') {
     dictionarySortCategory = category || 'all';
@@ -404,7 +432,8 @@ window.setDictionarySortMode = function(mode, category) {
   }
   window.words = sortDictionaryWords(window.words);
   saveDictionarySortPrefs();
-  if (dictionarySortMode === 'auto') {
+  if (paged) window.setPersonalDictionaryCloudSort(dictionarySortMode);
+  if (dictionarySortMode === 'auto' && !paged) {
     persistDictionary();
   }
   document.getElementById('dictionarySortMenu')?.classList.remove('open');
@@ -725,8 +754,8 @@ function setActiveNavLink(key) {
 function getUnlockProgressSnapshot() {
   const words = getPersonalDictionaryWordsSnapshot();
   return {
-    wordCount: words.length,
-    starredCount: words.filter(w => w.starred).length,
+    wordCount: getDictionaryWordCount(),
+    starredCount: window.LootLinguaDictionaryPages?.current()?.state().counts?.starred ?? words.filter(w => w.starred).length,
     userXP: loadInt('userXP', 0),
     userLevel: getLevelFromXP(loadInt('userXP', 0)),
     dailyStreak: loadInt('dailyStreak', 0),
@@ -1073,7 +1102,7 @@ function showThemeUseMessageOnce(theme) {
   const key = themeSeenKey('used', theme);
   if (localStorage.getItem(key) === '1') return;
   localStorage.setItem(key, '1');
-  requestProfileCloudSave();
+  requestProfilePreferencesSave({ themeIntroSeen: getThemeIntroSeenList() });
   setTimeout(() => showToast(THEME_USE_MESSAGES[theme], 'success', 5200), 2400);
 }
 
@@ -1133,11 +1162,12 @@ window.setTheme = function(theme, skipLockCheck = false) {
   localStorage.setItem(currentThemePreferenceKey(), theme);
   document.querySelectorAll('.theme-option').forEach(opt => {
     opt.classList.toggle('active', opt.dataset.theme === theme);
+    opt.setAttribute('aria-pressed', opt.dataset.theme === theme ? 'true' : 'false');
   });
   refreshThemeLockUI();
   syncOasisAppearanceControls();
   if (!skipLockCheck && theme !== previousTheme) showThemeUseMessageOnce(theme);
-  if (!skipLockCheck) requestProfileCloudSave();
+  if (!skipLockCheck) requestProfilePreferencesSave({ theme });
   return true;
 };
 
@@ -1180,7 +1210,7 @@ function syncOasisAppearanceControls() {
 window.setProfileOasisMode = function(mode) {
   if ((document.documentElement.getAttribute('data-theme') || '') !== 'ocean') return false;
   applyOasisMode(mode, true);
-  requestProfileCloudSave();
+  requestProfilePreferencesSave({ oasisMode: document.documentElement.getAttribute('data-oasis-mode') || 'light' });
   return true;
 };
 
@@ -1196,6 +1226,7 @@ const APP_VIEW_ROUTES = {
   admin: 'admin',
 };
 const APP_MODAL_ROUTES = {
+  streakFreezeHelpModal: 'streak-freeze',
   deleteModal: 'delete-word',
   unlockExplainModal: 'locked-feature',
   logoutModal: 'logout',
@@ -1318,6 +1349,8 @@ function setPublishedContentRoute(key, params, options = {}) {
 }
 
 function closeRouteOverlays() {
+  window.cancelPendingStatsPanel?.();
+  window.LootLinguaModalFocus?.closeAll();
   document.querySelectorAll('.custom-modal').forEach(modal => {
     modal.style.display = 'none';
   });
@@ -1332,6 +1365,7 @@ function closeRouteOverlays() {
   if (stats) {
     stats.classList.remove('show');
     stats.style.display = 'none';
+    stats.setAttribute('aria-hidden', 'true');
     unlockBackgroundScroll('stats');
   }
   const wordHunterModal = document.getElementById('wordHunterModal');
@@ -1387,7 +1421,7 @@ function loadFeatureScript(src, options = {}) {
 function loadLootLinguaAdminAccess() {
   if (window.LootLinguaAdminCloud) return Promise.resolve();
   if (adminAccessLoadPromise) return adminAccessLoadPromise;
-  adminAccessLoadPromise = loadFeatureScript('js/admin-cloud.js?v=20260729-1', { module: true }).catch((error) => {
+  adminAccessLoadPromise = loadFeatureScript('js/admin-cloud.js?v=20261106-admin-fixes-1', { module: true }).catch((error) => {
     adminAccessLoadPromise = null;
     throw error;
   });
@@ -1400,7 +1434,7 @@ window.loadLootLinguaAdminFeature = function() {
   adminFeatureLoadPromise = (async () => {
     await loadLootLinguaAdminAccess();
     await loadFeatureScript('js/admin-word-import.js?v=20260729-1');
-    await loadFeatureScript('js/admin.js?v=20261028-legacy-game-removal-fix-1');
+    await loadFeatureScript('js/admin.js?v=20261106-admin-fixes-1');
     await loadFeatureScript('js/test-clock.js?v=20260729-2', { module: true });
   })().catch((error) => {
     adminFeatureLoadPromise = null;
@@ -1568,6 +1602,11 @@ function showModal(id) {
   activeModalFocusContext = { modal, returnFocus, trap };
   modal.style.display = 'flex';
   modal.setAttribute('aria-hidden', 'false');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  // Register nested confirmations so the profile dialog releases their
+  // inert state and focus can enter the confirmation buttons.
+  window.LootLinguaModalFocus?.open(modal, { dialog: modal.querySelector('.modal-content') || modal, onEscape: () => hideModal(id) });
   if (!modal.hasAttribute('tabindex')) modal.tabIndex = -1;
   requestAnimationFrame(() => {
     const focusable = getModalFocusableElements(modal);
@@ -1582,6 +1621,7 @@ function hideModal(id) {
     if (modal) {
       modal.style.display = 'none';
       modal.setAttribute('aria-hidden', 'true');
+      window.LootLinguaModalFocus?.close(modal);
     }
     if (activeModalFocusContext?.modal === modal) {
       modal?.removeEventListener('keydown', activeModalFocusContext.trap);
@@ -1717,12 +1757,16 @@ window.flushDeferredEntryToasts = function() {
 // ═══════════════════════════════════════════════════════
 function loadInt(k,d)  { const v=parseInt(localStorage.getItem(k)); return isNaN(v)?d:v; }
 function saveInt(k,v)  {
+  const before = localStorage.getItem(k);
   localStorage.setItem(k,String(v));
+  if (!window.__applyingCloudProfile && !window.__profileHydrating) window.recordProfileStorageMutation?.(k, before, String(v));
   markGuestProfileDataDirty(k);
 }
 function loadJSON(k,d) { try{const r=JSON.parse(localStorage.getItem(k));return r??d;}catch{return d;} }
 function saveJSON(k,v) {
-  localStorage.setItem(k,JSON.stringify(v));
+  const before = localStorage.getItem(k), after = JSON.stringify(v);
+  localStorage.setItem(k,after);
+  if (!window.__applyingCloudProfile && !window.__profileHydrating) window.recordProfileStorageMutation?.(k, before, after);
   markGuestProfileDataDirty(k);
 }
 function localDateKey(value = new Date()) {
@@ -1751,6 +1795,26 @@ function requestProfileCloudSave() {
   if (!window.saveProfileToCloud) return;
   if (window.__applyingCloudProfile || isInitialLoad || window.__suppressUnlockNotices) return;
   window.saveProfileToCloud();
+}
+
+function requestProfilePreferencesSave(patch) {
+  if (!window.auth?.currentUser || window.__applyingCloudProfile || isInitialLoad || window.__suppressUnlockNotices) return;
+  const uid = window.auth.currentUser.uid;
+  const generation = Number(window.__lootlinguaAuthGeneration) || 0;
+  const notify = () => {
+    if (window.auth?.currentUser?.uid === uid && (Number(window.__lootlinguaAuthGeneration) || 0) === generation) {
+      const quota = window.__lootlinguaLastProfileSaveFailure?.code === 'resource-exhausted' || window.LootLinguaCloudBackoff?.remaining() > 0;
+      showToast(quota ? 'بلغت السحابة حد الاستخدام مؤقتًا. المظهر محفوظ محليًا وبانتظار إعادة المزامنة؛ لم يُؤكّد حفظه بالسحابة بعد.' : 'تم تطبيق المظهر على هذا الجهاز، لكن تعذّرت مزامنته مع حسابك.', 'warning', 6500);
+    }
+  };
+  if (typeof window.saveProfilePreferencesToCloud !== 'function') { notify(); return; }
+  return Promise.resolve().then(() => {
+    if (window.auth?.currentUser?.uid !== uid || (Number(window.__lootlinguaAuthGeneration) || 0) !== generation) return false;
+    return window.saveProfilePreferencesToCloud(patch);
+  }).then(saved => {
+    if (saved !== true) notify();
+    return saved;
+  }).catch(() => { notify(); return false; });
 }
 
 // بيانات الملف الشخصي للسحابة (وحدات ES تتصل بهذا بدل `let` من السكربت العادي)
@@ -1782,6 +1846,7 @@ window.getLootlinguaProfilePayload = function() {
     // Runner rewards are cosmetic-only and deliberately separate from XP/SRS.
     runnerCoins:      loadInt('lootlingua.runner.coins.v1', 0),
     runnerBestDistance: loadInt('lootlingua.runner.best-distance.v1', 0),
+    motivationRewards: window.LootLinguaMotivation?.getState?.(),
   };
 };
 
@@ -1831,7 +1896,69 @@ window.resetLootlinguaProfileState = function(options = {}) {
   if (typeof renderTreasureRoom === 'function' && currentView === 'treasure') renderTreasureRoom();
 };
 
+// Transaction results already include this owner's pending intents. Apply the
+// canonical values directly; the older guest merge below has different semantics.
+window.applyCanonicalLootlinguaProfile = function(d) {
+  if (!d) return false;
+  const wasHydrating = window.__profileHydrating === true;
+  const wasApplying = window.__applyingCloudProfile === true;
+  window.__profileHydrating = true;
+  window.__applyingCloudProfile = true;
+  let changed = false;
+  const put = (key, value) => {
+    const serialized = String(value);
+    if (localStorage.getItem(key) === serialized) return;
+    localStorage.setItem(key, serialized);
+    changed = true;
+  };
+  try {
+    if (d.userXP !== undefined) {
+      const nextXP = Math.max(userXP, Number(d.userXP) || 0);
+      if (nextXP !== userXP) changed = true;
+      userXP = nextXP;
+      put('userXP', userXP);
+    }
+    if (d.dailyStreak !== undefined || d.lastActivityDate !== undefined) {
+      const nextStreak = Math.max(0, Number(d.dailyStreak) || 0);
+      const nextActivity = String(d.lastActivityDate || '');
+      if (dailyStreak !== nextStreak || lastActivity !== nextActivity) changed = true;
+      dailyStreak = nextStreak;
+      lastActivity = nextActivity;
+      put('dailyStreak', dailyStreak);
+      put('lastActivityDate', lastActivity);
+    }
+    const integers = {
+      streakFreezes: 'lootlinguaStreakFreezes', runnerCoins: 'lootlingua.runner.coins.v1',
+      freezeSaves: 'lootlinguaFreezeSaves', gameDictAdds: 'lootlinguaGameDictAdds',
+      perfectQuizzes: 'lootlinguaPerfectQuizzes', maxStreak: 'lootlinguaMaxStreak',
+      runnerBestDistance: 'lootlingua.runner.best-distance.v1', xpEconomyVersion: 'xpEconomyVersion',
+    };
+    for (const [field, key] of Object.entries(integers)) if (d[field] !== undefined) put(key, Math.max(0, Number(d[field]) || 0));
+    const objects = { activityMap: 'activityMap', addedGameWords: 'addedGameWords', dailyLootState: 'lootlinguaDailyLootState', titlesState: 'lootlinguaTitlesState', extraChests: 'lootlinguaExtraChests' };
+    for (const [field, key] of Object.entries(objects)) if (d[field] !== undefined) put(key, JSON.stringify(d[field]));
+    for (const [day, state] of Object.entries(d.dailyQuestsByDay || {})) put(getDailyQuestStorageKey(day), JSON.stringify(state));
+    if (d.dailyQuestDate && d.dailyQuestState) put(getDailyQuestStorageKey(d.dailyQuestDate), JSON.stringify(d.dailyQuestState));
+    if (d.displayName !== undefined) put('lootlinguaDisplayName', d.displayName);
+    if (d.activeTitleId !== undefined) put('lootlinguaActiveTitleId', d.activeTitleId);
+    if (Array.isArray(d.quizExposureHistory) && typeof writeQuizExposureHistory === 'function') writeQuizExposureHistory(d.quizExposureHistory);
+    for (const theme of d.themeIntroSeen || []) if (Object.prototype.hasOwnProperty.call(THEME_USE_MESSAGES, theme)) put(themeSeenKey('used', theme), '1');
+    if (d.theme && document.documentElement.getAttribute('data-theme') !== d.theme) { setTheme(d.theme, true); changed = true; }
+    if (d.oasisMode && document.documentElement.getAttribute('data-oasis-mode') !== d.oasisMode) { applyOasisMode(d.oasisMode, true); changed = true; }
+    window._profileLoaded = true;
+    if (changed) {
+      renderStreak(); renderDailyGoal(); renderXPBar(); syncHeroAvatar();
+      updateDailyQuestsBadge(); refreshFeatureUnlockUI();
+      if (typeof renderProfileModalStats === 'function') renderProfileModalStats();
+    }
+  } finally {
+    window.__profileHydrating = wasHydrating;
+    window.__applyingCloudProfile = wasApplying;
+  }
+  return changed;
+};
+
 window.mergeLootlinguaProfileFromCloud = function(d, options = {}) {
+  if (options.canonical === true) return window.applyCanonicalLootlinguaProfile(d);
   // Track if we loaded from cloud to avoid double checkAndUpdateStreak
   window._profileLoaded = true;
   if (!d) return;
@@ -2015,7 +2142,8 @@ function getGuestProgressSnapshot() {
   // treat as guest-owned only when a signed-out write marked that namespace as
   // dirty. Account hydration also uses these keys and is not guest evidence.
   if (typeof hasDirtyGuestData !== 'function' || !hasDirtyGuestData()) return {};
-  return window.getLootlinguaProfilePayload ? window.getLootlinguaProfilePayload() : {};
+  return window.getLootlinguaProfilePayload ? { ...window.getLootlinguaProfilePayload(),
+    motivationRewards: window.LootLinguaMotivation?.getGuestState?.() } : {};
 }
 
 function getGuestProgressSummary(profile) {
@@ -2098,17 +2226,73 @@ function renderGuestMigrationModal(summary) {
   showModal('guestMigrationModal');
 }
 
-window.prepareGuestMigrationForUser = function(user) {
-  if (!user) return Promise.resolve('guest');
-  if (window.__guestMigrationPromise && window.__guestMigrationUid === user.uid) {
-    return window.__guestMigrationPromise;
+let activeGuestMigrationSession = null;
+
+function isGuestMigrationSessionCurrent(session) {
+  return Boolean(session && activeGuestMigrationSession === session &&
+    window.auth?.currentUser?.uid === session.uid &&
+    (Number(window.__lootlinguaAuthGeneration) || 0) === session.generation &&
+    window.__guestMigrationPromise === session.promise);
+}
+
+function retireGuestMigrationSession(session) {
+  if (!session) return;
+  // Release the old profile loader's decision wait even if an upload is still
+  // in flight. Its continuation will reject the retired auth generation.
+  session.resolve?.('cancelled');
+  session.resolve = null;
+  session.operation = null;
+  if (activeGuestMigrationSession !== session) return;
+  activeGuestMigrationSession = null;
+  window.__guestMigrationPromise = null;
+  window.__guestMigrationUid = '';
+  window.__resolveGuestMigration = null;
+  window.__guestMigrationSummary = null;
+  window.__guestMigrationRunning = false;
+  window.__guestMigrationSessionComplete = false;
+  window.__guestMigrationSessionDecision = null;
+  if (window.__acceptedGuestProfileMigration?.uid === session.uid) {
+    window.__acceptedGuestProfileMigration = null;
   }
+  setGuestMigrationBusy(false);
+  hideModal('guestMigrationModal');
+}
+
+window.addEventListener?.('lootlingua:auth-state', () => {
+  const session = activeGuestMigrationSession;
+  if (session && !isGuestMigrationSessionCurrent(session)) retireGuestMigrationSession(session);
+});
+
+window.prepareGuestMigrationForUser = function(user) {
+  if (!user?.uid) {
+    if (activeGuestMigrationSession && !isGuestMigrationSessionCurrent(activeGuestMigrationSession)) {
+      retireGuestMigrationSession(activeGuestMigrationSession);
+    }
+    return Promise.resolve('guest');
+  }
+  if (window.auth?.currentUser?.uid !== user.uid) return Promise.resolve('cancelled');
+  if (isGuestMigrationSessionCurrent(activeGuestMigrationSession)) {
+    return activeGuestMigrationSession.promise;
+  }
+  retireGuestMigrationSession(activeGuestMigrationSession);
+
+  const session = {
+    uid: user.uid,
+    generation: Number(window.__lootlinguaAuthGeneration) || 0,
+    operation: null,
+    resolve: null,
+  };
+  activeGuestMigrationSession = session;
+  const setDecisionPromise = (promise) => {
+    session.promise = promise;
+    window.__guestMigrationPromise = promise;
+    return promise;
+  };
 
   window.__guestMigrationUid = user.uid;
 
   if (shouldSkipGuestMigrationPrompt(user)) {
-    window.__guestMigrationPromise = Promise.resolve('none');
-    return window.__guestMigrationPromise;
+    return setDecisionPromise(Promise.resolve('none'));
   }
 
   const loot = getGuestLootSnapshot();
@@ -2121,15 +2305,18 @@ window.prepareGuestMigrationForUser = function(user) {
   // so reusing those markers here could silently purge a newer snapshot.
   const shouldPrompt = hasGuestData;
   window.__guestMigrationSummary = { ...loot, words, profile, user, guestSnapshotId };
+  session.summary = window.__guestMigrationSummary;
 
   if (!shouldPrompt) {
-    window.__guestMigrationPromise = Promise.resolve('none');
-    return window.__guestMigrationPromise;
+    return setDecisionPromise(Promise.resolve('none'));
   }
 
-  window.__guestMigrationPromise = new Promise((resolve) => {
-    window.__resolveGuestMigration = resolve;
-  });
+  setDecisionPromise(new Promise((resolve) => { session.resolve = resolve; }));
+  window.__resolveGuestMigration = (decision) => {
+    if (!isGuestMigrationSessionCurrent(session)) return;
+    session.resolve?.(decision);
+    session.resolve = null;
+  };
   window.__guestMigrationSessionDecision = {
     uid: user.uid,
     guestSnapshotId,
@@ -2140,10 +2327,15 @@ window.prepareGuestMigrationForUser = function(user) {
 };
 
 window.confirmGuestMigration = async function() {
+  const session = activeGuestMigrationSession;
   const summary = window.__guestMigrationSummary;
   const user = summary?.user || window.auth?.currentUser;
-  if (!summary || !user) return;
+  if (!summary || !user || !isGuestMigrationSessionCurrent(session) || session.summary !== summary) return;
   if (window.__guestMigrationRunning) return;
+  const operation = {};
+  session.operation = operation;
+  const isCurrent = () => isGuestMigrationSessionCurrent(session) &&
+    session.operation === operation && window.__guestMigrationSummary === summary;
   window.__guestMigrationRunning = true;
   let stage = 'preparing';
 
@@ -2152,11 +2344,7 @@ window.confirmGuestMigration = async function() {
   setGuestMigrationBusy(true, 'نجهّز اللوت للنقل الآمن...');
 
   try {
-    if (window.auth?.currentUser?.uid !== user.uid) {
-      const identityError = new Error('Authenticated user changed during guest migration');
-      identityError.code = 'auth/identity-changed';
-      throw identityError;
-    }
+    if (!isCurrent()) return;
     const existing = new Set((window.words || []).map((word) => normalizeMigrationWordKey(word)).filter(Boolean));
     const toMove = summary.words.filter((word) => {
       const key = normalizeMigrationWordKey(word);
@@ -2174,13 +2362,16 @@ window.confirmGuestMigration = async function() {
       unavailable.code = 'guest-migration/unavailable';
       throw unavailable;
     }
+    if (!isCurrent()) return;
     const wordResults = await window.migrateGuestWordsToCloud(toMove, {
       importId: 'guest-migration',
       operationId: 'guest-migration',
       onProgress: ({ completed, total }) => {
+        if (!isCurrent()) return;
         setGuestMigrationBusy(true, `جارٍ نقل كلماتك بأمان (${completed}/${total})...`);
       },
     });
+    if (!isCurrent()) return;
     const uploadedByIndex = new Map(wordResults.map((result) => [result.wordIndex, result.wordId]));
     toMove.forEach((word, index) => {
       const realId = uploadedByIndex.get(index);
@@ -2195,6 +2386,7 @@ window.confirmGuestMigration = async function() {
     });
     const uploaded = wordResults.length;
 
+    if (!isCurrent()) return;
     stage = 'custom-worlds';
     setGuestMigrationBusy(true, 'جارٍ نقل عوالمك وكلماتها...');
     const guestWorlds = dedupeCustomWorlds([
@@ -2203,6 +2395,7 @@ window.confirmGuestMigration = async function() {
     ]);
     const migratedWorlds = [];
     for (const world of guestWorlds) {
+      if (!isCurrent()) return;
       const normalizedWorld = normalizeCustomWorldPayload({
         ...world,
         id: world.id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -2210,41 +2403,52 @@ window.confirmGuestMigration = async function() {
       migratedWorlds.push(normalizedWorld);
       if (window.saveCustomWorldToCloud) {
         const savedWorld = await window.saveCustomWorldToCloud(normalizedWorld);
+        if (!isCurrent()) return;
         if (!savedWorld) throw new Error('custom-world-upload-failed');
       }
       const guestWorldWords = readCustomWorldWordsFromStorage(world.id, 'guest');
       const nextWords = [];
       for (const word of guestWorldWords) {
+        if (!isCurrent()) return;
         const copy = { ...word, id: word.id || `${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
         if (window.saveCustomWorldWordToCloud) {
           const realId = await window.saveCustomWorldWordToCloud(normalizedWorld.id, copy);
+          if (!isCurrent()) return;
           if (!realId) throw new Error('custom-world-word-upload-failed');
           copy.id = realId;
         }
         nextWords.push(copy);
       }
+      if (!isCurrent()) return;
       writeCustomWorldWordsToStorage(normalizedWorld.id, applyStoredWordOrder(nextWords), user.uid);
     }
+    if (!isCurrent()) return;
     if (migratedWorlds.length) {
       customWorlds = migratedWorlds;
       writeCustomWorldsToStorage(customWorlds, user.uid);
+      if (!isCurrent()) return;
       renderCustomWorldCards();
     }
 
+    if (!isCurrent()) return;
     stage = 'learning-state';
     setGuestMigrationBusy(true, 'جارٍ حفظ تقدّم التعلّم...');
     const guestMastery = summary.wordMastery && typeof summary.wordMastery === 'object'
       ? summary.wordMastery
       : {};
     for (const [wordKey, state] of Object.entries(guestMastery)) {
+      if (!isCurrent()) return;
       if (!wordKey || !state || typeof window.saveGlobalWordMasteryToCloud !== 'function') continue;
       const saved = await window.saveGlobalWordMasteryToCloud(wordKey, state);
+      if (!isCurrent()) return;
       if (!saved) throw new Error('word-mastery-upload-failed');
     }
     if (Object.keys(guestMastery).length && typeof window.applyGlobalWordMasterySnapshot === 'function') {
+      if (!isCurrent()) return;
       window.applyGlobalWordMasterySnapshot(guestMastery);
     }
 
+    if (!isCurrent()) return;
     const guestQuizSession = summary.activeQuizSession || loadJSON('active_quiz_session', null);
     if (
       guestQuizSession &&
@@ -2255,6 +2459,7 @@ window.confirmGuestMigration = async function() {
       const accountQuizSession = typeof window.loadActiveQuizSessionFromCloud === 'function'
         ? await window.loadActiveQuizSessionFromCloud()
         : null;
+      if (!isCurrent()) return;
       if (accountQuizSession && isResumableQuizSession(accountQuizSession)) {
         localStorage.setItem(
           `lootlingua:migrated-quiz-draft:${user.uid}`,
@@ -2262,13 +2467,16 @@ window.confirmGuestMigration = async function() {
         );
       } else {
         const saved = await window.saveActiveQuizSessionToCloud(guestQuizSession);
+        if (!isCurrent()) return;
         if (!saved) throw new Error('quiz-session-upload-failed');
       }
     }
 
+    if (!isCurrent()) return;
     stage = 'profile';
     setGuestMigrationBusy(true, 'جارٍ حفظ XP والتقدّم في حسابك...');
     writeWordsToStorage(window.words, 'normal', user.uid);
+    if (!isCurrent()) return;
     const profileMigrationKey = window.LootLinguaEntryExperience?.profileMigrationStorageKey({ uid: user.uid }) ||
       `lootlingua:guest-profile-migration:v1:user:${user.uid}`;
     let previousProfileMigration = null;
@@ -2305,11 +2513,13 @@ window.confirmGuestMigration = async function() {
     // The learning uploads above and this account-scoped recovery record must
     // both exist before the guest namespace is purged. profile-cloud removes
     // the recovery record only after the merged profile is durably saved.
+    if (!isCurrent()) return;
     localStorage.setItem(profileMigrationKey, JSON.stringify(acceptedProfileMigration));
     window.__acceptedGuestProfileMigration = acceptedProfileMigration;
     const profileCommitted = typeof window.commitPendingGuestProfileMigration === 'function'
       ? await window.commitPendingGuestProfileMigration(user)
       : false;
+    if (!isCurrent()) return;
     if (!profileCommitted) {
       const profileError = new Error('guest-profile-commit-failed');
       profileError.code = window.__lootlinguaLastProfileSaveFailure?.code || 'profile/commit-failed';
@@ -2318,6 +2528,7 @@ window.confirmGuestMigration = async function() {
     stage = 'notifications';
     setGuestMigrationBusy(true, 'اللمسات الأخيرة على اللوت...');
     const notificationsMigrated = await window.LootLinguaNotificationStore?.migrateGuestToOwner?.(user.uid);
+    if (!isCurrent()) return;
     if (notificationsMigrated === false) {
       const notificationError = new Error('guest-notification-migration-failed');
       notificationError.code = 'notification/migration-failed';
@@ -2326,13 +2537,21 @@ window.confirmGuestMigration = async function() {
     // Keep the verified profile marker until all later migration stages have
     // succeeded. This prevents a retry from crediting the same guest balance.
     window.finalizePendingGuestProfileMigration?.(user);
+    if (!isCurrent()) return;
     markGuestMigrationCompleteFlag(user, 'accepted', summary.guestSnapshotId);
+    if (!isCurrent()) return;
     purgeStaleGuestLocalData();
+    if (!isCurrent()) return;
     saveAndRender();
+    if (!isCurrent()) return;
     hideModal('guestMigrationModal');
+    if (!isCurrent()) return;
     showToast(uploaded > 0 ? `تم نقل ${uploaded} كلمات لحسابك` : 'ما في كلمات جديدة للنقل، وتم حفظ تقدمك', 'success', 4200);
-    window.__resolveGuestMigration?.('accepted');
+    if (!isCurrent()) return;
+    session.resolve?.('accepted');
+    session.resolve = null;
   } catch (err) {
+    if (!isCurrent()) return;
     const diagnostic = {
       stage,
       code: String(err?.firestoreCode || err?.cause?.code || err?.code || 'guest-migration/failed'),
@@ -2358,22 +2577,38 @@ window.confirmGuestMigration = async function() {
     if (decline) decline.disabled = false;
     showToast('ما قدرنا ننقل اللوت الآن. خليناه محفوظ على الجهاز.', 'danger', 4600);
   } finally {
-    window.__guestMigrationRunning = false;
+    if (isCurrent()) {
+      session.operation = null;
+      window.__guestMigrationRunning = false;
+    }
   }
 };
 
 window.declineGuestMigration = function() {
+  const session = activeGuestMigrationSession;
+  if (!isGuestMigrationSessionCurrent(session)) return;
   if (window.__guestMigrationRunning) return;
   const summary = window.__guestMigrationSummary;
   const user = window.auth?.currentUser;
   if (!user?.uid || summary?.user?.uid !== user.uid || !summary?.guestSnapshotId) return;
   markGuestMigrationCompleteFlag(user, 'declined', summary.guestSnapshotId);
+  if (!isGuestMigrationSessionCurrent(session)) return;
   hideModal('guestMigrationModal');
+  if (!isGuestMigrationSessionCurrent(session)) return;
   showToast('احتفظنا بلوت الضيف على هذا الجهاز، ولن نسألك عنه مجددًا لهذا الحساب.', 'info', 4200);
-  window.__resolveGuestMigration?.('declined');
+  if (!isGuestMigrationSessionCurrent(session)) return;
+  session.resolve?.('declined');
+  session.resolve = null;
 };
 
 function beginViewSwitch() {
+  window.releaseDictionaryDraggedCard?.();
+  window.cancelDictionaryFullDataRequest?.();
+  window.watchPersonalDictionaryRows?.([]);
+  window.__dictionaryNavigationGeneration = (window.__dictionaryNavigationGeneration || 0) + 1;
+  window.dispatchEvent(new CustomEvent('lootlingua:dictionary-navigation'));
+  const dictionaryStatus = document.getElementById('dictionaryLoadStatus');
+  if (dictionaryStatus) dictionaryStatus.hidden = true;
   window.LootLinguaGuidedFirstJourney?.clearCoach?.();
   document.body.classList.add('view-transitioning');
   requestAnimationFrame(() => {

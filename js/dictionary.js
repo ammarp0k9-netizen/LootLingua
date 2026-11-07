@@ -42,19 +42,35 @@ function safeClassToken(v) {
 }
 
 // ── Stats Panel ───────────────────────────────────────
-function openStatsPanel() {
+let statsPanelRequest = 0;
+let statsPanelHideTimer = null;
+window.cancelPendingStatsPanel = function() { statsPanelRequest++; clearTimeout(statsPanelHideTimer); };
+async function openStatsPanel() {
+  const request = ++statsPanelRequest;
+  const owner = window.auth?.currentUser?.uid || 'guest';
+  const generation = Number(window.__lootlinguaAuthGeneration) || 0;
+  if (await window.LootLinguaDictionaryPages?.requireComplete() === false) return;
+  if (request !== statsPanelRequest || owner !== (window.auth?.currentUser?.uid || 'guest') ||
+      generation !== (Number(window.__lootlinguaAuthGeneration) || 0)) return;
   const p=document.getElementById('statsPanel'); if(!p)return;
+  clearTimeout(statsPanelHideTimer);
   lockBackgroundScroll('stats');
-  p.style.display='flex'; setTimeout(()=>p.classList.add('show'),10);
+  p.style.display='flex'; p.setAttribute('aria-hidden', 'false');
+  setTimeout(()=>{ if (request === statsPanelRequest) p.classList.add('show'); },10);
+  window.LootLinguaModalFocus?.open(p, { dialog: p.querySelector('.stats-box') || p, onEscape: closeStatsPanel });
   renderHeatmap(); renderStatsNumbers();
   setAppRoute('overlay', 'stats');
 }
 function closeStatsPanel() {
+  statsPanelRequest++;
   closeRouteEntry('overlay', 'stats', () => {
     const p=document.getElementById('statsPanel'); if(!p)return;
     p.classList.remove('show');
+    p.setAttribute('aria-hidden', 'true');
     unlockBackgroundScroll('stats');
-    setTimeout(()=>p.style.display='none',300);
+    window.LootLinguaModalFocus?.close(p);
+    clearTimeout(statsPanelHideTimer);
+    statsPanelHideTimer = setTimeout(()=>p.style.display='none',300);
   });
 }
 function renderHeatmap() {
@@ -68,7 +84,7 @@ function renderHeatmap() {
   const frag=document.createDocumentFragment();
   for(let i=0;i<days;i++){
     const d=new Date(start); d.setDate(d.getDate()+i);
-    const key=d.toISOString().slice(0,10);
+    const key=localDateKey(d);
     const cnt=map[key]||0;
     const cell=document.createElement('div'); cell.className='hm-cell';
     // level 0 = no activity, 1-4 = intensity
@@ -79,6 +95,10 @@ function renderHeatmap() {
   container.appendChild(frag);
 }
 function renderStatsNumbers() {
+  const run = () => renderStatsNumbersFromData();
+  return typeof window.withWordMasterySnapshot === 'function' ? window.withWordMasterySnapshot(run) : run();
+}
+function renderStatsNumbersFromData() {
   const personalWords = getPersonalDictionaryWordsSnapshot();
   const map =loadJSON('activityMap',{});
   const vals=Object.values(map).filter(v=>v>0);
@@ -95,7 +115,8 @@ function renderStatsNumbers() {
 // Save & Render helpers
 // ═══════════════════════════════════════════════════════
 function persistDictionary() {
-  if (dictionarySortMode === 'auto' && Array.isArray(window.words)) {
+  if (dictionarySortMode === 'auto' && Array.isArray(window.words) &&
+      (!window.LootLinguaDictionaryPages?.current() || window.LootLinguaDictionaryPages.current().state().complete)) {
     reindexWordOrder(window.words);
   }
   writeActiveWordsToStorage(window.words);
@@ -154,10 +175,11 @@ function syncWordMetaInDom() {
   });
 }
 
-window.applyCloudWordsFromSnapshot = function(cloudWords) {
+window.applyCloudWordsFromSnapshot = function(cloudWords, options = {}) {
   const prev = Array.isArray(window.words) ? window.words : [];
   const uid = window.auth?.currentUser?.uid;
-  let normalized = applyStoredWordOrder(cloudWords);
+  let normalized = options.paged ? [...cloudWords].sort((a, b) =>
+    (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER)) : applyStoredWordOrder(cloudWords);
   if (!isCustomWorldView()) {
     const expanded = new Set(prev.filter(word => word.expanded).map(word => String(word.id)));
     normalized = normalized.map(word => ({ ...word, expanded: expanded.has(String(word.id)) }));
@@ -219,12 +241,40 @@ async function saveActiveWordToCloud(word) {
     : null;
 }
 
-async function updateActiveWordInCloud(id, data) {
-  if (isCustomWorldView()) {
-    if (window.updateCustomWorldWordInCloud) await window.updateCustomWorldWordInCloud(activeCustomWorldId, id, data);
-    return;
-  }
-  if (window.updateWordInCloud) await window.updateWordInCloud(id, data);
+function captureDictionaryWriteContext() {
+  return {
+    owner: window.auth?.currentUser?.uid || 'guest',
+    generation: Number(window.__lootlinguaAuthGeneration) || 0,
+    scope: getActiveDictionaryStorageScope(),
+    worldId: isCustomWorldView() ? String(activeCustomWorldId) : '',
+    view: currentView,
+  };
+}
+
+function isDictionaryWriteContextCurrent(context) {
+  return context.owner === (window.auth?.currentUser?.uid || 'guest') &&
+    context.generation === (Number(window.__lootlinguaAuthGeneration) || 0) &&
+    context.scope === getActiveDictionaryStorageScope() && context.view === currentView;
+}
+
+function dictionaryWriteErrorMessage(error) {
+  if (error?.code === 'resource-exhausted') return 'بلغت السحابة حصة الاستخدام أو حد الطلبات. لم نؤكد حفظ الكلمة؛ بقيت المدخلات للمحاولة لاحقًا.';
+  if (error?.code === 'permission-denied') return 'رفضت السحابة حفظ الكلمة لهذا الحساب. أعد تسجيل الدخول وحاول مجددًا؛ بقيت المدخلات محفوظة هنا.';
+  if (['unavailable', 'deadline-exceeded', 'dictionary/offline'].includes(error?.code)) return 'تعذّر الاتصال بالسحابة لحفظ الكلمة. بقيت المدخلات للمحاولة عند عودة الاتصال.';
+  if (['auth/identity-changed', 'word-lifecycle/sign-in-required'].includes(error?.code)) return 'تغيّرت جلسة الحساب. افتح القاموس من حسابك الحالي وحاول مجددًا.';
+  if (error?.code === 'dictionary/identity-change') return 'هذا التعديل يغيّر هوية الكلمة وتقدمها. أضف الكلمة المختلفة ككلمة جديدة؛ بقيت الحقول كما هي.';
+  if (error?.code === 'dictionary/invalid-patch') return 'تعذّر حفظ هذه القيم. تحقق من طول الحقول وصحتها؛ بقيت المدخلات للمحاولة مجددًا.';
+  return 'تعذّر حفظ الكلمة الآن. بقيت المدخلات للمحاولة مجددًا.';
+}
+
+async function updateActiveWordInCloud(id, data, context = captureDictionaryWriteContext()) {
+  if (!isDictionaryWriteContextCurrent(context)) throw Object.assign(new Error('Dictionary context changed.'), { code: 'dictionary/context-changed' });
+  if (context.owner === 'guest') return true;
+  const update = context.worldId ? window.updateCustomWorldDictionaryWordInCloud : window.updateDictionaryWordInCloud;
+  if (typeof update !== 'function') throw Object.assign(new Error('Dictionary writer unavailable.'), { code: 'dictionary/unavailable' });
+  const saved = await (context.worldId ? update(context.worldId, id, data) : update(id, data));
+  if (saved !== true) throw Object.assign(new Error('Dictionary write was not acknowledged.'), { code: 'dictionary/save-failed' });
+  return true;
 }
 
 async function deleteActiveWordFromCloud(id) {
@@ -253,9 +303,10 @@ async function deleteWordFromCapturedScope(id, customWorldId, word, sourceSummar
 
 async function restoreExistingDictionaryWord(existingWord, incomingWord, sourceType = 'manual') {
   if (!existingWord) return null;
+  const context = captureDictionaryWriteContext();
   let result = null;
   if (hasSignedInUser()) {
-    if (!window.upsertUserWordWithSource) return null;
+    if (!window.upsertUserWordWithSource) throw new Error('Dictionary restoration unavailable.');
     result = await window.upsertUserWordWithSource({
       word: { ...incomingWord, id: existingWord.id },
       existingWordId: existingWord.id,
@@ -263,6 +314,8 @@ async function restoreExistingDictionaryWord(existingWord, incomingWord, sourceT
       restoreHidden: true,
       operationId: `${sourceType}:restore`,
     });
+    if (!isDictionaryWriteContextCurrent(context)) throw Object.assign(new Error('Dictionary context changed.'), { code: 'dictionary/context-changed' });
+    if (!result?.wordId || result.failed) throw new Error('Dictionary restoration was not acknowledged.');
   } else {
     result = {
       status: 'restored',
@@ -271,6 +324,7 @@ async function restoreExistingDictionaryWord(existingWord, incomingWord, sourceT
       wordKey: getWordLifecycleContract()?.wordKeyOf?.(existingWord) || '',
     };
   }
+  const previousWords = window.words;
   window.words = window.words.map((word) => String(word.id) === String(existingWord.id)
     ? {
       ...word,
@@ -283,7 +337,17 @@ async function restoreExistingDictionaryWord(existingWord, incomingWord, sourceT
         : (incomingWord.category || word.category || 'عام'),
     }
     : word);
-  persistDictionary();
+  try { persistDictionary(); }
+  catch (error) {
+    if (context.owner === 'guest') {
+      const stored = readWordsFromStorage('normal', 'guest');
+      if (!stored.some(word => String(word.id) === String(existingWord.id) && word.hiddenFromDictionary === false)) {
+        window.words = previousWords;
+        throw error;
+      }
+    }
+    console.warn('[Dictionary] Restored; optional local refresh failed.', error?.message);
+  }
   return result;
 }
 
@@ -291,6 +355,7 @@ window.restoreDictionaryWordById = function(wordId, options = {}) {
   const scope = `dictionary-restore:${String(wordId || '')}`;
   const runner = window.LootLinguaOperations?.runExclusive || ((key, task) => task());
   return runner(scope, async () => {
+    if (await window.LootLinguaDictionaryPages?.requireComplete() === false) return null;
     const personalWords = readWordsFromStorage('normal', window.auth?.currentUser?.uid);
     const existing = personalWords.find((word) => String(word.id) === String(wordId));
     if (!existing) return null;
@@ -312,7 +377,8 @@ window.isExpanded = isExpanded;
 const addFormDrafts = new Map();
 
 function getAddFormDraftScope() {
-  return isCustomWorldView() ? `custom:${activeCustomWorldId}` : 'personal';
+  const owner = window.auth?.currentUser?.uid || 'guest';
+  return `${owner}:${isCustomWorldView() ? `custom:${activeCustomWorldId}` : 'personal'}`;
 }
 
 function readAddFormDraftFromDom() {
@@ -432,86 +498,101 @@ if (document.readyState === 'loading') {
 // Add / Edit Word
 // ═══════════════════════════════════════════════════════
 window.addWord = async function() {
-  const w  = document.getElementById('wordInput').value.trim();
-  const m  = document.getElementById('meaningInput').value.trim();
-  const ex = document.getElementById('exampleInput').value.trim();
-  const c  = document.getElementById('categoryInput').value;
-
-  if (!w || !m) { showToast("عبّي الكلمة ومعناها يا بطل!"); return; }
-
+  const context = captureDictionaryWriteContext();
+  const key = JSON.stringify([context.owner, context.generation, context.scope]);
+  if (window.__dictionarySaveInFlight?.key === key) return false;
+  const operation = { key };
+  window.__dictionarySaveInFlight = operation;
   const btn = document.getElementById('addBtn');
-  let savedWord = null;
-  btn.disabled = true;
-
-  if (editId) {
-    window.words = window.words.map(item =>
-      item.id === editId ? { ...item, word: w, meaning: m, example: ex, category: c } : item
-    );
-    await updateActiveWordInCloud(editId, { word: w, meaning: m, example: ex, category: c });
-    editId = null;
+  let savedWord = null, beforeWords = null, persisted = false;
+  try {
+    const w = document.getElementById('wordInput').value.trim();
+    const m = document.getElementById('meaningInput').value.trim();
+    const ex = document.getElementById('exampleInput').value.trim();
+    const c = document.getElementById('categoryInput').value;
+    const editingId = editId;
+    const sameDraft = () => editId === editingId && document.getElementById('wordInput').value.trim() === w &&
+      document.getElementById('meaningInput').value.trim() === m && document.getElementById('exampleInput').value.trim() === ex && document.getElementById('categoryInput').value === c;
+    if (!w || !m) { showToast('عبّي الكلمة ومعناها يا بطل!'); return false; }
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> جارٍ الحفظ…';
+    if (await window.LootLinguaDictionaryPages?.requireComplete({ personal: !context.worldId }) === false ||
+        !isDictionaryWriteContextCurrent(context) || !sameDraft()) return false;
+    if (editingId) {
+      const existing = window.words.find(word => String(word.id) === String(editingId));
+      if (!existing) throw new Error('Dictionary word no longer exists.');
+      const lifecycle = getWordLifecycleContract();
+      if (lifecycle && lifecycle.wordKeyOf(existing) !== lifecycle.normalizeIdentity(w).wordKey) {
+        throw Object.assign(new Error('Word identity changed.'), { code: 'dictionary/identity-change' });
+      }
+      await updateActiveWordInCloud(editingId, { word: w, meaning: m, example: ex, category: c }, context);
+      if (!isDictionaryWriteContextCurrent(context)) return false;
+      beforeWords = [...window.words];
+      window.words = window.words.map(word => String(word.id) === String(editingId)
+        ? { ...word, word: w, text: w, meaning: m, translation: m, example: ex, category: c } : word);
+    } else {
+      if (!rateLimit('addWord', 30, 60000)) return false;
+      const existing = findActiveDictionaryWord(w);
+      if (existing && !isDictionaryWordHidden(existing)) { showToast('هذه الكلمة موجودة بالفعل في هذا القاموس!'); return false; }
+      if (existing && !context.worldId) {
+        const restored = await restoreExistingDictionaryWord(existing, { word: w, meaning: m, example: ex, category: c }, 'manual');
+        if (!restored || !isDictionaryWriteContextCurrent(context)) return false;
+        savedWord = window.words.find(word => String(word.id) === String(existing.id));
+      } else {
+        const newWord = applyKnownSharedMastery({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, word: w, meaning: m, example: ex, category: c, starred: false, forgetCount: 0, xpValue: 0, order: 0, createdAt: new Date().toISOString() });
+        if (context.owner !== 'guest') {
+          const realId = await saveActiveWordToCloud(newWord);
+          if (!isDictionaryWriteContextCurrent(context)) return false;
+          if (typeof realId !== 'string' || !realId.trim()) throw new Error('Dictionary write was not acknowledged.');
+          newWord.id = realId;
+        }
+        savedWord = window.words.find(word => String(word.id) === String(newWord.id)) || newWord;
+        if (savedWord === newWord) { beforeWords = [...window.words]; window.words = [newWord, ...window.words]; }
+      }
+    }
+    persisted = context.owner !== 'guest';
     renderLimit = 20;
+    try { saveAndRender(); persisted = true; }
+    catch (error) {
+      if (!persisted) {
+        const stored = context.worldId ? readCustomWorldWordsFromStorage(context.worldId, context.owner) : readWordsFromStorage('normal', context.owner);
+        const targetId = savedWord?.id || editingId;
+        persisted = stored.some(word => String(word.id) === String(targetId) && word.word === w && word.meaning === m &&
+          (word.example || '') === ex && (word.category || '') === c);
+      }
+      if (!persisted) throw error;
+      showToast('حُفظت الكلمة، لكن تعذّر تحديث العرض المحلي بالكامل.', 'warning', 4500);
+    }
+    if (savedWord && window.words?.some(word => String(word.id) === String(savedWord.id)) &&
+        isDictionaryWriteContextCurrent(context)) window.dispatchEvent(new CustomEvent('lootlingua:dictionary-word-saved', {
+      detail: { id: savedWord.id, owner: context.owner, scope: context.worldId ? 'custom-world' : 'personal' },
+    }));
+    if (!isDictionaryWriteContextCurrent(context) || !sameDraft()) return true;
+    editId = null;
     btn.innerHTML = 'إضافة للقاموس <i class="fa-solid fa-floppy-disk"></i>';
     btn.style.background = '';
-  } else {
-    // Spam: max 30 words per minute
-    if (!rateLimit('addWord', 30, 60000)) { btn.disabled=false; return; }
-    const existingWord = findActiveDictionaryWord(w);
-    if (existingWord && !isDictionaryWordHidden(existingWord)) {
-      showToast('هذه الكلمة موجودة بالفعل في هذا القاموس!');
-      btn.disabled=false;
-      return;
-    }
-    if (existingWord && isDictionaryWordHidden(existingWord) && !isCustomWorldView()) {
-      await restoreExistingDictionaryWord(existingWord, {
-        word: w,
-        meaning: m,
-        example: ex,
-        category: c,
-      }, 'manual');
-      clearInputs();
-      setAddFormExpanded(false);
-      btn.disabled = false;
-      renderLimit = 20;
-      render();
-      showToast(`تمت استعادة كلمة ”${w}“، وتقدمها السابق محفوظ.`, 'success', 4800);
-      return;
-    }
-    const newWord = applyKnownSharedMastery({ id:Date.now().toString(), word:w, meaning:m, example:ex, category:c, starred:false, forgetCount:0, xpValue:0, order:0, createdAt:new Date().toISOString() });
-    window.words.unshift(newWord);
-    reindexWordOrder(window.words);
-    let realId = null;
-    try {
-      realId = await saveActiveWordToCloud(newWord);
-    } catch (error) {
-      // Do not claim the guest's mandatory first-word step when its actual
-      // persistence failed. Keep the form values so a retry is possible.
-      window.words = window.words.filter((word) => word !== newWord);
-      btn.disabled = false;
-      showToast('تعذّر حفظ الكلمة الآن. جرّب مرة ثانية.', 'danger');
-      return;
-    }
-    if (realId) newWord.id = realId;
-    savedWord = newWord;
-    renderLimit = 20;
-  }
-
-  try {
-    saveAndRender();
+    clearInputs();
+    setAddFormExpanded(false);
+    return true;
   } catch (error) {
-    if (savedWord) window.words = window.words.filter((word) => word !== savedWord);
-    btn.disabled = false;
-    showToast('تعذّر حفظ الكلمة على الجهاز. بيانات الحقول بقيت للمحاولة مجددًا.', 'danger');
-    return;
-  }
-  clearInputs();
-  setAddFormExpanded(false);
-  btn.disabled = false;
-  // This event is emitted only after the active dictionary was persisted, not
-  // on opening the form or typing.  The guest first-word step consumes it.
-  if (savedWord && window.words?.some((word) => word === savedWord || String(word?.id) === String(savedWord?.id))) {
-    window.dispatchEvent(new CustomEvent('lootlingua:dictionary-word-saved', {
-      detail: { id: savedWord.id, owner: window.auth?.currentUser?.uid || 'guest', scope: isCustomWorldView() ? 'custom-world' : 'personal' },
-    }));
+    if (isDictionaryWriteContextCurrent(context)) {
+      if (persisted) {
+        console.warn('[Dictionary] Saved; optional UI update failed.', error?.message);
+        showToast('حُفظت الكلمة، لكن تعذّر تحديث العرض المحلي بالكامل.', 'warning', 4500);
+        return true;
+      }
+      if (beforeWords && !persisted) { window.words = beforeWords; if (dictionarySortMode === 'auto') reindexWordOrder(window.words); }
+      showToast(dictionaryWriteErrorMessage(error), 'danger');
+    }
+    return false;
+  } finally {
+    if (window.__dictionarySaveInFlight === operation) {
+      delete window.__dictionarySaveInFlight;
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.innerHTML = editId ? 'تحديث الكلمة <i class="fa-solid fa-floppy-disk"></i>' : 'إضافة للقاموس <i class="fa-solid fa-floppy-disk"></i>';
+    }
   }
 };
 
@@ -888,35 +969,51 @@ window.deleteWord = function(id, event) {
 
 // Star Toggle
 // ═══════════════════════════════════════════════════════
-window.toggleStar = function(id, event) {
+window.toggleStar = async function(id, event) {
   if (event) event.stopPropagation();
-  const word = window.words.find(w => w.id === id);
-  if (!word) return;
-
-  word.starred = !word.starred;
-
-  // تحديث البيانات في الخلفية بصمت
-  persistDictionary();
-  updateActiveWordInCloud(id, { starred: word.starred });
-
-  // تحديث شكل النجمة مباشرة في الـ DOM لتجنب الرمشة
-  // تم استبدال currentTarget بـ target.closest لحل مشكلة تفويض الأحداث
-  const btn = event?.target ? event.target.closest('.star-btn') : document.querySelector(`[data-id="${id}"][data-action="star"]`);
-  if (btn) btn.classList.toggle('active', word.starred);
-
-  // إذا كنا في عرض "الكلمات الصعبة" والكلمة لم تعد صعبة، نحذفها بأنيميشن
-  if ((currentView === 'starred' || currentFilter === 'starred') && !word.starred) {
-    const li = btn.closest('.word-card');
-    if (li) {
-      li.style.transition = 'all 0.4s ease';
-      li.style.opacity = '0';
-      li.style.transform = 'translateX(30px)';
-      setTimeout(() => {
-        li.remove();
-        const list = document.getElementById('list');
-        if (list && list.children.length === 0) render();
-      }, 400);
+  const context = captureDictionaryWriteContext();
+  const word = window.words.find(item => String(item.id) === String(id));
+  if (!word) return false;
+  const pending = window.__dictionaryStarWrites ||= new Map();
+  const key = JSON.stringify([context.owner, context.generation, context.scope, String(id)]);
+  if (pending.has(key)) return false;
+  pending.set(key, true);
+  const previous = Boolean(word.starred), next = !previous;
+  const btn = event?.target?.closest?.('.star-btn') || [...document.querySelectorAll('[data-action="star"]')].find(button => String(button.dataset.id) === String(id));
+  const paint = value => { btn?.classList.toggle('active', value); btn?.setAttribute('aria-pressed', String(value)); };
+  if (btn) { btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+  paint(next);
+  let persisted = false, updatedWord = null;
+  try {
+    await updateActiveWordInCloud(id, { starred: next }, context);
+    if (!isDictionaryWriteContextCurrent(context)) return false;
+    updatedWord = window.words.find(item => String(item.id) === String(id));
+    if (!updatedWord) return false;
+    updatedWord.starred = next;
+    persisted = context.owner !== 'guest';
+    try { persistDictionary(); persisted = true; }
+    catch (error) {
+      if (!persisted) {
+        const stored = context.worldId ? readCustomWorldWordsFromStorage(context.worldId, 'guest') : readWordsFromStorage('normal', 'guest');
+        persisted = stored.some(item => String(item.id) === String(id) && Boolean(item.starred) === next);
+      }
+      if (!persisted) throw error;
+      console.warn('[Dictionary] Star saved; optional refresh failed.', error?.message);
     }
+    paint(next);
+    if (currentView === 'starred') renderStarredWords();
+    else if (currentFilter === 'starred') render();
+    return true;
+  } catch (error) {
+    if (isDictionaryWriteContextCurrent(context)) {
+      if (updatedWord && !persisted) updatedWord.starred = previous;
+      paint(persisted ? next : previous);
+      if (!persisted) showToast('تعذّر حفظ النجمة. حاول مجددًا؛ لم نؤكد حفظها في حسابك.', 'warning', 4500);
+    }
+    return persisted;
+  } finally {
+    pending.delete(key);
+    if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
   }
 };
 
@@ -1024,13 +1121,22 @@ function announceDictionarySearchResult(type, status, word) {
 async function buildAiRequestHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   const user = window.auth?.currentUser;
+  const generation = Number(window.__lootlinguaAuthGeneration) || 0;
   if (user) {
+    let token;
     try {
-      const token = await user.getIdToken();
-      headers.Authorization = `Bearer ${token}`;
-    } catch (e) {
-      console.warn('getIdToken failed:', e);
+      token = await user.getIdToken();
+    } catch {
+      throw Object.assign(new Error('تعذّر تأكيد جلسة الدخول. تحقق من اتصالك وأعد البحث.'), { code: 401 });
     }
+    if (window.auth?.currentUser?.uid !== user.uid ||
+        generation !== (Number(window.__lootlinguaAuthGeneration) || 0)) {
+      throw Object.assign(new Error('تغيّر الحساب. أعد البحث من الحساب الحالي.'), { code: 401 });
+    }
+    if (typeof token !== 'string' || !token.trim()) {
+      throw Object.assign(new Error('تعذّر تأكيد جلسة الدخول. سجّل الدخول مجددًا أو أعد المحاولة.'), { code: 401 });
+    }
+    headers.Authorization = `Bearer ${token}`;
   }
   return headers;
 }
@@ -1054,6 +1160,13 @@ function bindSearchLockOverlays() {
 async function fetchAiMeaningsWithCache(word, type) {
   const trimmed = String(word || '').trim();
   if (!trimmed) return { ok: false, data: [], error: 'empty' };
+  const owner = window.auth?.currentUser?.uid || 'guest';
+  const generation = Number(window.__lootlinguaAuthGeneration) || 0;
+  const assertOwner = () => {
+    if (owner !== (window.auth?.currentUser?.uid || 'guest') || generation !== (Number(window.__lootlinguaAuthGeneration) || 0)) {
+      throw Object.assign(new Error('تغيّر الحساب. أعد البحث من الحساب الحالي.'), { code: 401 });
+    }
+  };
 
   if (!guardGuestAiSearch(type)) {
     const err = new Error('Forbidden');
@@ -1064,10 +1177,12 @@ async function fetchAiMeaningsWithCache(word, type) {
   if (typeof window.getAiGlobalCache === 'function') {
     try {
       const cached = await window.getAiGlobalCache(trimmed, type);
+      assertOwner();
       if (Array.isArray(cached) && cached.length) {
         return { ok: true, data: cached, fromCache: true };
       }
     } catch (e) {
+      if (e.code === 401) throw e;
       console.warn('fetchAiMeaningsWithCache: cache read', e);
     }
   }
@@ -1080,6 +1195,7 @@ async function fetchAiMeaningsWithCache(word, type) {
 
   const endpoint = type === 'gamer' ? '/api/gamer-dictionary' : '/api/dictionary';
   const headers = await buildAiRequestHeaders();
+  assertOwner();
   const res = await fetch(`${DICT_API_BASE}${endpoint}`, {
     method: 'POST',
     headers,
@@ -1087,7 +1203,14 @@ async function fetchAiMeaningsWithCache(word, type) {
   });
 
   const payload = await res.json().catch(() => ({}));
+  assertOwner();
+  if (res.status === 401) {
+    throw Object.assign(new Error('تعذّر تأكيد جلسة الدخول. سجّل الدخول مجددًا أو أعد البحث.'), { code: 401 });
+  }
   if (res.status === 403) {
+    if (owner !== 'guest') {
+      throw Object.assign(new Error(payload.error || 'تعذّر إكمال البحث من هذا الحساب. أعد المحاولة.'), { code: 'dictionary/forbidden', status: 403 });
+    }
     markGuestSearchUsed(type);
     showGuestTrialBlocked();
     const err = new Error('Forbidden');
@@ -1121,7 +1244,13 @@ function clearGamerSuggestionsUI() {
 
 
 function sugAttr(str) {
-  return encodeURIComponent(String(str ?? ''));
+  return encodeURIComponent(suggestionText(str));
+}
+
+function suggestionText(value) {
+  if (!['string', 'number', 'boolean'].includes(typeof value)) return '';
+  return String(value).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g,
+    unit => unit.length === 2 ? unit : '\uFFFD');
 }
 
 function decodeSugAttr(str) {
@@ -1130,11 +1259,16 @@ function decodeSugAttr(str) {
 }
 
 function pickSuggestionFields(s) {
+  const source = s && typeof s === 'object' && !Array.isArray(s) ? s : {};
+  const firstText = (...values) => values.map(suggestionText).find(Boolean) || '';
+  const stars = Number(suggestionText(source.stars));
   return {
-    ar: s.ar || s.arabic || s.meaning_ar || s.translation || s.meaning || '',
-    pos: s.pos || s.partOfSpeech || s.category || 'مصطلح ألعاب',
-    ex: s.ex || s.example || s.sentence || '',
-    game: s.game || '',
+    ar: firstText(source.ar, source.arabic, source.meaning_ar, source.translation, source.meaning),
+    pos: firstText(source.pos, source.partOfSpeech, source.category) || 'مصطلح ألعاب',
+    ex: firstText(source.ex, source.example, source.sentence),
+    exAr: suggestionText(source.ex_ar),
+    game: suggestionText(source.game),
+    stars: Number.isFinite(stars) ? Math.max(1, Math.min(3, Math.round(stars))) : 1,
   };
 }
 
@@ -1173,6 +1307,8 @@ window.submitSuggestionFromUI = async function(wordEnc, arEnc, gameEnc, ev) {
 };
 
 async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
+  const context = captureDictionaryWriteContext();
+  if (await window.LootLinguaDictionaryPages?.requireComplete({ personal: !context.worldId }) === false || !isDictionaryWriteContextCurrent(context)) return;
   if (!word || !ar) {
     pushNotification('بيانات ناقصة للإضافة', 'warning');
     return;
@@ -1194,6 +1330,9 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
   const xpGain = 0;
   const category = pos || 'مصطلح ألعاب';
   let added = false;
+  let cloudAccepted = false;
+  let guestWord = null;
+  let guestPersisted = false;
 
   try {
     if (existingWord && isDictionaryWordHidden(existingWord) && !isCustomWorldView()) {
@@ -1203,6 +1342,8 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         example: ex || '',
         category,
       }, 'dictionary-search');
+      if (!isDictionaryWriteContextCurrent(context)) return;
+      cloudAccepted = context.owner !== 'guest';
       if (isEditableDictionaryView()) render();
       pushNotification(`تمت استعادة كلمة ”${word}“. كانت مرتبطة برحلة تعليمية، وتقدمها السابق محفوظ.`, 'success');
       added = true;
@@ -1218,8 +1359,10 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
           tempWord.order ?? 0,
           { ...tempWord, lifecycleSource: { type: 'dictionary-search' } }
         );
-      if (realId) {
-        window.words.unshift(applyKnownSharedMastery({
+      if (!isDictionaryWriteContextCurrent(context)) return;
+      if (typeof realId === 'string' && realId.trim()) {
+        cloudAccepted = true;
+        if (!window.words.some(item => String(item.id) === realId)) window.words.unshift(applyKnownSharedMastery({
           id: realId, word, meaning: ar, example: ex || '', category,
           starred: false, forgetCount: 0, xpValue: xpGain, createdAt: tempWord.createdAt,
         }));
@@ -1228,17 +1371,14 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
         pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
         added = true;
       } else {
-        const nw = applyKnownSharedMastery({ id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain, createdAt: new Date().toISOString() });
-        window.words.unshift(nw);
-        persistDictionary();
-        if (isEditableDictionaryView()) render();
-        pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()} محلياً — سجّل دخول للمزامنة`, 'success');
-        added = true;
+        throw new Error('Dictionary write was not acknowledged.');
       }
     } else {
       const nw = applyKnownSharedMastery({ id: Date.now().toString(), word, meaning: ar, example: ex || '', category, starred: false, forgetCount: 0, xpValue: xpGain, createdAt: new Date().toISOString() });
+      guestWord = nw;
       window.words.unshift(nw);
       persistDictionary();
+      guestPersisted = true;
       if (isEditableDictionaryView()) render();
       pushNotification(`تمت الإضافة إلى ${getActiveDictionaryMessageLabel()}!`, 'success');
       added = true;
@@ -1249,6 +1389,18 @@ async function addAiMeaningCore({ word, ar, pos, ex, game }, btn) {
       btn.classList.add('sug-added');
     }
   } catch (err) {
+    if (!isDictionaryWriteContextCurrent(context)) return;
+    if (guestWord && !guestPersisted) {
+      const stored = context.worldId ? readCustomWorldWordsFromStorage(context.worldId, context.owner) : readWordsFromStorage('normal', context.owner);
+      guestPersisted = stored.some(item => String(item.id) === String(guestWord.id) && item.word === guestWord.word &&
+        item.meaning === guestWord.meaning && (item.example || '') === guestWord.example && (item.category || '') === guestWord.category);
+      if (!guestPersisted) window.words = window.words.filter(item => item !== guestWord);
+    }
+    if (cloudAccepted || guestPersisted) {
+      pushNotification('حُفظت الكلمة في حسابك، لكن تعذّر تحديث العرض المحلي بالكامل.', 'warning');
+      if (btn) { btn.disabled = true; btn.classList.add('sug-added'); btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>تمت الإضافة</span>'; }
+      return;
+    }
     console.error('addAiMeaningCore:', err);
     pushNotification('ما قدرنا نضيف الكلمة. جرّب مرة ثانية.', 'danger');
     if (btn) {
@@ -1297,6 +1449,35 @@ function injectGamerMeaningBubble() {
   bindSearchLockOverlays();
 }
 
+let suggestionInteractionsBound = false;
+
+function bindSuggestionInteractions() {
+  if (suggestionInteractionsBound) return;
+  suggestionInteractionsBound = true;
+  const handleAction = (event) => {
+    const control = event.target?.closest?.('[data-action="select-ai-meaning"], [data-action="toggle-ai-meanings"]');
+    if (!control || !control.closest('#suggestionsList, #gamerSuggestionsPanel')) return;
+    if (event.type === 'keydown') {
+      if (control.dataset.action !== 'select-ai-meaning' ||
+          (event.key !== 'Enter' && event.key !== ' ') || event.repeat) return;
+    }
+    event.preventDefault();
+    if (control.dataset.action === 'select-ai-meaning') {
+      selectSuggestion(decodeSugAttr(control.dataset.ar), decodeSugAttr(control.dataset.pos),
+        decodeSugAttr(control.dataset.ex));
+      document.getElementById('meaningInput')?.focus();
+      return;
+    }
+    const expanded = control.getAttribute('aria-expanded') !== 'true';
+    const extra = control.parentElement.querySelectorAll('.extra-meaning');
+    extra.forEach(item => { item.style.display = expanded ? 'block' : 'none'; });
+    control.setAttribute('aria-expanded', String(expanded));
+    control.textContent = expanded ? 'عرض أقل ▲' : `عرض المزيد (${extra.length}) ▼`;
+  };
+  document.addEventListener('click', handleAction);
+  document.addEventListener('keydown', handleAction);
+}
+
 function renderSuggestionHtml(suggestions, itemClass, options = {}) {
   const {
     sourceWord = window.__lastDictSearchWord || '',
@@ -1306,31 +1487,30 @@ function renderSuggestionHtml(suggestions, itemClass, options = {}) {
     listSelector = '',
   } = options;
 
+  bindSuggestionInteractions();
+  const items = Array.isArray(suggestions) ? suggestions : [];
   const wordEnc = sugAttr(sourceWord);
   let html = '';
 
-  suggestions.forEach((s, i) => {
+  items.forEach((s, i) => {
     const fields = pickSuggestionFields(s);
-    const safeAr = fields.ar.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const safeEx = fields.ex.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const safePos = fields.pos.replace(/'/g, "\\'");
     const arEsc = escapeHtml(fields.ar);
     const posEsc = escapeHtml(fields.pos);
     const exEsc = escapeHtml(fields.ex);
-    const exArEsc = escapeHtml(s.ex_ar || '');
-    const gameTag = escapeHtml(fields.game || game || '');
-    const starsNum = Math.max(1, Math.min(3, Number(s.stars) || 1));
+    const exArEsc = escapeHtml(fields.exAr);
+    const gameTag = escapeHtml(fields.game || suggestionText(game));
+    const starsNum = fields.stars;
     const starsHtml = '★'.repeat(starsNum) + '☆'.repeat(3 - starsNum);
     const extraClass = i >= 4 ? 'extra-meaning' : '';
     const extraStyle = i >= 4 ? 'style="display:none"' : '';
     const itemGameEnc = sugAttr(fields.game || game || '');
-    const click = allowSelect
-      ? `onclick="selectSuggestion('${safeAr}','${safePos}','${safeEx}')"`
+    const selection = allowSelect
+      ? `role="button" tabindex="0" data-action="select-ai-meaning" data-ar="${sugAttr(fields.ar)}" data-pos="${sugAttr(fields.pos)}" data-ex="${sugAttr(fields.ex)}"`
       : '';
 
     html += `
       <div class="sug-result-card ${extraClass}" ${extraStyle}>
-        <div class="${itemClass} sug-item ${allowSelect ? 'sug-item-clickable' : ''}" ${click}>
+        <div class="${escapeHtml(itemClass)} sug-item ${allowSelect ? 'sug-item-clickable' : ''}" ${selection}>
           <div class="sug-main">
             <span class="sug-ar">${arEsc}</span>
             <span class="sug-pos">${posEsc}</span>
@@ -1360,10 +1540,9 @@ function renderSuggestionHtml(suggestions, itemClass, options = {}) {
       </div>`;
   });
 
-  if (listSelector && suggestions.length > 4) {
-    html += `<div class="sug-toggle gamer-sug-toggle"
-      onclick="const e=document.querySelectorAll('${listSelector} .extra-meaning'),h=e[0]&&e[0].style.display==='none';e.forEach(x=>x.style.display=h?'block':'none');this.innerHTML=h?'عرض أقل ▲':'عرض المزيد (${suggestions.length - 4}) ▼'">
-      عرض المزيد (${suggestions.length - 4}) ▼</div>`;
+  if (listSelector && items.length > 4) {
+    html += `<button type="button" class="sug-toggle gamer-sug-toggle" data-action="toggle-ai-meanings" aria-expanded="false">
+      عرض المزيد (${items.length - 4}) ▼</button>`;
   }
 
   return html;
@@ -1514,7 +1693,9 @@ window.fetchSuggestions = async function() {
     console.error("Frontend Error:", error);
     
     // التعامل مع الأخطاء بطريقة مريحة للمستخدم
-    if (error.message === "sleeping" || error.message.includes("fetch")) {
+    if (error.code === 401 || error.code === 'dictionary/forbidden') {
+         list.innerHTML = `<p class="gamer-suggestions-error">${escapeHtml(error.message)}</p>`;
+    } else if (error.message === "sleeping" || error.message.includes("fetch")) {
          list.innerHTML = "<p style='color:var(--warning);text-align:center;font-size:12px;padding:10px;'>السيرفر كان في وضع السكون ويستيقظ الآن.. جرب الضغط على بحث مرة أخرى بعد ثوانٍ</p>";
     } else {
          list.innerHTML = "<p style='color:var(--danger);text-align:center;font-size:12px;padding:10px;'>فشل في جلب البيانات من السيرفر</p>";
@@ -1795,7 +1976,7 @@ async function handleWordHunterWordClick(event, btn) {
       showWordHunterPopover(btn, { word, meaning: 'سجل دخولك لاستخدام البحث الذكي بعد التجربة.', empty: true });
       return;
     }
-    showWordHunterPopover(btn, { word, meaning: 'تعذر جلب المعنى الآن.', empty: true });
+    showWordHunterPopover(btn, { word, meaning: error.code === 401 ? error.message : 'تعذر جلب المعنى الآن.', empty: true });
   }
 }
 
@@ -1886,7 +2067,7 @@ window.fetchWordHunterGamerMeaning = async function(event) {
       });
     }
   } catch (err) {
-    if (err.code !== 403) showToast('تعذر جلب معنى الألعاب الآن.', 'warning', 3600);
+    if (err.code !== 403) showToast(err.code === 401 ? err.message : 'تعذر جلب معنى الألعاب الآن.', 'warning', 3600);
   }
 };
 
@@ -1901,7 +2082,8 @@ function setFilter(f) {
 // ═══════════════════════════════════════════════════════
 // Reorder (Drag & Drop)
 // ═══════════════════════════════════════════════════════
-function toggleReorderMode() {
+async function toggleReorderMode() {
+  if (!isReorderMode && await window.LootLinguaDictionaryPages?.requireComplete({ personal: !isCustomWorldView() }) === false) return;
   if (!isEditableDictionaryView()) return;
   if (!isReorderMode && !isBulkDeleteMode) {
     window.enterSelectionMode();
@@ -2249,7 +2431,8 @@ function finalizeJsonImport(ctx, uploadResult) {
   }
 }
 
-window.exportData = function() {
+window.exportData = async function() {
+  if (await window.LootLinguaDictionaryPages?.requireComplete({ personal: !isCustomWorldView() }) === false) return;
   const activeWorld = getActiveCustomWorld();
   const payload = {
     format: 'lootlingua-dictionary',
@@ -2271,6 +2454,7 @@ window.exportData = function() {
 window.importData = async function(event) {
   const file = event.target.files?.[0];
   if (!file) return;
+  if (await window.LootLinguaDictionaryPages?.requireComplete({ personal: !isCustomWorldView() }) === false) return;
   event.target.value = '';
 
   if (!rateLimit('jsonImport', 5, 60000)) {

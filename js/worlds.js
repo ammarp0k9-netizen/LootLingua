@@ -55,7 +55,7 @@ const TITLE_DEFS = [
     color: '#fbbf24',
     name: 'صائد الصعب',
     how: 'علّم 10 كلمات ككلمات صعبة.',
-    unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => w.starred).length >= 10,
+    unlocked: () => getDictionaryStarredCount() >= 10,
   },
   {
     id: 'first_mastery',
@@ -63,7 +63,7 @@ const TITLE_DEFS = [
     color: '#22d3ee',
     name: 'صاقل الجوهرة',
     how: 'أتقن أول كلمة في قاموسك.',
-    unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length >= 1,
+    unlocked: () => getDictionaryMasteredCount() >= 1,
   },
   {
     id: 'mastery_circle',
@@ -71,7 +71,7 @@ const TITLE_DEFS = [
     color: '#eab308',
     name: 'تاج الإتقان',
     how: 'أتقن 10 كلمات في قاموسك.',
-    unlocked: () => getPersonalDictionaryWordsSnapshot().filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length >= 10,
+    unlocked: () => getDictionaryMasteredCount() >= 10,
   },
   {
     id: 'strategist',
@@ -315,6 +315,7 @@ function getStreakFreezeCount() {
 
 function saveStreakFreezeCount(count) {
   saveInt(STREAK_FREEZE_KEY, Math.max(0, Number(count) || 0));
+  if (typeof renderStreakFreezeStatus === 'function') renderStreakFreezeStatus();
   if (!hasSignedInUser()) markGuestDataDirty();
   requestProfileCloudSave();
 }
@@ -334,34 +335,47 @@ function saveChestProgressState(state) {
   if (typeof renderLootSummary === 'function' && currentView === 'treasure') renderLootSummary();
 }
 
-let chestXPUnlockInFlight = null;
+const chestXPUnlockInFlight = new Map();
 
 async function unlockChestXP(reason = '') {
-  if (chestXPUnlockInFlight) return chestXPUnlockInFlight;
-  chestXPUnlockInFlight = (async () => {
+  const owner = getStorageUserId();
+  const generation = Number(window.__lootlinguaAuthGeneration) || 0;
+  const operationKey = JSON.stringify([owner, generation]);
+  const isCurrent = () => getStorageUserId() === owner && (Number(window.__lootlinguaAuthGeneration) || 0) === generation;
+  if (chestXPUnlockInFlight.has(operationKey)) return chestXPUnlockInFlight.get(operationKey);
+  const operation = (async () => {
+  if (window.auth?.currentUser) {
+    if (typeof window.flushProfileIntents !== 'function') return false;
+    const pending = await window.flushProfileIntents();
+    if (!isCurrent() || pending?.saved !== true) return false;
+  }
   const state = getLootState();
   const amount = Number(state.lockedXP) || 0;
   if (amount <= 0) return false;
   const eventId = `daily_chest_unlock:${state.lockStartedAt || state.lastOpenAt || todayStr()}`;
   const metadata = { eventId };
   const awarded = await awardXP(amount, 'daily_chest_unlock', metadata);
-  if (metadata.awardStatus === 'unavailable') return false;
-  state.lockedXP = 0;
-  state.lockStartedAt = 0;
-  state.lockResolvedAt = Date.now();
-  state.lockMasteredWordIds = [];
-  state.lockHighAccuracyQuizIds = [];
-  saveChestProgressState(state);
+  if (!isCurrent() || !['awarded', 'duplicate'].includes(metadata.awardStatus)) return false;
+  const current = getLootState();
+  const currentEventId = `daily_chest_unlock:${current.lockStartedAt || current.lastOpenAt || todayStr()}`;
+  if (currentEventId !== eventId || Number(current.lockedXP) !== amount) return false;
+  current.lockedXP = 0;
+  current.lockStartedAt = 0;
+  current.lockResolvedAt = Date.now();
+  current.lockMasteredWordIds = [];
+  current.lockHighAccuracyQuizIds = [];
+  saveChestProgressState(current);
   if (awarded > 0) {
     showXPBadge(awarded, 'dailyLootChest', false);
     showToast(`انفتح الxp المقفل!+${awarded} XP${reason ? ` — ${reason}` : ''}`, 'success', 5200);
   }
   return true;
   })();
+  chestXPUnlockInFlight.set(operationKey, operation);
   try {
-    return await chestXPUnlockInFlight;
+    return await operation;
   } finally {
-    chestXPUnlockInFlight = null;
+    chestXPUnlockInFlight.delete(operationKey);
   }
 }
 
@@ -393,7 +407,41 @@ function recordHighAccuracyVerifiedQuiz(sessionId) {
   evaluateChestXPUnlock(state);
 }
 
-function revealDailyLootReward(state, reward) {
+function captureLootOpening() {
+  return { owner: getStorageUserId(), generation: Number(window.__lootlinguaAuthGeneration) || 0,
+    eventId: window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}` };
+}
+
+function isLootOpeningCurrent(operation) {
+  return operation.owner === getStorageUserId() && operation.generation === (Number(window.__lootlinguaAuthGeneration) || 0);
+}
+
+async function revealDailyLootReward(state, reward, operation = captureLootOpening()) {
+  if (!isLootOpeningCurrent(operation)) return false;
+  if (operation.owner !== 'guest') {
+    try {
+      if (typeof window.commitProfileIntent !== 'function') throw new Error('Profile sync is not ready.');
+      const result = await window.commitProfileIntent({
+        type: 'loot-open', eventId: operation.eventId, reward, at: Date.now(), day: todayStr(),
+      });
+      if (!isLootOpeningCurrent(operation)) return false;
+      if (result?.saved !== true || result?.applied !== true) {
+        showToast(result?.saved === true ? 'لم يُفتح صندوق جديد. تم تحديث حالته من حسابك.' :
+          'تعذّر تأكيد فتح الصندوق. ستتحدث حالته عند عودة المزامنة.', 'warning', 5000);
+        renderTreasureRoom(); return false;
+      }
+    } catch (error) {
+      if (isLootOpeningCurrent(operation)) {
+        showToast('تعذّر تأكيد فتح الصندوق. ستتحدث حالته عند عودة المزامنة.', 'warning', 5000);
+        renderTreasureRoom();
+      }
+      return false;
+    }
+    launchConfetti();
+    showToast(`طلع لك: ${describeLootReward(reward)}. ${CHEST_XP_UNLOCK_TEXT}`, 'success', 6500);
+    evaluateTitleUnlocks(true); updateDailyQuestsBadge(); renderTreasureRoom();
+    return true;
+  }
   if ((Number(state.lockedXP) || 0) > 0) {
     showToast(`عندك ${Number(state.lockedXP) || 0} XP مقفولة. افتح المكافأة الحالية أولا قبل صندوق جديد.`, 'warning', 5200);
     renderTreasureRoom();
@@ -424,6 +472,7 @@ function revealDailyLootReward(state, reward) {
   updateDailyQuestsBadge();
   renderTreasureRoom();
   requestProfileCloudSave();
+  return true;
 }
 
 window.startLootChestCharge = function(event) {
@@ -442,15 +491,16 @@ window.startLootChestCharge = function(event) {
     window.openDailyLootBox();
     return;
   }
-  if (window.__lootOpening || window.__lootHoldTimer) {
+  if ((window.__lootOpening && isLootOpeningCurrent(window.__lootOpening)) || window.__lootHoldTimer) {
     window.__lootPointerStart = null;
     return;
   }
   chest?.classList.add('is-charging');
   if (preview) preview.textContent = 'ثبّت ضغطتك شوي... الصندوق بدأ يتشقق.';
+  const holdOwner = captureLootOpening();
   window.__lootHoldTimer = setTimeout(() => {
     window.__lootHoldTimer = null;
-    window.openDailyLootBox();
+    if (isLootOpeningCurrent(holdOwner)) window.openDailyLootBox();
   }, 820);
 };
 
@@ -491,8 +541,9 @@ window.openDailyLootBox = function() {
     renderTreasureRoom();
     return;
   }
-  if (window.__lootOpening) return;
-  window.__lootOpening = true;
+  if (window.__lootOpening && isLootOpeningCurrent(window.__lootOpening)) return;
+  const operation = captureLootOpening();
+  window.__lootOpening = operation;
   clearTimeout(window.__lootHoldTimer);
   window.__lootHoldTimer = null;
   const chest = document.getElementById('dailyLootChest');
@@ -506,14 +557,18 @@ window.openDailyLootBox = function() {
   if (preview) preview.textContent = 'الصندوق فتح... بنفرز اللوت الآن!';
   const state = availability.state;
   const reward = pickDailyLootReward();
-  setTimeout(() => {
-    revealDailyLootReward(state, reward);
-    chest?.classList.remove('is-opening');
-    if (chest) {
-      chest.disabled = false;
-      chest.setAttribute('aria-busy', 'false');
+  setTimeout(async () => {
+    try {
+      await revealDailyLootReward(state, reward, operation);
+    } finally {
+      if (window.__lootOpening === operation) {
+        if (isLootOpeningCurrent(operation)) {
+          chest?.classList.remove('is-opening');
+          if (chest) { chest.disabled = false; chest.setAttribute('aria-busy', 'false'); }
+        }
+        window.__lootOpening = false;
+      }
     }
-    window.__lootOpening = false;
   }, 900);
 };
 
@@ -523,13 +578,13 @@ function getTitleProgressMetrics() {
   const journeyTitles = getJourneyTitleProgress();
   return {
     loot,
-    wordCount: words.length,
-    starred: words.filter(w => w.starred).length,
+    wordCount: getDictionaryWordCount(),
+    starred: getDictionaryStarredCount(),
     perfect: loadInt('lootlinguaPerfectQuizzes', 0),
     freezeSaves: loadInt(FREEZE_SAVES_KEY, 0),
     level: getLevelFromXP(loadInt('userXP', 0)),
     streak: loadInt('dailyStreak', 0),
-    masteredWords: words.filter(w => getWordMasteryState(w).mastery_status === 'Mastered').length,
+    masteredWords: getDictionaryMasteredCount(),
     clearedGates: journeyTitles.clearedGateIds.length,
     completedWorlds: journeyTitles.completedWorldIds.length,
   };
@@ -570,6 +625,7 @@ function getTitleProgress(def, metrics = getTitleProgressMetrics()) {
 
 function showTitleUnlockMoment(definitions) {
   const titles = Array.isArray(definitions) ? definitions.filter(Boolean) : [];
+  if (titles.length && window.LootLinguaMotivation?.queueTitles?.(titles)) return;
   if (!titles.length || document.getElementById('titleUnlockMoment')) return;
   const primary = titles[0];
   const shell = document.createElement('section');
@@ -629,7 +685,7 @@ function evaluateTitleUnlocksFromData(celebrate = false) {
     localStorage.removeItem(ACTIVE_TITLE_KEY);
   }
   if (newly.length) saveTitleState(state);
-  if (newly.length && celebrate && !isJsonImportBatchActive()) {
+  if (newly.length && (celebrate || window.LootLinguaMotivation?.isLearningCommitActive?.()) && !isJsonImportBatchActive()) {
     showTitleUnlockMoment(newly);
   }
   renderTitlesGrid();
@@ -4692,6 +4748,7 @@ function renderPublishedGateClearResult(world, rank, gate, bundle) {
     if (!publishedContentState.shownGateClearCelebrations.has(celebrationKey)) {
       publishedContentState.shownGateClearCelebrations.add(celebrationKey);
       const titles = recordJourneyTitleProgress(world, rank, gate, bundle.result);
+      window.LootLinguaMotivation?.observeGates?.(world, rank, [{ worldId: world.worldId, rankId: rank.rankId, gateId: gate.gateId, clearedBy: 'gate-clear', lastClearResult: 'passed', status: 'cleared' }]);
       try { window.launchConfetti?.(); } catch (_) {}
       try { navigator.vibrate?.([35, 35, 85]); } catch (_) {}
       try { window.playUnlockSound?.(); } catch (_) {}
@@ -5335,6 +5392,8 @@ function renderPublishedRanks(world, ranks, journey, activeJourney) {
     ],
   });
   section.append(makePublishedJourneyPanel(world, ranks, journey, activeJourney));
+  const rewardGoal = window.LootLinguaMotivation?.makeGoal?.(world.worldId, null, { gateCount: world.gateCount, complete: journey?.contentJourneyStatus === 'completed-current-content' });
+  if (rewardGoal) section.append(rewardGoal);
   if (!ranks.length) {
     section.append(renderPublishedEmpty('لا توجد مستويات أو بوابات منشورة في هذا العالم.', 'fa-solid fa-dungeon'));
   } else {
@@ -5387,6 +5446,9 @@ function renderPublishedGates(
     gateProgressById,
     ranks
   );
+  window.LootLinguaMotivation?.observeGates?.(world, rank, gateProgressById);
+  const rewardGoal = window.LootLinguaMotivation?.makeGoal?.(world.worldId, null, { gateCount: world.gateCount, complete: journey?.contentJourneyStatus === 'completed-current-content' });
+  if (rewardGoal) section.append(rewardGoal);
   if (rankProgress.completed) {
     const achievement = publishedElement(
       'section',
@@ -5735,6 +5797,8 @@ function renderPublishedGateWords(world, rank, gate, snapshot) {
   );
   if (gateSwitcher) section.append(gateSwitcher);
   section.append(makePublishedGateJourneyPanel(world, rank, gate));
+  const rewardGoal = window.LootLinguaMotivation?.makeGoal?.(world.worldId, publishedContentState.gateProgress, { gateCount: world.gateCount, complete: publishedContentState.journey?.contentJourneyStatus === 'completed-current-content' });
+  if (rewardGoal) section.append(rewardGoal);
   const gateState = publishedGateJourneyState(
     gate,
     rank,
@@ -6018,6 +6082,8 @@ async function loadPublishedRouteData(route, options) {
         : 'جارٍ تحميل كلمات البوابة...'
   );
   try {
+    if (level === 'words' && await window.LootLinguaDictionaryPages?.requireComplete() === false) throw new Error('Dictionary data is unavailable.');
+    if (generation !== publishedContentState.generation) return;
     const api = getPublishedContentApi();
     if (key === 'not-found') {
       const notFound = new Error('Published route was not found.');
@@ -6733,6 +6799,9 @@ async function saveWordsToTarget(targetId, wordsToAdd, options = {}) {
         word.id = realId;
       }));
     }
+    const movedPrivateKeys = new Set(wordsToAdd
+      .filter((word) => word.removePrivateWorldId)
+      .map(getWorldManageWordKey));
     wordsToAdd.forEach((word) => {
       delete word.operationId;
       delete word.removePrivateWorldId;
@@ -6742,6 +6811,18 @@ async function saveWordsToTarget(targetId, wordsToAdd, options = {}) {
     const existingKeys = new Set(currentPersonal.map(getWorldManageWordKey));
     const next = currentPersonal.map((word) => {
       const incoming = incomingByKey.get(getWorldManageWordKey(word));
+      if (incoming && movedPrivateKeys.has(getWorldManageWordKey(word))) {
+        const dictionaryFields = {};
+        ['example', 'category', 'starred', 'order'].forEach((field) => {
+          if (Object.prototype.hasOwnProperty.call(incoming, field)) dictionaryFields[field] = incoming[field];
+        });
+        const text = incoming.word || incoming.text;
+        const meaning = incoming.meaning ?? incoming.translation ?? '';
+        return {
+          ...word, ...dictionaryFields, word: text, text, meaning, translation: meaning,
+          personalDictionaryState: 'active', hiddenFromDictionary: false, hiddenFromDictionaryAt: null,
+        };
+      }
       return incoming
         ? { ...incoming, ...word, personalDictionaryState: 'active' }
         : word;
@@ -6807,7 +6888,8 @@ function showSkippedDuplicateWordsNotice(skipped, targetId = 'personal', operati
 
 let worldManageOperationPromise = null;
 
-window.applyWorldManageToTarget = function(targetId, action = pendingWorldManageAction) {
+window.applyWorldManageToTarget = async function(targetId, action = pendingWorldManageAction) {
+  if (await window.LootLinguaDictionaryPages?.requireComplete() === false) return false;
   if (worldManageOperationPromise) return worldManageOperationPromise;
   const selected = getSelectedWordsForWorldManage();
   if (!selected.length) return Promise.resolve(false);
@@ -7111,7 +7193,8 @@ window.loadTreasureView = function() {
 };
 
 // ── Starred Words View ──
-window.loadStarredView = function() {
+window.loadStarredView = async function() {
+  if (await window.LootLinguaDictionaryPages?.requireComplete() === false) return;
   window.saveActiveAddFormDraft?.();
   cleanupQuizSessionIfActive();
   if (window.LootLinguaGuidedFirstJourney?.shouldAllowSurface?.('starred') === false) return;
