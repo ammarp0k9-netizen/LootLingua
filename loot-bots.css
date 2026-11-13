@@ -1,0 +1,145 @@
+.loot-bots {
+  --lb-gold: #f6d48b;
+  --lb-teal: #9af2dc;
+  box-sizing: border-box;
+  width: min(calc(100vw - 12px), 1480px);
+  height: min(calc(100dvh - 12px - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 960px);
+  max-width: 100%; max-height: 100%;
+  padding: 0;
+  border: 1px solid #36575d;
+  border-radius: 18px;
+  background: #0c1824;
+  color: #f3f8f7;
+  font-family: inherit;
+  box-shadow: 0 20px 70px #0009;
+  overscroll-behavior: contain;
+  overflow: hidden;
+}
+.loot-bots::backdrop { background: #040912ec; }
+.loot-bots [hidden] { display: none !important; }
+.loot-bots .lb-shell { box-sizing: border-box; height: 100%; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; gap: 8px; padding: 10px; }
+.loot-bots .lb-header, .loot-bots .lb-footer, .loot-bots .lb-actions { display: flex; align-items: center; gap: 8px; }
+.loot-bots .lb-header, .loot-bots .lb-footer { justify-content: space-between; }
+.loot-bots .lb-header h2 { margin: 0; text-align: right; font: 900 clamp(1.3rem, 4vw, 2rem)/1 system-ui, sans-serif; letter-spacing: -.045em; color: var(--lb-teal); }
+.loot-bots p { margin: 0; }
+.loot-bots .lb-header p, .loot-bots .lb-note { color: #b8cbd3; font-size: .76rem; }
+.loot-bots button {
+  min-height: 42px; padding: 4px 10px; border: 1px solid #466e75; border-radius: 10px;
+  background: #183544; color: #f4f8f8; font-family: inherit; font-size: .83rem; line-height: 1.3;
+  font-weight: 700; cursor: pointer; touch-action: manipulation;
+}
+.loot-bots button:focus-visible, .loot-bots .lb-arena:focus-visible { outline: 2px solid var(--lb-gold); outline-offset: 2px; }
+.loot-bots button:disabled { opacity: .55; cursor: default; }
+.loot-bots .lb-hud { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+.loot-bots .lb-hud span { min-width: 0; text-align: center; border-radius: 8px; padding: 3px; background: #132632; font-size: .75rem; color: #bdd1d9; }
+.loot-bots .lb-hud b { display: block; direction: ltr; color: #fff; font-variant-numeric: tabular-nums; }
+.loot-bots .lb-hud span:last-child b { color: var(--lb-gold); }
+.loot-bots .lb-hud .lb-health { grid-column: span 2; background: #38232d; color: #ffd4dc; }
+.loot-bots .lb-health b { color: #ff8fa4; font-size: clamp(.92rem, 3.75vw, 1.3rem); line-height: 1.12; letter-spacing: .025em; white-space: nowrap; }
+.loot-bots .lb-boss-meter { display: grid; gap: 4px; padding: 3px 8px 6px; border: 1px solid #35535c; border-radius: 8px; background: #152631; }
+.loot-bots .lb-boss-meter > span { display: flex; align-items: center; justify-content: space-between; color: #ffe19d; font-size: .74rem; }
+.loot-bots .lb-boss-meter b::before { content: '◆'; margin-inline-end: 6px; }
+.loot-bots .lb-boss-meter small { color: #dce8ed; font-variant-numeric: tabular-nums; }
+.loot-bots .lb-track { overflow: hidden; height: 6px; border-radius: 5px; background: #0b1722; }
+.loot-bots .lb-track i { display: block; height: 100%; transform: scaleX(0); transform-origin: right; background: linear-gradient(90deg, #ffdf8b, #ce8950); }
+.loot-bots .lb-boss-meter.is-threat { border-color: #8c504b; }
+.loot-bots .lb-boss-meter.is-threat .lb-track i { background: linear-gradient(90deg, #ff977d, #e75567); }
+.loot-bots .lb-arena { position: relative; min-width: 0; min-height: 0; border-radius: 11px; overflow: hidden; background: #101f2a; user-select: none; }
+.loot-bots .lb-arena.is-fighting { touch-action: none; }
+.loot-bots canvas { display: block; width: 100%; height: 100%; }
+.loot-bots .lb-arena.is-fighting canvas { cursor: crosshair; }
+.loot-bots .lb-panel { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: safe center; align-items: center; gap: 8px; padding: 14px; background: #0b1724ed; text-align: center; overflow: auto; touch-action: pan-y; }
+.loot-bots .lb-panel strong { font-size: clamp(1.25rem, 4vw, 2.1rem); color: var(--lb-teal); }
+.loot-bots .lb-panel p { max-width: 30ch; font-size: .88rem; }
+.loot-bots .lb-panel small { color: #c3d4da; }
+.loot-bots #lbAudioSettings { display: grid; gap: 6px; border: 1px solid #466e75; border-radius: 8px; padding: 4px 12px 8px; text-align: start; }
+.loot-bots #lbAudioSettings label { display: flex; align-items: center; gap: 8px; min-height: 30px; cursor: pointer; }
+.loot-bots #lbAudioSettings input { width: 18px; height: 18px; accent-color: #8de7d4; }
+.loot-bots [data-repeat] { min-height: 40px; margin-block-start: 6px; }
+.loot-bots [data-play] { background: var(--lb-teal); color: #0b2729; border-color: transparent; }
+.loot-bots .lb-combat-controls { position: absolute; right: 9px; bottom: 9px; z-index: 2; display: grid; gap: 5px; justify-items: end; pointer-events: none; }
+.loot-bots .lb-combat-controls > div:last-child { display: flex; align-items: end; gap: 6px; }
+.loot-bots .lb-weapon { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 8px; border-radius: 7px; background: #102836f2; color: #e6f6f5; border: 1px solid #6a9aa3; font-size: .77rem; }
+.loot-bots .lb-weapon.is-cooling { background: #55301c; color: #fff0c9; border-color: #ffbc69; }
+.loot-bots .lb-weapon.is-cooling small { display: none; }
+.loot-bots .lb-aim-guide { position: absolute; right: 9px; bottom: 108px; z-index: 3; width: min(216px, 82%); display: grid; gap: 3px; padding: 7px 10px; border: 1px solid #f7d48c; border-radius: 9px; background: #122838f5; color: #fff2d4; pointer-events: none; }
+.loot-bots .lb-aim-guide::after { content: ''; position: absolute; right: 23px; bottom: -6px; width: 10px; height: 10px; rotate: 45deg; background: #122838; border-right: 1px solid #f7d48c; border-bottom: 1px solid #f7d48c; }
+.loot-bots .lb-aim-guide strong { font-size: .82rem; }
+.loot-bots .lb-aim-guide span { font-size: .74rem; }
+.loot-bots [data-fire] { min-width: 64px; min-height: 54px; pointer-events: auto; touch-action: none; background: #f7d48c; color: #332510; border: 1px solid #fff0cd; border-bottom: 4px solid #ae7136; box-shadow: 0 4px 12px #06101bb0; }
+.loot-bots [data-fire]:active { translate: 0 2px; background: #ffedbc; }
+.loot-bots [data-dash] {
+  pointer-events: auto; display: grid; grid-template-columns: auto auto;
+  align-items: center; justify-items: center; gap: 0 5px; min-width: 76px; min-height: 49px;
+  padding: 4px 7px; border: 1px solid #ddfff5; border-bottom: 4px solid #4b9c91; border-radius: 12px;
+  background: #9af2dc; color: #0b2729; box-shadow: 0 4px 12px #06101bb0;
+}
+.loot-bots [data-dash] span { grid-row: span 2; font-size: 1.28rem; line-height: 1; }
+.loot-bots [data-dash] small { font-size: .66rem; font-variant-numeric: tabular-nums; }
+.loot-bots [data-dash]:active { translate: 0 2px; }
+.loot-bots [data-dash]:disabled { opacity: 1; background: #233949; color: #e1edf3; border-color: #71868c; }
+.loot-bots .lb-announcement, .loot-bots .lb-reward { position: absolute; pointer-events: none; z-index: 1; }
+.loot-bots .lb-announcement { inset: 9% 12% auto; display: grid; text-align: center; padding: 9px; border: 1px solid #e18c76; border-radius: 9px; background: #47252ef5; color: #fff0dd; }
+.loot-bots .lb-announcement.is-victory { background: #173f36f5; border-color: #99efad; }
+.loot-bots .lb-announcement.is-lower { inset-block-start: 58%; }
+.loot-bots .lb-announcement small { font-size: .74rem; }
+.loot-bots .lb-reward { inset: 8px 8px auto auto; border: 1px solid var(--reward); border-radius: 7px; padding: 2px 6px; background: #122435eb; color: var(--reward); font-size: .7rem; }
+.loot-bots .lb-station {
+  position: absolute; top: 57%; left: 50%; transform: translateX(-50%);
+  border: 2px solid #8bf4de; background: #12313d; color: #e9fffa; white-space: nowrap;
+}
+.loot-bots .lb-core, .loot-bots .lb-result {
+  position: absolute; inset: 15% 6% auto; display: grid; gap: 10px;
+  border: 1px solid #77d2bf; border-top: 4px solid #80e7cc; border-radius: 13px;
+  padding: clamp(9px, 2vw, 18px); background: #0c2233f5; color: #fff;
+  box-shadow: 0 9px 32px #06101bce; text-align: center; max-height: 74%; overflow: auto;
+}
+.loot-bots .lb-question small { color: var(--lb-teal); display: block; font-size: .78rem; }
+.loot-bots .lb-question b { color: #fff; display: block; font: 800 clamp(1.15rem, 4vw, 1.85rem)/1.14 system-ui, sans-serif; overflow-wrap: anywhere; }
+.loot-bots .lb-options { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 5px; }
+.loot-bots .lb-options button {
+  min-width: 0; min-height: 46px; padding: 4px; display: grid; justify-items: center;
+  border: 1px solid #57878e; border-bottom: 3px solid #488f89; background: #173646;
+  color: #fff8dc; overflow-wrap: anywhere;
+  font-size: clamp(.68rem, 2.5vw, .96rem);
+}
+.loot-bots .lb-core, .loot-bots .lb-options bdi { overscroll-behavior: contain; touch-action: pan-y; }
+.loot-bots .lb-options bdi { max-height: 4.5em; overflow: auto; }
+.loot-bots .lb-options span { color: var(--lb-teal); font-size: .66rem; }
+.loot-bots .lb-result { inset-block-start: 19%; border-color: #ffdc8b; background: #26311f; }
+.loot-bots .lb-result.is-wrong { border-color: #ff8268; background: #571e23; }
+.loot-bots .lb-result strong { font-size: clamp(.9rem, 3vw, 1.25rem); }
+.loot-bots .lb-result span { font-size: clamp(.85rem, 3vw, 1.2rem); overflow-wrap: anywhere; }
+.loot-bots .lb-footer { height: 36px; }
+.loot-bots .lb-footer p { color: #e0f1ee; font-size: .8rem; max-height: 36px; overflow: auto; overflow-wrap: anywhere; }
+@media (pointer: coarse) {
+  .loot-bots .lb-arena.is-fighting::before {
+    position: absolute; bottom: 4px; padding: 1px 6px; border-radius: 5px;
+    background: #0c1b27df; color: #d6e5eb; font-size: .62rem; pointer-events: none;
+  }
+  .loot-bots .lb-arena.is-fighting::before { left: 4px; content: 'حركة'; }
+}
+@media (max-width: 380px) {
+  .loot-bots .lb-shell { padding: 8px; gap: 6px; }
+  .loot-bots .lb-actions { gap: 4px; }
+  .loot-bots .lb-actions button { padding-inline: 6px; }
+  .loot-bots .lb-hud span { font-size: .66rem; }
+  .loot-bots .lb-footer { height: 30px; }
+  .loot-bots .lb-footer p { max-height: 30px; }
+}
+@media (min-width: 720px) and (orientation: landscape), (max-height: 520px) and (orientation: landscape) {
+  .loot-bots .lb-shell { grid-template-columns: clamp(155px, 22vw, 244px) minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+  .loot-bots .lb-arena { grid-area: 2 / 2 / 6; }
+  .loot-bots .lb-boss-meter { grid-area: 1 / 2; align-self: end; }
+  .loot-bots .lb-track { height: 10px; }
+  .loot-bots .lb-header { grid-area: 1 / 1 / 3 / 2; align-self: start; align-content: start; flex-wrap: wrap; }
+  .loot-bots .lb-hud { grid-area: 3 / 1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .loot-bots .lb-footer { grid-area: 4 / 1; height: auto; align-self: start; }
+  .loot-bots .lb-note { grid-area: 5 / 1; }
+  .loot-bots .lb-footer p { max-height: 100%; }
+}
+@media (max-height: 390px) and (orientation: landscape) {
+  .loot-bots .lb-shell { gap: 5px; padding: 6px; }
+  .loot-bots .lb-actions button { min-height: 36px; padding-inline: 5px; font-size: .7rem; }
+  .loot-bots .lb-note { font-size: .62rem; }
+}
