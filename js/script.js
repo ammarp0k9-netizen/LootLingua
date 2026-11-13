@@ -1290,10 +1290,14 @@ function parseAppRoute() {
   const parts = slug.split('/').filter(Boolean);
   if (parts[0] === APP_VIEW_ROUTES.worlds && parts.length > 1) {
     if (parts.length === 2) {
+      const assessmentId = history.state?.params?.worldId === parts[1] ? history.state.params.assessmentId : '';
       return {
         kind: 'published',
         key: 'world',
-        params: { worldId: parts[1] }
+        params: {
+          worldId: parts[1],
+          ...(assessmentId ? { assessmentId } : {}),
+        }
       };
     }
     if (parts.length === 4 && parts[2] === 'ranks') {
@@ -1312,23 +1316,36 @@ function parseAppRoute() {
     }
     return { kind: 'published', key: 'not-found', params: {} };
   }
-  if (APP_ROUTE_TO_VIEW[slug]) return { kind: 'view', key: APP_ROUTE_TO_VIEW[slug] };
+  if (APP_ROUTE_TO_VIEW[slug]) {
+    const key = APP_ROUTE_TO_VIEW[slug];
+    const tab = key === 'worlds' && history.state?.key === 'worlds' ? history.state.tab : '';
+    return { kind: 'view', key, ...(tab === 'custom' ? { tab } : {}) };
+  }
   if (APP_ROUTE_TO_MODAL[slug]) return { kind: 'modal', key: APP_ROUTE_TO_MODAL[slug] };
   if (APP_ROUTE_TO_OVERLAY[slug]) return { kind: 'overlay', key: APP_ROUTE_TO_OVERLAY[slug] };
   return { kind: 'view', key: 'personal' };
 }
 
 function setAppRoute(kind, key, options = {}) {
-  if (!appRoutingReady || appRouteSyncing) return;
   const routeKey = kind === 'published' ? (options.params || {}) : key;
-  const path = getAppRoutePath(kind, routeKey);
   const state = {
     lootlingua: true,
     kind,
     key,
     ...(kind === 'published' ? { params: routeKey } : {}),
+    ...(options.tab ? { tab: options.tab } : {}),
     source: options.source || (options.replace ? 'replace' : 'push')
   };
+  if (kind === 'view' || kind === 'published') {
+    const generation = window.__dictionaryNavigationGeneration;
+    queueMicrotask(() => {
+      if (generation === window.__dictionaryNavigationGeneration) {
+        window.dispatchEvent(new CustomEvent('lootlingua:surface-ready', { detail: state }));
+      }
+    });
+  }
+  if (!appRoutingReady || appRouteSyncing) return;
+  const path = getAppRoutePath(kind, routeKey);
   try {
     if (location.pathname === path) {
       history.replaceState({ ...state, source: history.state?.source || state.source }, '', path);
@@ -1343,6 +1360,9 @@ function setAppRoute(kind, key, options = {}) {
 function setAppViewRoute(viewKey, options = {}) {
   setAppRoute('view', viewKey, options);
 }
+
+window.getOnboardingView = () => currentView;
+window.hasActiveLearningQuiz = () => currentView === 'quiz' && Boolean(activeQuizSession);
 
 function setPublishedContentRoute(key, params, options = {}) {
   setAppRoute('published', key, { ...options, params });
@@ -1507,6 +1527,7 @@ function applyAppRoute(route = parseAppRoute()) {
   closeRouteOverlays();
   if (route.kind === 'view') {
     openRouteView(route.key);
+    if (route.key === 'worlds' && route.tab === 'custom') window.showCustomWorldsTab?.();
   } else if (route.kind === 'published') {
     if (typeof window.loadPublishedContentRoute === 'function') {
       window.loadPublishedContentRoute(route);
@@ -1941,6 +1962,7 @@ window.applyCanonicalLootlinguaProfile = function(d) {
     if (d.displayName !== undefined) put('lootlinguaDisplayName', d.displayName);
     if (d.activeTitleId !== undefined) put('lootlinguaActiveTitleId', d.activeTitleId);
     if (Array.isArray(d.quizExposureHistory) && typeof writeQuizExposureHistory === 'function') writeQuizExposureHistory(d.quizExposureHistory);
+    if (d.lastPersonalTrustedQuizAt) window.rememberLastPersonalTrustedQuizAt?.(d.lastPersonalTrustedQuizAt);
     for (const theme of d.themeIntroSeen || []) if (Object.prototype.hasOwnProperty.call(THEME_USE_MESSAGES, theme)) put(themeSeenKey('used', theme), '1');
     if (d.theme && document.documentElement.getAttribute('data-theme') !== d.theme) { setTheme(d.theme, true); changed = true; }
     if (d.oasisMode && document.documentElement.getAttribute('data-oasis-mode') !== d.oasisMode) { applyOasisMode(d.oasisMode, true); changed = true; }
@@ -2141,9 +2163,17 @@ function getGuestProgressSnapshot() {
   // Legacy profile keys (XP, streak, titles...) are unscoped. They are safe to
   // treat as guest-owned only when a signed-out write marked that namespace as
   // dirty. Account hydration also uses these keys and is not guest evidence.
-  if (typeof hasDirtyGuestData !== 'function' || !hasDirtyGuestData()) return {};
-  return window.getLootlinguaProfilePayload ? { ...window.getLootlinguaProfilePayload(),
-    motivationRewards: window.LootLinguaMotivation?.getGuestState?.() } : {};
+  const bots = window.LootLinguaBots?.guestProgress?.();
+  const owned = typeof hasDirtyGuestData === 'function' && hasDirtyGuestData();
+  const profile = owned && window.getLootlinguaProfilePayload ? { ...window.getLootlinguaProfilePayload() } : {};
+  const lastPersonalQuiz = window.getLastPersonalTrustedQuizAt?.('guest');
+  if (owned && lastPersonalQuiz) profile.lastPersonalTrustedQuizAt = lastPersonalQuiz;
+  const motivation = owned ? window.LootLinguaMotivation?.getGuestState?.() : null;
+  if (motivation) profile.motivationRewards = motivation;
+  const vault = window.LootLinguaTreasure?.guestProfile?.();
+  if (vault) Object.assign(profile, vault);
+  if (bots) profile.lootBots = bots;
+  return profile;
 }
 
 function getGuestProgressSummary(profile) {
@@ -2154,8 +2184,13 @@ function getGuestProgressSummary(profile) {
   if ((Number(profile?.dailyStreak) || 0) > 0) stats.push({ label: `${profile.dailyStreak} يوم`, hint: 'سلسلة يومية' });
   if (titles > 0) stats.push({ label: `${titles} ألقاب`, hint: 'إنجازات مفتوحة' });
   if (chests > 0) stats.push({ label: `${chests} صناديق`, hint: 'لوت يومي' });
+  const extras = (profile?.extraChests?.length || 0) + (profile?.extraChestState?.transferred?.length || 0);
+  if (extras > 0) stats.push({ label: `${extras} صناديق إضافية`, hint: 'خزنة المكافآت' });
   if ((Number(profile?.streakFreezes) || 0) > 0) stats.push({ label: `${profile.streakFreezes} تجميد`, hint: 'حماية الستريك' });
   if ((Number(profile?.runnerCoins) || 0) > 0) stats.push({ label: `${profile.runnerCoins} عملة`, hint: 'رصيد لعبة الجري' });
+  if (Number(profile?.lootBots?.coins) > 0) stats.push({ label: `${profile.lootBots.coins} عملة`, hint: 'رصيد Loot Bots' });
+  else if (Number(profile?.lootBots?.best) > 0) stats.push({ label: `${profile.lootBots.best} نقطة`, hint: 'أفضل نتيجة في Loot Bots' });
+  else if (profile?.lootBots) stats.push({ label: 'Loot Bots', hint: 'سجل اللعب وإعدادات الصوت' });
   return stats;
 }
 
@@ -2602,6 +2637,7 @@ window.declineGuestMigration = function() {
 };
 
 function beginViewSwitch() {
+  window.cancelPendingStatsPanel?.();
   window.releaseDictionaryDraggedCard?.();
   window.cancelDictionaryFullDataRequest?.();
   window.watchPersonalDictionaryRows?.([]);

@@ -51,12 +51,17 @@
   function captureRunnerOwner() { return { uid: window.auth?.currentUser?.uid || '', generation: Number(window.__lootlinguaAuthGeneration) || 0 }; }
   function runnerOwnerCurrent(owner) { return owner.uid === (window.auth?.currentUser?.uid || '') && owner.generation === (Number(window.__lootlinguaAuthGeneration) || 0); }
   const node = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
-  function reviewIsDue(progress, now = Date.now()) {
+  function reviewIsDue(progress, now = window.LootLinguaTestClock?.effectiveNow?.() ?? Date.now()) {
+    if (progress?.status && progress.status !== 'learning') return false;
     const due = Array.from(new Set((progress?.runnerReviewDueWordKeys || []).map(String).filter(Boolean)));
     const completed = new Set((progress?.runnerReviewCompletedDueWordKeys || []).map(String));
-    const nextAt = Number(progress?.readinessNextAt?.toMillis?.() ?? progress?.readinessNextAt) || 0;
+    const next = progress?.readinessNextAt;
+    const nextAt = Number(next?.toMillis?.() ?? (next?.seconds != null ? next.seconds * 1000 + (next.nanoseconds || 0) / 1e6 : next)) || 0;
     const unresolvedDue = Number(progress?.availableForReviewNowCount) > 0 && (!due.length || due.some((key) => !completed.has(key)));
     return unresolvedDue || (nextAt > 0 && nextAt <= now);
+  }
+  function practiceLocked(context) {
+    return Boolean(context?.practiceLocked ? context.practiceLocked() : context?.progress?.status === 'ready' || reviewIsDue(context?.progress));
   }
   function render(context) {
     const card = node('aside', 'gate-runner-card'), copy = node('div', 'gate-runner-card-copy');
@@ -65,25 +70,32 @@
     best.dataset.runnerBest = ''; best.textContent = String(RunnerBestDistance.value());
     totals.append('عملاتك: ', wallet, ' · أفضل مسافة: ', best, ' م');
     copy.append(node('strong', '', 'لووت رنر — جري البوابات'),
-      node('span', '', 'ثلاثة مسارات، قفز وانزلاق. تفادَ العوائق واعبر بوابة المعنى الصحيح.'),
+      node('span', '', 'تفادَ العوائق واعبر بوابة المعنى الصحيح. الجري لا يزيد الإتقان أو جاهزية البوابة. لرفع الجاهزية اختر المطابقة أو الصندوق المشفّر أو الهروب من النسيان.'),
       totals);
     const play = node('button', 'gate-runner-launch', 'ابدأ الجري'); play.type = 'button';
-    const due = reviewIsDue(context?.progress); play.disabled = due; play.setAttribute('aria-disabled', String(due));
+    const due = practiceLocked(context); play.disabled = due;
     play.addEventListener('click', async () => {
       if (play.disabled) return; play.disabled = true; play.setAttribute('aria-busy', 'true'); play.textContent = 'جارٍ تجهيز الطريق…';
       try { await launch(context); }
-      finally { play.disabled = reviewIsDue(context?.progress); play.removeAttribute('aria-busy'); play.textContent = 'ابدأ الجري'; }
+      finally { play.disabled = practiceLocked(context); play.removeAttribute('aria-busy'); play.textContent = 'ابدأ الجري'; }
     });
     card.append(copy, play);
-    if (due) card.append(node('p', 'gate-runner-review-lock', 'حان وقت مراجعة البوابة. أكمل المراجعة الموثّقة أولًا، ثم ارجع للجري.'));
     return card;
   }
   async function getWords(context) {
     if (context?.source === 'dictionary') return normalizeWords(context.words);
-    const api = window.LootLinguaPublishedContent; return api?.listAllPublishedGateWords ? normalizeWords(await api.listAllPublishedGateWords(context.worldId, context.rankId, context.gateId)) : [];
+    const api = window.LootLinguaPublishedContent;
+    if (!api?.listAllPublishedGateWords) return [];
+    const words = await api.listAllPublishedGateWords(context.worldId, context.rankId, context.gateId);
+    return normalizeWords(window.orderRunnerGateWords?.(words) || words);
   }
 
   let activeRun = null, launchPending = null, resources = null;
+  let practiceBreak = { rounds: 0, until: 0 };
+  const recentPrompts = new Map();
+  function practiceBreakActive(context) {
+    return context?.source === 'dictionary' && context.onPractice && practiceBreak.until > Date.now();
+  }
   const engine = () => window.LootLinguaRunnerEngine;
   function ensureResources() {
     if (resources) return resources;
@@ -99,7 +111,7 @@
       link.dataset.runnerStyle = ''; link.onload = resolve; link.onerror = () => { link.remove(); reject(new Error('Runner styles unavailable')); };
       document.head.append(link);
     });
-    resources = Promise.all([styles, module('LootLinguaRunnerEngine', 'js/runner-engine.js?v=20261107-runner-entry-1'), module('LootLinguaRunnerRenderer', 'js/runner-renderer.js?v=20261107-runner-entry-1')]).catch(error => { resources = null; throw error; });
+    resources = Promise.all([styles, module('LootLinguaRunnerEngine', 'js/runner-engine.js?v=20261111-runner-1'), module('LootLinguaRunnerRenderer', 'js/runner-renderer.js?v=20261111-jump-4')]).catch(error => { resources = null; throw error; });
     return resources;
   }
   function button(label, cls, action) {
@@ -176,18 +188,31 @@
   }
   async function launch(context) {
     if (activeRun) { activeRun.focus(); return false; }
+    if (practiceBreakActive(context)) {
+      window.showToast?.('استراحة قصيرة من الجري. جرّب المطابقة لرفع الإتقان، أو ارجع للجري بعد دقيقتين.', 'info');
+      context.onPractice();
+      return false;
+    }
     const owner = captureRunnerOwner();
     if (launchPending && runnerOwnerCurrent(launchPending.owner)) return false;
-    if (reviewIsDue(context?.progress)) { window.showToast?.('حان وقت المراجعة الموثّقة أولًا.', 'info'); return false; }
+    if (practiceLocked(context) || (context?.isCurrent && !context.isCurrent())) return false;
     const operation = { owner }; launchPending = operation;
     let words;
     try { await ensureResources(); words = await getWords(context); }
     catch (error) { if (runnerOwnerCurrent(owner)) window.showToast?.('تعذّر تحميل اللعبة أو كلمات البوابة. حاول مجددًا.', 'warning'); return false; }
     finally { if (launchPending === operation) launchPending = null; }
-    if (!runnerOwnerCurrent(owner) || reviewIsDue(context?.progress) || activeRun) return false;
-    if (context?.source === 'dictionary' && context.isCurrent && !context.isCurrent()) return false;
+    if (!runnerOwnerCurrent(owner) || practiceLocked(context) || activeRun || (context?.isCurrent && !context.isCurrent())) return false;
 
-    const E = engine(), state = E.createState(words); state.running = false;
+    const scope = context?.source === 'dictionary' ? context.scope || 'personal' : JSON.stringify([context?.worldId, context?.rankId, context?.gateId]);
+    const recent = recentPrompts.get(scope) || [];
+    const promptKey = word => String(word).toLowerCase();
+    const recentSet = new Set(recent);
+    const repeated = words.filter(item => recentSet.has(promptKey(item.word)));
+    repeated.sort((a, b) => recent.indexOf(promptKey(a.word)) - recent.indexOf(promptKey(b.word)));
+    const orderedWords = [...words.filter(item => !recentSet.has(promptKey(item.word))), ...repeated];
+    const E = engine(), state = E.createState(orderedWords, { orderedPrompts: true });
+    state.running = false;
+    let answeredGate = false, correctGates = 0;
     const recoveryKey = 'lootlingua.runner.recovery.v1';
     const hintsKey = 'lootlingua.runner.hints.v1';
     let showObstacleHints = true;
@@ -370,8 +395,26 @@
     function finish(reason) {
       speech.cancel();
       state.running = false; cancelAnimationFrame(raf); saveRun(); challenge.hidden = options.hidden = true;
-      showScreen(reason, `${Math.floor(state.distance)} متر · ${state.coins} عملة${state.distance > startingBest ? ' · رقم قياسي جديد!' : ''}`, 'جولة جديدة', () => { cleanup(); void launch(context); });
+      if (state.over && answeredGate && context?.source === 'dictionary' && context.onPractice && ++practiceBreak.rounds >= 2) {
+        practiceBreak = { rounds: 0, until: Date.now() + 120000 };
+      }
+      const needsPractice = practiceBreakActive(context);
+      const stats = `${Math.floor(state.distance)} متر · ${state.coins} عملة${state.distance > startingBest ? ' · رقم قياسي جديد!' : ''}`;
+      const message = needsPractice
+        ? 'الجري وبطاقات الذاكرة لا يرفعان الإتقان. جرّب المطابقة الآن، أو ارجع للجري بعد دقيقتين.'
+        : 'الجري تدريب لا يزيد الإتقان.';
+      showScreen(reason, `${stats}. ${message}`, needsPractice ? 'جرّب مطابقة الكلمات' : 'جولة جديدة', () => {
+        cleanup();
+        if (needsPractice) context.onPractice();
+        else void launch(context);
+      });
       screen.append(button(context?.source === 'dictionary' ? 'العودة إلى إعدادات اللعبة' : 'العودة إلى البوابة', 'llr-secondary', cleanup));
+      if (state.over && correctGates >= 3 && runnerOwnerCurrent(owner)) {
+        const chestNotice = node('p', 'llr-chest-result');
+        chestNotice.setAttribute('role', 'status');
+        screen.append(chestNotice);
+        void window.LootLinguaTreasure?.training('runner', runId, correctGates).then(text => { chestNotice.textContent = text; });
+      }
       pause.disabled = true;
     }
     function syncHUD() {
@@ -399,9 +442,21 @@
     function frame(now) {
       if (destroyed) return;
       if (!runnerOwnerCurrent(owner)) { cleanup(); return; }
-      if (now - lastDueCheck > 1000) { lastDueCheck = now; if (reviewIsDue(context?.progress)) { finish('حان وقت المراجعة الموثّقة'); return; } }
+      if (now - lastDueCheck > 1000) { lastDueCheck = now; if (practiceLocked(context)) { finish('حان وقت الاختبار الموثوق'); return; } }
       const delta = Math.min(50, Math.max(0, now - previous)); previous = now;
       E.update(state, delta);
+      for (const event of state.events) {
+        if (event.type === 'gate') {
+          answeredGate = true;
+          if (event.correct) correctGates++;
+        }
+        if (event.type !== 'gate-approach') continue;
+        const key = promptKey(event.word);
+        const history = (recentPrompts.get(scope) || []).filter(word => word !== key);
+        history.push(key);
+        if (!recentPrompts.has(scope) && recentPrompts.size >= 20) recentPrompts.delete(recentPrompts.keys().next().value);
+        recentPrompts.set(scope, history.slice(-12));
+      }
       if (state.events.some(event => event.type === 'gate' && event.correct)) audio.play('gate');
       else if (state.events.some(event => event.type === 'coin')) audio.play();
       renderer.draw(state); syncHUD();
@@ -448,7 +503,7 @@
       window.LootLinguaModalFocus?.open(overlay, { dialog: game, onEscape: cleanup });
       syncHUD(); renderer.draw(state);
       const free = new Set(words.map(w => w.meaning)).size < 3;
-      showScreen('الطريق لك', `اختر مسارك، اقفز فوق الحواجز وانزلق تحت العوارض. ${free ? 'هذه جولة جري حر؛ البوابة تحتاج ثلاثة معانٍ مختلفة لأسئلة الكلمات.' : 'عند ظهور كلمة، اعبر بوابة معناها الصحيح.'}`, 'انطلق', () => {
+      showScreen('الطريق لك', `${free ? 'هذه جولة جري حر؛ البوابة تحتاج ثلاثة معانٍ مختلفة.' : 'عند ظهور كلمة، اعبر بوابة معناها الصحيح.'} السباق تدريب ولا يزيد الإتقان أو جاهزية البوابة.`, 'انطلق', () => {
         audio.unlock(); screen.hidden = true; state.running = true; state.paused = false; previous = performance.now(); viewport.focus({ preventScroll: true }); raf = requestAnimationFrame(frame);
       });
       screen.insertBefore(node('div', 'llr-tutorial', '← → مسارات   ↑ قفز   ↓ انزلاق\nالهاتف: اسحب في الاتجاه نفسه أو استخدم الأزرار'), screen.lastChild);
@@ -501,7 +556,12 @@
     createState: (...args) => engine().createState(...args), step: (...args) => engine().update(...args), chooseLane: (...args) => engine().move(...args),
     getDiagnostics: () => activeRun ? { lane: activeRun.state.lane, action: activeRun.state.action, paused: activeRun.state.paused, entities: activeRun.state.entities.filter(e => e.active !== false).length, distance: activeRun.state.distance } : null,
   };
-  window.addEventListener?.('lootlingua:auth-state', refreshProgressUI);
+  window.addEventListener?.('lootlingua:trusted-quiz-completed', () => { practiceBreak = { rounds: 0, until: 0 }; });
+  window.addEventListener?.('lootlingua:auth-state', () => {
+    practiceBreak = { rounds: 0, until: 0 };
+    recentPrompts.clear();
+    refreshProgressUI();
+  });
   const initialProfile = window.__lootlinguaProfileSnapshot;
   if (initialProfile?.uid && initialProfile.uid === window.auth?.currentUser?.uid) acceptProfile(initialProfile.data, initialProfile.uid);
 })();

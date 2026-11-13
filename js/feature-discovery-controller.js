@@ -49,7 +49,7 @@
     root.dispatchEvent?.(new CustomEvent('lootlingua:feature-discovery-change', { detail: { state } }));
     return state;
   }
-  function getStatus(feature, unlocked) {
+  function getStatus(feature, unlocked = eligible(feature)) {
     return api().stateFor(load(), feature, unlocked).status;
   }
   function start(feature) { return save(api().transition(load(), feature, 'start', Date.now())); }
@@ -104,15 +104,31 @@
   function isInteractiveJourneyActive() {
     const journey = root.LootLinguaGuidedFirstJourney;
     const journeyState = journey?.getState?.();
+    const dictionary = root.LootLinguaPersonalDictionaryOnboarding?.getState?.();
     return Boolean(
       root.__entryExperienceActive ||
+      root.hasActiveLearningQuiz?.() ||
+      (typeof document !== 'undefined' && document.getElementById('appAuthDialogShell')?.hidden === false) ||
       (typeof document !== 'undefined' && document.documentElement.classList.contains('journey-auth-active')) ||
-      ['intro', 'awaiting-first-word'].includes(root.LootLinguaPersonalDictionaryOnboarding?.getState?.()?.phase) ||
-      (root.LootLinguaGuidedFirstJourneyContract?.isActive?.(journeyState) && !(journeyState?.guestDictionaryAvailable && !user()))
+      ['awaiting-journey', 'intro', 'awaiting-first-word'].includes(dictionary?.phase) ||
+      (journey?.isPresenting?.() ?? (root.LootLinguaGuidedFirstJourneyContract?.isActive?.(journeyState) &&
+        !(journeyState?.guestDictionaryAvailable && !user())))
     );
   }
 
-  function notificationKey(feature) { return `feature-discovery:${feature}`; }
+  function notificationKey(feature) {
+    const key = `feature-discovery:${feature}`;
+    // Old builds terminally resolved these records on a transient word count.
+    const store = root.LootLinguaNotificationStore;
+    const legacy = store?.find?.(key);
+    const currentKey = legacy?.resolutionReason === 'feature-discovery-ineligible' ? `${key}:available` : key;
+    return store?.find?.(currentKey)?.resolutionReason === 'source-cleared' ? `${key}:invitation` : currentKey;
+  }
+
+  function canShowInvitation(feature) {
+    return api().FEATURES.includes(feature) && eligible(feature) && !isInteractiveJourneyActive() &&
+      !['completed', 'skipped'].includes(getStatus(feature, true));
+  }
 
   function updateMarkers() {
     if (typeof document === 'undefined') return;
@@ -129,8 +145,7 @@
     });
     const worldsPending = !defer && ['starred', 'custom-worlds'].some((feature) => eligible(feature) && !['completed', 'skipped'].includes(getStatus(feature, true)));
     document.querySelector('#legendDock [data-dock-view="worlds"]')?.classList.toggle('feature-discovery-ready', worldsPending);
-    const tabPending = !defer && ['starred', 'custom-worlds'].some((feature) => eligible(feature) && !['completed', 'skipped'].includes(getStatus(feature, true)));
-    document.querySelector('#customWorldsTab')?.classList.toggle('feature-discovery-ready', tabPending);
+    document.querySelector('#customWorldsTab')?.classList.toggle('feature-discovery-ready', worldsPending);
   }
 
   function syncNotifications() {
@@ -140,10 +155,11 @@
     api().FEATURES.forEach((feature) => {
       const current = getStatus(feature, eligible(feature));
       const key = notificationKey(feature);
-      if (['completed', 'skipped', 'locked'].includes(current)) {
-        store.resolve(key, current === 'locked' ? 'feature-discovery-ineligible' : `feature-discovery-${current}`);
+      if (['completed', 'skipped'].includes(current)) {
+        store.resolve(key, `feature-discovery-${current}`);
         return;
       }
+      if (current === 'locked') return;
       // NotificationStore keeps terminal dismissals as records. Do not revive
       // a dismissed invitation or rewrite an active one on every word update.
       if (store.find?.(key)) return;
@@ -171,6 +187,7 @@
     load();
     updateMarkers();
     syncNotifications();
+    root.dispatchEvent?.(new CustomEvent('lootlingua:discovery-display-change'));
     return state;
   }
 
@@ -201,7 +218,9 @@
 
   root.addEventListener('lootlingua:auth-state', () => { loadedOwner = ''; load(); requestEvaluation(); });
   root.addEventListener('lootlingua:onboarding-cloud-change', () => { loadedOwner = ''; state = null; load(); requestEvaluation(); });
-  ['lootlingua:initial-data-ready', 'lootlingua:learning-data-changed', 'lootlingua:entry-state-ready', 'lootlingua:guided-first-journey-change', 'lootlingua:personal-dictionary-onboarding-change']
+  ['lootlingua:initial-data-ready', 'lootlingua:learning-data-changed', 'lootlingua:entry-state-ready', 'lootlingua:entry-closed',
+    'lootlingua:surface-ready', 'lootlingua:auth-dialog-opened', 'lootlingua:auth-dialog-closed',
+    'lootlingua:guided-first-journey-change', 'lootlingua:personal-dictionary-onboarding-change']
     .forEach((eventName) => root.addEventListener(eventName, requestEvaluation));
   if (typeof document !== 'undefined') {
     document.addEventListener('click', (event) => {
@@ -212,12 +231,13 @@
       // A tour may ask the user to operate this very control. Let that real
       // action run instead of reopening discovery and rebuilding its anchor.
       if (root.LootLinguaFeatureMiniOnboarding?.getActiveFeature?.() === feature) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      void open(feature);
+      if (open(feature)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     }, true);
   }
-  const CONTROLLER = Object.freeze({ load, getState: () => load(), getStatus, start, complete, skip, checkpoint, evaluate, requestEvaluation, open });
+  const CONTROLLER = Object.freeze({ load, getState: () => load(), getStatus, start, complete, skip, checkpoint, evaluate, requestEvaluation, open, isInteractiveJourneyActive, canShowInvitation });
   Object.defineProperty(root, 'LootLinguaFeatureDiscovery', { value: CONTROLLER, configurable: false, writable: false });
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', requestEvaluation, { once: true });

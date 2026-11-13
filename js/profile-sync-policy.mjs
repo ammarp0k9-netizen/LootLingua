@@ -10,9 +10,110 @@ function calendarTime(day) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day ? date.getTime() : NaN;
 }
 export const PROFILE_SYNC_VERSION = 1;
+export const TREASURE_CAPACITY = 4;
+export const TREASURE_TYPES = Object.freeze({
+  training: Object.freeze({ label: 'تدريب', minutes: 20, minXP: 7, maxXP: 11, freezeChance: .08 }),
+  mastery: Object.freeze({ label: 'إتقان', minutes: 60, minXP: 13, maxXP: 20, freezeChance: .12 }),
+  station: Object.freeze({ label: 'محطة', minutes: 180, minXP: 22, maxXP: 30, freezeChance: .18 }),
+});
+
+export function treasureChests(profile) {
+  return (Array.isArray(profile?.extraChests) ? profile.extraChests : [])
+    .filter(chest => chest?.id && Object.hasOwn(TREASURE_TYPES, chest.kind) && Number.isFinite(chest.readyAt))
+    .slice(0, TREASURE_CAPACITY);
+}
+
+export function treasureSlots(profile) {
+  const slots = Array(TREASURE_CAPACITY).fill(null);
+  const overflow = [];
+  for (const chest of treasureChests(profile)) {
+    if (Number.isInteger(chest.slot) && chest.slot >= 0 && chest.slot < TREASURE_CAPACITY && !slots[chest.slot]) slots[chest.slot] = chest;
+    else overflow.push(chest);
+  }
+  for (const chest of overflow) slots[slots.indexOf(null)] = chest;
+  return slots;
+}
+
+function treasureCommand(profile, intent, context, effects) {
+  const now = context.now ?? Date.now();
+  const stored = Array.isArray(profile.extraChests) ? profile.extraChests : [];
+  const chests = treasureChests(profile);
+  const state = { ...(profile.extraChestState || {}) };
+  const { eventId, type } = intent;
+  if (typeof eventId !== 'string' || !eventId || eventId.length > 450) return 'invalid-chest';
+  if (type === 'treasure-open') {
+    const chest = chests.find(item => item.id === intent.chestId);
+    if (!chest || context.consumedExtraIds?.has(chest.id)) return 'extra-chest-unavailable';
+    if (chest.readyAt > now) return 'extra-chest-waiting';
+    const policy = TREASURE_TYPES[chest.kind];
+    if (!Number.isInteger(chest.xp) || chest.xp < policy.minXP || chest.xp > policy.maxXP ||
+        ![0, 1].includes(chest.freezes)) return 'invalid-chest';
+    profile.userXP = number(profile.userXP) + chest.xp;
+    profile.streakFreezes = number(profile.streakFreezes) + chest.freezes;
+    profile.extraChests = stored.filter(item => item.id !== chest.id);
+    effects.consumedExtraId = chest.id;
+    effects.reward = { xp: chest.xp, freezes: chest.freezes };
+    return '';
+  }
+  if (chests.length >= TREASURE_CAPACITY) return 'treasure-full';
+  if (type === 'treasure-recover') {
+    const chest = state.transferred?.find(item => item.id === intent.chestId);
+    if (!chest || context.consumedExtraIds?.has(chest.id) || chests.some(item => item.id === chest.id)) return 'extra-chest-unavailable';
+    profile.extraChests = [...stored, { ...chest, slot: treasureSlots(profile).indexOf(null) }];
+    profile.extraChestState = { ...state, transferred: state.transferred.filter(item => item.id !== chest.id) };
+    return '';
+  }
+  let kind, id;
+  if (type === 'treasure-training') {
+    if (!Number.isFinite(calendarTime(intent.day))) return 'invalid-chest';
+    if (!['runner', 'bots'].includes(intent.game) || !Number.isSafeInteger(intent.score) ||
+        intent.score < (intent.game === 'runner' ? 3 : 1)) return 'training-not-qualified';
+    if (String(state.trainingDay || '') >= intent.day) return 'training-already-earned';
+    kind = 'training';
+    id = `training:${intent.day}`;
+    state.trainingDay = intent.day;
+  } else {
+    const award = profile.motivationRewards?.rewards?.[intent.awardId];
+    if (!award || !['mastery', 'station'].includes(award.kind)) return 'unknown-achievement';
+    if (state.achievements?.[intent.awardId] === true) return 'achievement-already-claimed';
+    kind = award.kind;
+    id = `award:${intent.awardId}`;
+    state.achievements = { ...state.achievements, [intent.awardId]: true };
+  }
+  if (stored.some(item => item.id === id) || context.consumedExtraIds?.has(id)) return 'extra-chest-unavailable';
+  if (![intent.xpRoll, intent.freezeRoll].every(roll => Number.isFinite(roll) && roll >= 0 && roll < 1)) return 'invalid-chest';
+  const policy = TREASURE_TYPES[kind];
+  profile.extraChests = [...stored, {
+    id, kind, slot: treasureSlots(profile).indexOf(null), readyAt: now + policy.minutes * 60000,
+    xp: policy.minXP + Math.floor(intent.xpRoll * (policy.maxXP - policy.minXP + 1)),
+    freezes: intent.freezeRoll < policy.freezeChance ? 1 : 0,
+  }];
+  profile.extraChestState = state;
+  return '';
+}
 // Onboarding completion is monotonic across devices; replaying an older tour
 // checkpoint must never reopen a completed tour.
 export function mergeOnboardingProgress(tour, left, right) {
+  if (tour === 'public-world-guide') {
+    const normalize = value => {
+      const phases = ['choosing-world', 'awaiting-first-gate', 'first-gate-opened', 'awaiting-quiz-cta', 'completed'];
+      if (value?.version !== 1 || !phases.includes(value.phase) || (!value.worldId && value.phase !== 'choosing-world')) return null;
+      const id = field => typeof value[field] === 'string' ? value[field].trim().slice(0, 128) : '';
+      return {
+        version: 1, audience: 'new', phase: value.phase, worldId: id('worldId'),
+        suggestedWorldId: id('suggestedWorldId'), gateId: id('gateId'), rankId: id('rankId'),
+        placementStage: ['assessment', 'result', 'offer', 'continue'].includes(value.placementStage) ? value.placementStage : '',
+        placementLevel: id('placementLevel').slice(0, 8), assessmentId: id('assessmentId'),
+        resultStep: Math.min(2, Math.floor(number(value.resultStep))), guestDictionaryAvailable: value.guestDictionaryAvailable === true,
+        startedAt: number(value.startedAt), updatedAt: number(value.updatedAt),
+        completedAt: value.phase === 'completed' ? number(value.completedAt) : 0,
+      };
+    };
+    const a = normalize(left), b = normalize(right);
+    if (!a || !b) return a || b;
+    if ((a.phase === 'completed') !== (b.phase === 'completed')) return a.phase === 'completed' ? a : b;
+    return a.updatedAt >= b.updatedAt ? a : b;
+  }
   const personal = tour === 'personal-dictionary';
   if (!personal && !['treasure', 'quiz', 'starred', 'custom-worlds'].includes(tour)) return null;
   const phases = personal ? ['awaiting-journey', 'intro', 'awaiting-first-word', 'completed'] : ['available', 'in-progress', 'skipped', 'completed'];
@@ -107,6 +208,26 @@ export function applyProfileIntent(remote, intent, context = {}) {
   let reason = '';
   const effects = {};
   switch (intent.type) {
+    case 'treasure-training':
+    case 'treasure-achievement':
+    case 'treasure-recover':
+    case 'treasure-open':
+      reason = treasureCommand(profile, intent, context, effects);
+      break;
+    case 'bots-run': {
+      if (!intent.eventId || !intent.run || !['coins', 'best', 'bosses', 'seconds'].every(key => Number.isSafeInteger(intent.run[key]) && intent.run[key] >= 0)) {
+        reason = 'invalid-bots-run'; break;
+      }
+      profile.lootBots = mergeBotsProgress(profile.lootBots, intent.run);
+      break;
+    }
+    case 'bots-audio': {
+      if (!['effects', 'speech'].includes(intent.field) || typeof intent.enabled !== 'boolean' || !Number.isSafeInteger(intent.at) || intent.at <= 0) {
+        reason = 'invalid-bots-audio'; break;
+      }
+      profile.lootBots = mergeBotsProgress(profile.lootBots, { audio: { [intent.field]: { enabled: intent.enabled, at: intent.at } } });
+      break;
+    }
     case 'onboarding': {
       const merged = mergeOnboardingProgress(intent.tour, profile.onboardingProgress?.[intent.tour], intent.state);
       if (!merged) { reason = 'invalid-onboarding'; break; }
@@ -124,6 +245,7 @@ export function applyProfileIntent(remote, intent, context = {}) {
     case 'learning-day': learn(profile, intent.day, intent.advanceAfterFreeze !== false); break;
     case 'quiz-activity': {
       if (!dayPattern.test(intent.day || '') || !(number(intent.answers) > 0)) { reason = 'invalid-activity'; break; }
+      if (number(intent.personalAt)) profile.lastPersonalTrustedQuizAt = Math.max(number(profile.lastPersonalTrustedQuizAt), number(intent.personalAt));
       profile.activityMap = { ...(profile.activityMap || {}), [intent.day]: number(profile.activityMap?.[intent.day]) + number(intent.answers) };
       if (intent.perfect) {
         profile.perfectQuizzes = number(profile.perfectQuizzes) + 1;
@@ -200,6 +322,10 @@ export function applyProfileIntent(remote, intent, context = {}) {
       profile.userXP = Math.max(number(profile.userXP), number(guest.userXP));
       for (const field of ['runnerCoins', 'streakFreezes']) profile[field] = number(profile[field]) + number(guest[field]);
       for (const field of ['freezeSaves', 'gameDictAdds', 'perfectQuizzes', 'maxStreak', 'runnerBestDistance']) profile[field] = Math.max(number(profile[field]), number(guest[field]));
+      if (number(guest.lastPersonalTrustedQuizAt)) {
+        profile.lastPersonalTrustedQuizAt = Math.max(number(profile.lastPersonalTrustedQuizAt), number(guest.lastPersonalTrustedQuizAt));
+      }
+      if (guest.lootBots) profile.lootBots = mergeBotsProgress(profile.lootBots, guest.lootBots);
       if (String(guest.lastActivityDate || '') > String(profile.lastActivityDate || '')) {
         profile.lastActivityDate = guest.lastActivityDate;
         profile.dailyStreak = number(guest.dailyStreak);
@@ -210,6 +336,27 @@ export function applyProfileIntent(remote, intent, context = {}) {
       profile.titlesState = titles.titlesState;
       const extras = applyProfileIntent(profile, { type: 'extra-add', chests: guest.extraChests || [] }, context).profile;
       profile.extraChests = extras.extraChests;
+      if (guest.extraChestState || treasureChests(guest).length) {
+        const current = profile.extraChestState || {}, incoming = guest.extraChestState || {};
+        const vault = profile.extraChests.filter(item => treasureChests({ extraChests: [item] }).length);
+        const overflow = vault.slice(TREASURE_CAPACITY);
+        const overflowIds = new Set(overflow.map(item => item.id));
+        profile.extraChests = profile.extraChests.filter(item => !overflowIds.has(item.id));
+        const slots = treasureSlots(profile);
+        profile.extraChests = profile.extraChests.map(item => {
+          const slot = slots.indexOf(item);
+          return slot < 0 ? item : { ...item, slot };
+        });
+        const present = new Set(profile.extraChests.map(item => item.id));
+        const transferred = new Map([...(current.transferred || []), ...(incoming.transferred || []), ...overflow]
+          .filter(item => item?.id && !present.has(item.id) && !context.consumedExtraIds?.has(item.id))
+          .map(item => [item.id, item]));
+        profile.extraChestState = {
+          trainingDay: [current.trainingDay || '', incoming.trainingDay || ''].sort().at(-1),
+          achievements: { ...current.achievements, ...incoming.achievements },
+          transferred: [...transferred.values()],
+        };
+      }
       if (!profile.dailyLootState && guest.dailyLootState) profile.dailyLootState = copy(guest.dailyLootState);
       if (guest.dailyQuestDate) quest(profile, guest.dailyQuestDate, guest.dailyQuestState);
       if (guest.motivationRewards?.version === 1) {
@@ -225,6 +372,19 @@ export function applyProfileIntent(remote, intent, context = {}) {
     default: reason = 'unsupported-intent';
   }
   return { profile: reason ? copy(remote || {}) : profile, applied: !reason && JSON.stringify(profile) !== before, reason, effects: reason ? {} : effects };
+}
+
+function mergeBotsProgress(saved = {}, incoming = {}) {
+  const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  const left = saved || {}, right = incoming || {};
+  const audio = {};
+  for (const field of ['effects', 'speech']) {
+    const choices = [left.audio?.[field], right.audio?.[field]].filter(value => typeof value?.enabled === 'boolean' && count(value.at));
+    if (choices.length) audio[field] = choices.reduce((a, b) => b.at >= a.at ? b : a);
+  }
+  return { coins: Math.min(Number.MAX_SAFE_INTEGER, count(left.coins) + count(right.coins)),
+    best: Math.max(count(left.best), count(right.best)), bosses: Math.max(count(left.bosses), count(right.bosses)),
+    seconds: Math.max(count(left.seconds), count(right.seconds)), audio };
 }
 
 export function profileStorageIntents(key, beforeText, afterText) {

@@ -1,15 +1,17 @@
 (function attachFeatureMiniOnboarding(root) {
   'use strict';
   const COACH_ID = 'featureMiniOnboardingCoach';
+  const FEATURE_NAMES = { treasure: 'الكنز', quiz: 'الاختبار', starred: 'الكلمات الصعبة', 'custom-worlds': 'العوالم الخاصة' };
   let activeFeature = '';
   let stepIndex = 0;
   let internalClose = false;
   let worldSaveHandled = false;
+  let run = 0;
 
   const STEPS = Object.freeze({
     treasure: [
       { selector: '#dailyLootChest', title: 'صندوقك اليومي', text: 'اضغط الصندوق لفتح مكافأتك اليومية عندما يكون جاهزًا.' },
-      { selector: '#treasureSlots', title: 'تقدّم المكافآت', text: 'هنا ترى الصناديق المتاحة وما يحتاج إلى مزيد من التقدّم.' },
+      { selector: '#treasureSlots', title: 'صناديقك الإضافية', text: 'هذه أربع خانات لصناديق التدريب والإتقان والمحطات. افتح أي صندوق جاهز حتى لو كانت خبرة الصندوق اليومي مقفلة.' },
       { selector: '#lootCountdownText', title: 'الوقت وشروط الفتح', text: 'هنا وقت عودة الصندوق أو شروط تحرير XP المقفلة. اتبع الحالة المعروضة؛ فتح الصندوق ليس مضمونًا قبل استيفائها.' },
       { selector: '#lootRewardPreview', title: 'المكافأة وسلسلة اللوت', text: 'هذه المنطقة تعرض توجيه المكافأة أو سلسلة الصناديق ورصيد تجميد السلسلة بحسب حالة الصندوق.' },
       { selector: '.treasure-title-strip', title: 'ألقابك', text: 'هنا تقدّم الألقاب، وتظهر الألقاب في القائمة عند تجهيزها. أكمل الإنجازات لتفتحها، ثم اختر لقبك من الملف الشخصي.' },
@@ -17,7 +19,7 @@
     ],
     quiz: [
       { selector: '#quizAvailableCount', title: 'راجع قاموسك كله', text: 'اختبار البوابة يراجع كلمات تلك البوابة فقط. هنا تراجع القاموس الشخصي أو المصدر الذي تختاره؛ استخدمه باستمرار لتثبيت كلماتك.' },
-      { selector: '#quizViewSetup .quiz-modes-grid', title: 'اختر وضعًا لتجربته', text: 'بطاقات للتذكر، تحدي وقت، ترتيب حروف، أو مطابقة. اضغط الوضع الذي يناسبك لنتعرف على إعداداته.', click: '.quiz-mode-card' },
+      { selector: '#quizViewSetup .quiz-modes-grid', title: 'اختر وضعًا لتجربته', text: 'ارفع إتقانك بالمطابقة أو الصندوق المشفّر أو الهروب من النسيان. لووت رنر وLoot Bots وبطاقات الذاكرة للتدريب.', click: '.quiz-mode-card' },
       { selector: '#quizSharedSettings .quiz-source-selector', title: 'مصدر الكلمات', text: 'اختر القاموس الشخصي لمراجعته، أو الكلمات الصعبة أو عالمًا خاصًا إذا كان لديك. المصدر يحدد الكلمات التي ستختبرها.' },
       { selector: '#quizSharedSettings [aria-label="عدد الأسئلة"]', title: 'حجم الجلسة', text: 'اختر عدد الأسئلة المناسب. قد تختلف الخيارات الفعلية حسب الوضع والكلمات المتاحة.' },
       { selector: '#quizStartButton', title: 'ابدأ عندما تكون جاهزًا', text: 'راجع الملخص واتجاه السؤال إن ظهر. بعد البدء اتبع تعليمات الوضع، وستظهر نتيجة أدائك عند إنهاء الجلسة.' },
@@ -38,6 +40,12 @@
   });
 
   function controller() { return root.LootLinguaFeatureDiscovery; }
+  function onFeature(feature) {
+    const view = root.getOnboardingView?.();
+    if (!view) return false;
+    if (feature === 'custom-worlds') return view === 'worlds' && document.getElementById('customWorldsTab')?.classList.contains('active');
+    return view === feature;
+  }
   function close() {
     internalClose = true;
     root.LootLinguaPopover?.closeIf?.(COACH_ID, { silent: true });
@@ -49,6 +57,7 @@
     close();
     if (feature) controller()?.complete?.(feature);
     controller()?.evaluate?.();
+    offerResume();
   }
   function prepareStep() {
     if (activeFeature === 'custom-worlds' && stepIndex >= 3 && stepIndex <= 4) {
@@ -66,7 +75,9 @@
     if (stepIndex + 1 >= STEPS[activeFeature].length) { finish(); return; }
     stepIndex += 1;
     controller()?.checkpoint?.(activeFeature, stepIndex);
-    close(); prepareStep(); setTimeout(show, 100);
+    close(); prepareStep();
+    const currentRun = run;
+    setTimeout(() => { if (currentRun === run) show(); }, 100);
   }
   function targetForCurrentStep() {
     const step = STEPS[activeFeature]?.[stepIndex];
@@ -76,7 +87,9 @@
   }
   function show() {
     const { step, target } = targetForCurrentStep();
-    if (!step || !target || !target.getClientRects().length || !root.LootLinguaPopover?.open) { activeFeature = ''; close(); return; }
+    if (!step || !onFeature(activeFeature) || !target?.getClientRects().length || !root.LootLinguaPopover?.open) {
+      pause(); return;
+    }
     const content = document.createElement('div');
     content.className = 'feature-mini-onboarding-content';
     const title = document.createElement('strong');
@@ -95,19 +108,35 @@
     if (step.click || step.event) next.hidden = true;
     next.addEventListener('click', advance);
     actions.append(skip, next); content.append(title, copy, actions);
-    root.LootLinguaPopover.open({ id: COACH_ID, className: 'lootlingua-popover feature-mini-onboarding-coach', anchor: target, content, labelledBy: title.id, persistent: true });
+    const actionsToDelay = step.click ? [...document.querySelectorAll(step.click)]
+      : step.event ? [target] : [];
+    if (!root.LootLinguaPopover.open({
+      id: COACH_ID, className: 'lootlingua-popover feature-mini-onboarding-coach', anchor: target,
+      content, labelledBy: title.id, persistent: true,
+      reading: { step: `${activeFeature}:${stepIndex}`, text: step.text, actions: actionsToDelay },
+    })) pause();
+  }
+  function pause() {
+    run += 1;
+    activeFeature = '';
+    close();
+    offerResume();
   }
   function start(feature) {
-    if (!STEPS[feature] || (activeFeature && activeFeature !== feature)) return false;
+    if (!STEPS[feature] || !onFeature(feature) || controller()?.isInteractiveJourneyActive?.() ||
+        (activeFeature && activeFeature !== feature)) return false;
+    if (activeFeature === feature) return true;
+    const currentRun = ++run;
     activeFeature = feature;
+    offerResume();
     worldSaveHandled = false;
     stepIndex = Math.min(controller()?.getState?.()?.features?.[feature]?.step || 0, STEPS[feature].length - 1);
     prepareStep();
     let attempts = 0;
     const wait = () => {
-      if (!activeFeature) return;
+      if (currentRun !== run || activeFeature !== feature) return;
       if (document.querySelector(STEPS[feature][stepIndex].selector)?.getClientRects().length) { show(); return; }
-      if (++attempts >= 20) { activeFeature = ''; controller()?.evaluate?.(); return; }
+      if (++attempts >= 20) { pause(); controller()?.evaluate?.(); return; }
       setTimeout(wait, 100);
     };
     wait();
@@ -115,9 +144,37 @@
   }
   Object.defineProperty(root, 'LootLinguaFeatureMiniOnboarding', { value: Object.freeze({ start, finish, getActiveFeature: () => activeFeature }), configurable: false });
   root.addEventListener('lootlingua:popover-closed', (event) => {
-    if (!internalClose && event.detail?.id === COACH_ID) activeFeature = '';
+    if (!internalClose && event.detail?.id === COACH_ID) pause();
   });
-  root.addEventListener('lootlingua:auth-state', () => { activeFeature = ''; close(); });
+  root.addEventListener('lootlingua:auth-state', pause);
+  root.addEventListener('lootlingua:dictionary-navigation', pause);
+  function interruptedFeatures() {
+    const discovery = controller();
+    if (activeFeature || discovery?.isInteractiveJourneyActive?.()) return [];
+    const features = discovery?.getState?.()?.features || {};
+    return Object.keys(STEPS).filter((key) =>
+      features[key]?.status === 'in-progress' && discovery.getStatus(key) === 'in-progress')
+      .sort((left, right) => (features[right].updatedAt || 0) - (features[left].updatedAt || 0));
+  }
+  function offerResume() {
+    const [feature] = interruptedFeatures();
+    root.LootLinguaPopover?.offerResume?.(COACH_ID, feature ? {
+      label: `تابع استكشاف ${FEATURE_NAMES[feature]}`,
+      open: () => { if (onFeature(feature)) start(feature); else controller()?.open?.(feature); },
+    } : null);
+  }
+  function resume() {
+    const feature = interruptedFeatures().find(onFeature);
+    if (feature) start(feature);
+    else offerResume();
+  }
+  root.addEventListener('lootlingua:surface-ready', () => {
+    if (activeFeature && (!onFeature(activeFeature) || controller()?.isInteractiveJourneyActive?.())) pause();
+    resume();
+  });
+  root.addEventListener('lootlingua:onboarding-cloud-change', resume);
+  root.addEventListener('lootlingua:initial-data-ready', resume);
+  root.addEventListener('lootlingua:discovery-display-change', offerResume);
   root.addEventListener('lootlingua:custom-world-saved', () => {
     if (activeFeature === 'custom-worlds' && stepIndex >= 3 && stepIndex <= 4) {
       worldSaveHandled = true;
@@ -126,13 +183,13 @@
   });
   document.addEventListener('click', (event) => {
     const step = STEPS[activeFeature]?.[stepIndex];
-    if (!step?.click || !event.target.closest?.(step.click)) return;
+    if (!step?.click || !event.target.closest?.(step.click) || !root.LootLinguaPopover?.canAct?.(COACH_ID)) return;
     advance();
   });
   setInterval(() => {
     if (!activeFeature || !document.getElementById(COACH_ID)) return;
     const selector = STEPS[activeFeature]?.[stepIndex]?.selector;
     const target = selector && document.querySelector(selector);
-    if (!target?.getClientRects().length) { activeFeature = ''; close(); }
+    if (!target?.getClientRects().length) pause();
   }, 500);
 })(window);

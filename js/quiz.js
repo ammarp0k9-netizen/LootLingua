@@ -11,13 +11,17 @@ function isVerifiedQuizMode(mode) {
 }
 
 const QUIZ_MODE_META = {
+  lootBots: {
+    title: 'تجهيز ساحة Loot Bots',
+    desc: 'اختر مصدر الكلمات لمحطة الطاقة. نقاط المعركة وعملاتها خاصة باللعبة.'
+  },
   runner: {
     title: 'تجهيز رحلة الجري',
-    desc: 'اختر كلمات مغامرتك، اجمع العملات واعبر بوابات المعاني. ثلاثة مسارات، قفز وانزلاق — والطريق يزداد تحديًا.'
+    desc: 'تدرّب على الكلمات واجمع العملات. لرفع الإتقان اختر مطابقة الكلمات أو الصندوق المشفّر أو الهروب من النسيان.'
   },
   flashcards: {
     title: 'بطاقات الذاكرة',
-    desc: 'اختبار هادئ: اقلب البطاقة وحدد إذا تذكرت الكلمة أو نسيتها.'
+    desc: 'اقلب البطاقة وحدد إذا تذكرت الكلمة أو نسيتها. هذا تدريب، والإتقان يرتفع في الاختبارات الموثّقة.'
   },
   timeAttack: {
     title: 'الهروب من النسيان',
@@ -358,6 +362,10 @@ function closeQuizSetup() {
 }
 
 function openQuizModeSettings(mode) {
+  if (isQuizPracticeMode(mode) && isPersonalQuizDue()) {
+    refreshQuizPracticeAvailability();
+    return;
+  }
   syncQuizSourceOptions();
   selectedQuizMode = QUIZ_MODE_META[mode] ? mode : 'flashcards';
   const ownerId = getQuizSourceOwnerId();
@@ -369,10 +377,14 @@ function openQuizModeSettings(mode) {
   document.getElementById('quizSettingsTitle').textContent = QUIZ_MODE_META[selectedQuizMode].title;
   document.getElementById('quizSettingsDesc').textContent = QUIZ_MODE_META[selectedQuizMode].desc;
   const isRunner = selectedQuizMode === 'runner';
+  const isBots = selectedQuizMode === 'lootBots';
+  const countGroup = document.getElementById('quizCountGroup');
+  if (countGroup) countGroup.style.display = isBots ? 'none' : '';
   document.getElementById('quizSettingsPanel').classList.toggle('runner-setup', isRunner);
   document.getElementById('runnerSetupBrief').hidden = !isRunner;
   document.getElementById('quizCountLabel').textContent = isRunner ? 'كلمات الجولة' : 'عدد الأسئلة';
   document.getElementById('quizStartButton').innerHTML = isRunner ? 'انطلق إلى الطريق <i class="fa-solid fa-play" aria-hidden="true"></i>' : 'ابدأ الاختبار <i class="fa-solid fa-play" aria-hidden="true"></i>';
+  if (isBots) document.getElementById('quizStartButton').textContent = 'ادخل الساحة';
   syncScrambleDirectionCopy();
   const isFlashcards = selectedQuizMode === 'flashcards';
   document.getElementById('flashcardPresetOptions').style.display = isFlashcards ? 'block' : 'none';
@@ -1067,11 +1079,11 @@ function validateQuizDeck(deck, requestedSize) {
   }).slice(0, limit);
 }
 
-function buildBalancedQuizDeck(sourceWords, requestedCount, options = {}) {
+function createBalancedQuizPlan(sourceWords, requestedCount, options = {}) {
   const available = Array.isArray(sourceWords) ? sourceWords : [];
   const limit = Math.max(0, Math.min(Math.floor(Number(requestedCount) || 0), available.length));
   const history = Array.isArray(options.history) ? options.history : readQuizExposureHistory();
-  currentQuizSelectionPlan = quizCore.buildQuizSelectionPlan(available, limit, {
+  return quizCore.buildQuizSelectionPlan(available, limit, {
     now: options.now,
     seed: options.seed,
     history,
@@ -1079,6 +1091,12 @@ function buildBalancedQuizDeck(sourceWords, requestedCount, options = {}) {
     getState: (word) => getWordMasteryState(word),
     getDueInfo: (word, state, now) => getQuizDueInfo(word, state, now),
   });
+}
+
+window.orderRunnerGateWords = words => createBalancedQuizPlan(words, words.length, { seed: makeQuizSessionId() }).deck;
+
+function buildBalancedQuizDeck(sourceWords, requestedCount, options = {}) {
+  currentQuizSelectionPlan = createBalancedQuizPlan(sourceWords, requestedCount, options);
   window.__lootlinguaQuizSelectionReport = currentQuizSelectionPlan;
   return currentQuizSelectionPlan.deck;
 }
@@ -1094,15 +1112,54 @@ function getConfiguredQuizWords(options = {}) {
   return buildSmartQuizDeck(sourceWords, count, options);
 }
 
-function refreshQuizAvailableCount() {
-  window.LootLinguaGateRunner?.refreshProgressUI?.();
-  window.LootLinguaGateRunner?.mountPreview?.(document.getElementById('runnerModePreview'));
+const personalQuizPracticeLockCopy = 'حان وقت اختبار قاموسك الشخصي. اختر المطابقة أو الصندوق المشفّر أو الهروب من النسيان، وحدّد القاموس الشخصي مصدرًا للكلمات. الاختبار الموثوق يقيس مستواك ويرفع إتقانك. الألعاب متوقفة مؤقتًا، وبطاقات الذاكرة متاحة للتدريب.';
+
+function isQuizPracticeMode(mode) {
+  return mode === 'runner' || mode === 'lootBots';
+}
+
+function personalQuizDueAt() {
+  return window.LootLinguaNotificationSources?.personalQuizDueAt?.(getQuizSourceOwnerId()) || 0;
+}
+
+function isPersonalQuizDue() {
+  const dueAt = personalQuizDueAt();
+  return dueAt > 0 && Date.now() >= dueAt;
+}
+
+function refreshQuizPracticeAvailability() {
+  if (currentView !== 'quiz') return;
+  const locked = isPersonalQuizDue();
+  const explanation = document.getElementById('quizPracticeLock');
+  if (explanation) {
+    explanation.hidden = !locked;
+    if (locked) explanation.textContent = personalQuizPracticeLockCopy;
+  }
+  for (const id of ['runnerDictionary', 'lootBotsDictionary']) {
+    const button = document.getElementById(id);
+    if (button) {
+      button.disabled = locked;
+      if (locked) button.setAttribute('aria-describedby', 'quizPracticeLock');
+      else button.removeAttribute('aria-describedby');
+    }
+  }
   const runnerLock = document.getElementById('runnerModeLock');
   if (runnerLock) {
     const ready = getQuizSourceResolutionStatus('personal') === 'ready';
     const count = getQuizSourceWords('personal', { mode: 'runner' }).length;
-    runnerLock.textContent = ready && count >= 10 ? 'الطريق مفتوح · انطلق!' : ready ? `تفتح عند 10 كلمات · ${count}/10` : 'تفتح عند 10 كلمات في قاموسك';
+    runnerLock.textContent = locked ? 'أكمل اختبار قاموسك أولًا' :
+      ready && count >= 10 ? 'الطريق مفتوح · انطلق!' : ready ? `تفتح عند 10 كلمات · ${count}/10` : 'تفتح عند 10 كلمات في قاموسك';
   }
+  if (isQuizPracticeMode(selectedQuizMode) && document.getElementById('quizSettingsPanel')?.style.display === 'block') {
+    refreshQuizSettingsSummary();
+  }
+}
+window.refreshQuizPracticeAvailability = refreshQuizPracticeAvailability;
+
+function refreshQuizAvailableCount() {
+  refreshQuizPracticeAvailability();
+  window.LootLinguaGateRunner?.refreshProgressUI?.();
+  window.LootLinguaGateRunner?.mountPreview?.(document.getElementById('runnerModePreview'));
   const quizCountEl = document.getElementById('quizAvailableCount');
   if (!quizCountEl) return;
   const pageState = window.LootLinguaDictionaryPages?.current()?.state();
@@ -1132,14 +1189,20 @@ function refreshQuizAvailableCount() {
 function refreshQuizSettingsSummary() {
   const ownerId = getQuizSourceOwnerId();
   const status = getQuizSourceResolutionStatus(currentQuizSource, ownerId);
-  const total = getQuizSourceWords(currentQuizSource, { mode: selectedQuizMode }).length;
+  const candidates = getQuizSourceWords(currentQuizSource, { mode: selectedQuizMode });
+  const total = candidates.length;
   const countText = quizQuestionCount === 'all' ? 'كل الكلمات' : `${quizQuestionCount} أسئلة`;
   const summary = document.getElementById('quizSettingsSummary');
   const sourceText = getQuizSourceLabel(currentQuizSource);
   const startButton = document.getElementById('quizStartButton');
+  if (isQuizPracticeMode(selectedQuizMode) && isPersonalQuizDue()) {
+    if (summary) summary.textContent = personalQuizPracticeLockCopy;
+    if (startButton) startButton.disabled = true;
+    return;
+  }
   if (selectedQuizMode === 'runner') {
     const personalCount = getQuizSourceWords('personal', { mode: 'runner' }).length;
-    const meanings = new Set(getQuizSourceWords(currentQuizSource, { mode: 'runner' }).map(word => word.meaning || word.translation));
+    const meanings = new Set(candidates.map(word => word.meaning || word.translation));
     const allowed = status === 'ready' && getQuizSourceResolutionStatus('personal') === 'ready' && personalCount >= 10 && total >= 3 && meanings.size >= 3;
     if (summary) summary.textContent = status === 'error' ? 'تعذّر تجهيز الكلمات. اختر المصدر لإعادة المحاولة.' : status !== 'ready' ? 'جارٍ تجهيز كلمات الطريق…' : personalCount < 10 ? `تفتح اللعبة عند 10 كلمات في قاموسك الشخصي · لديك ${personalCount}/10.` : !allowed ? 'اختر مصدرًا فيه 3 كلمات بمعانٍ مختلفة على الأقل.' : `${sourceText} · ${quizQuestionCount === 'all' ? 'كل الكلمات' : Math.min(Number(quizQuestionCount), total) + ' كلمات'} في جولة جري مستمرة · 3 فرص · العملات محفوظة، دون XP أو تغيير الإتقان.`;
     if (startButton) startButton.disabled = !allowed;
@@ -1155,6 +1218,14 @@ function refreshQuizSettingsSummary() {
     if (startButton) startButton.disabled = true;
     return;
   }
+  if (selectedQuizMode === 'lootBots') {
+    const meanings = new Set(candidates.map(word =>
+      String(word.translation || word.meaning || '').trim().normalize('NFKC').replace(/\s+/g, ' ')));
+    const allowed = total >= 2 && meanings.size >= 2;
+    if (summary) summary.textContent = allowed ? `${sourceText} · ${total} كلمة للساحة` : 'اختر مصدرًا فيه كلمتان على الأقل بمعنيين مختلفين.';
+    if (startButton) startButton.disabled = !allowed;
+    return;
+  }
   const eligibility = quizCore.getQuizStartEligibility(total, quizQuestionCount, { mode: selectedQuizMode });
   if (summary) {
     summary.textContent = eligibility.allowed
@@ -1165,13 +1236,34 @@ function refreshQuizSettingsSummary() {
 }
 
 function startConfiguredQuiz() {
+  if (isQuizPracticeMode(selectedQuizMode) && isPersonalQuizDue()) {
+    refreshQuizSettingsSummary();
+    return false;
+  }
   if (selectedQuizMode === 'runner') return startDictionaryRunner();
+  if (selectedQuizMode === 'lootBots') {
+    const scope = currentQuizSource;
+    let dueAt = personalQuizDueAt();
+    return window.LootLinguaBots?.launchDictionary(document.getElementById('quizStartButton'), {
+      source: getQuizSourceLabel(scope),
+      practiceLocked: isPersonalQuizDue,
+      isRunLocked: () => dueAt > 0 && Date.now() >= dueAt,
+      isSourceCurrent: () => currentView === 'quiz' && selectedQuizMode === 'lootBots' && currentQuizSource === scope &&
+        document.getElementById('quizSettingsPanel')?.style.display !== 'none',
+      words: async () => {
+        const snapshot = await ensureQuizSourceReady(scope, { mode: 'lootBots' });
+        if (!snapshot || snapshot.error || snapshot.stale) throw new Error('Dictionary source unavailable');
+        dueAt = personalQuizDueAt();
+        return snapshot.candidates;
+      },
+    });
+  }
   return startActualQuiz(selectedQuizMode, { configured: true });
 }
 
 let dictionaryRunnerPreparing = false;
 async function startDictionaryRunner() {
-  if (dictionaryRunnerPreparing) return false;
+  if (dictionaryRunnerPreparing || isPersonalQuizDue()) return false;
   dictionaryRunnerPreparing = true;
   const ownerId = getQuizSourceOwnerId(), scope = currentQuizSource;
   const generation = Number(window.__lootlinguaAuthGeneration) || 0;
@@ -1194,7 +1286,12 @@ async function startDictionaryRunner() {
       const index = deck.findIndex((word, position) => deck.some((other, otherPosition) => otherPosition !== position && meaning(other) === meaning(word)));
       if (index >= 0) deck[index] = candidate;
     }
-    return await window.LootLinguaGateRunner.launch({ source: 'dictionary', words: deck, isCurrent });
+    const dueAt = personalQuizDueAt();
+    return await window.LootLinguaGateRunner.launch({
+      source: 'dictionary', scope, words: deck, isCurrent,
+      practiceLocked: () => dueAt > 0 && Date.now() >= dueAt,
+      onPractice: () => openQuizModeSettings('matching'),
+    });
   } catch (error) { showToast('تعذّر تجهيز اللعبة. حاول مجددًا.', 'warning'); return false; }
   finally { dictionaryRunnerPreparing = false; refreshQuizSettingsSummary(); }
 }

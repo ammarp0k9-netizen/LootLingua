@@ -28,6 +28,7 @@ const GUEST_PROFILE_DIRTY_KEYS = new Set([
   'lootlinguaExtraChests',
   'lootlingua.runner.coins.v1',
   'lootlingua.runner.best-distance.v1',
+  'lootlingua.bots.v1:guest',
 ]);
 const GUEST_PROFILE_DIRTY_PREFIXES = ['lootlinguaDailyQuests_'];
 
@@ -179,6 +180,7 @@ function guestMigrationSnapshotFingerprint(snapshot) {
       lastActivityDate: profile.lastActivityDate || '',
       activityMap: profile.activityMap || {},
       quizExposureHistory: profile.quizExposureHistory || [],
+      ...(profile.lastPersonalTrustedQuizAt ? { lastPersonalTrustedQuizAt: profile.lastPersonalTrustedQuizAt } : {}),
       addedGameWords: profile.addedGameWords || [],
       dailyLootState: profile.dailyLootState || {},
       titlesState: profile.titlesState || {},
@@ -189,8 +191,10 @@ function guestMigrationSnapshotFingerprint(snapshot) {
       gameDictAdds: profile.gameDictAdds || 0,
       perfectQuizzes: profile.perfectQuizzes || 0,
       extraChests: profile.extraChests || [],
+      ...(profile.extraChestState ? { extraChestState: profile.extraChestState } : {}),
       runnerCoins: profile.runnerCoins || 0,
       runnerBestDistance: profile.runnerBestDistance || 0,
+      ...(profile.lootBots ? { lootBots: profile.lootBots } : {}),
     },
   });
   const serialized = JSON.stringify(stableSnapshot);
@@ -265,8 +269,10 @@ function purgeStaleGuestLocalData() {
   localStorage.removeItem(getCustomWorldsStorageKey('guest'));
   localStorage.removeItem(getPendingCustomWorldsStorageKey('guest'));
   localStorage.removeItem('lootlinguaQuizExposureHistory_guest');
+  localStorage.removeItem('lootlinguaLastPersonalTrustedQuizAt_guest');
   localStorage.removeItem('lootlinguaWordMastery_guest');
   localStorage.removeItem('lootlinguaMotivation_v1_guest');
+  localStorage.removeItem('lootlingua:guest-treasure:v1');
   localStorage.removeItem('active_quiz_session');
   localStorage.removeItem(LEGACY_DICTIONARY_KEY);
   localStorage.removeItem(GUEST_DATA_DIRTY_KEY);
@@ -323,6 +329,8 @@ function hasMeaningfulGuestLoot(snapshot) {
   if ((Number(p.perfectQuizzes) || 0) > 0) return true;
   if ((Number(p.runnerCoins) || 0) > 0) return true;
   if ((Number(p.runnerBestDistance) || 0) > 0) return true;
+  if (p.lootBots && (['coins', 'best', 'bosses', 'seconds'].some(key => Number(p.lootBots[key]) > 0) ||
+      Object.keys(p.lootBots.audio || {}).length > 0)) return true;
   const titles = p.titlesState?.unlocked;
   if (Array.isArray(titles) && titles.length > 0) return true;
   const lootState = p.dailyLootState;
