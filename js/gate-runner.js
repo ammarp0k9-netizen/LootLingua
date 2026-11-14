@@ -2,26 +2,54 @@
 (function () {
   'use strict';
   const MAX_HEARTS = 3, COIN_KEY = 'lootlingua.runner.coins.v1', BEST_DISTANCE_KEY = 'lootlingua.runner.best-distance.v1';
+  const GUEST_SHOP_KEY = 'lootlingua.runner.shop.v1:guest';
   const accountProgressKey = (uid, field) => `lootlingua.runner.progress.v1:user:${encodeURIComponent(uid)}:${field}`;
+  const coinCount = value => Math.max(0, Math.floor(Number(value) || 0));
+  let shop;
   function progressValue(field, guestKey) {
     try {
       const uid = window.auth?.currentUser?.uid;
       return Math.max(0, Number(localStorage.getItem(uid ? accountProgressKey(uid, field) : guestKey)) || 0);
     } catch { return 0; }
   }
+  function readShopState(uid = window.auth?.currentUser?.uid) {
+    try {
+      const key = uid ? accountProgressKey(uid, 'shop') : GUEST_SHOP_KEY;
+      return JSON.parse(localStorage.getItem(key)) || null;
+    } catch { return null; }
+  }
+  function walletProfile() {
+    return readShopState() || { runnerCoins: progressValue('runnerCoins', COIN_KEY), runnerUnlocks: [] };
+  }
+  function guestShopProfile() {
+    return readShopState('');
+  }
   function refreshProgressUI() {
     if (typeof document === 'undefined') return;
     document.querySelectorAll('[data-runner-wallet]').forEach(el => { el.textContent = String(RunnerCoinWallet.balance()); });
     document.querySelectorAll('[data-runner-best]').forEach(el => { el.textContent = String(RunnerBestDistance.value()); });
+    activeRun?.refreshShop?.();
   }
   function acceptProfile(profile, uid) {
     if (!uid || window.auth?.currentUser?.uid !== uid) return;
-    localStorage.setItem(accountProgressKey(uid, 'runnerCoins'), String(Math.max(0, Number(profile?.runnerCoins) || 0)));
-    localStorage.setItem(accountProgressKey(uid, 'runnerBestDistance'), String(Math.max(0, Number(profile?.runnerBestDistance) || 0)));
+    try {
+      localStorage.setItem(accountProgressKey(uid, 'shop'), JSON.stringify({
+        runnerCoins: coinCount(profile?.runnerCoins), runnerUnlocks: profile?.runnerUnlocks || [],
+      }));
+      localStorage.setItem(accountProgressKey(uid, 'runnerBestDistance'), String(Math.max(0, Number(profile?.runnerBestDistance) || 0)));
+    } catch {}
     refreshProgressUI();
   }
   function normalizeWords(words) { const seen = new Set(); return (Array.isArray(words) ? words : []).map((x) => ({ word: String(x?.word || x?.term || '').trim(), meaning: String(x?.translation || x?.meaning || x?.ar || x?.definition || '').trim() })).filter((x) => x.word && x.meaning && !seen.has(`${x.word}\u0000${x.meaning}`) && seen.add(`${x.word}\u0000${x.meaning}`)); }
-  const RunnerCoinWallet = Object.freeze({ balance() { return progressValue('runnerCoins', COIN_KEY); }, credit(amount, eventId) {
+  function saveGuestShop(profile) {
+    localStorage.setItem(GUEST_SHOP_KEY, JSON.stringify(profile));
+    window.markGuestProfileDataDirty?.(GUEST_SHOP_KEY);
+    refreshProgressUI();
+  }
+  function updateGuestWallet(action) {
+    return window.navigator?.locks ? window.navigator.locks.request(GUEST_SHOP_KEY, action) : action();
+  }
+  const RunnerCoinWallet = Object.freeze({ balance() { return coinCount(walletProfile().runnerCoins); }, credit(amount, eventId) {
     const value = Math.max(0, Math.floor(Number(amount) || 0));
     if (!value) return;
     if (window.auth?.currentUser) {
@@ -32,8 +60,36 @@
           return { saved: false, applied: false };
         });
     }
-    try { localStorage.setItem(COIN_KEY, String(this.balance() + value)); window.markGuestProfileDataDirty?.(COIN_KEY); refreshProgressUI(); } catch {}
+    const owner = captureRunnerOwner();
+    try {
+      return Promise.resolve(updateGuestWallet(() => {
+        if (!runnerOwnerCurrent(owner)) return;
+        const guest = guestShopProfile();
+        if (guest) saveGuestShop({ ...guest, runnerCoins: coinCount(guest.runnerCoins) + value });
+        else {
+          localStorage.setItem(COIN_KEY, String(this.balance() + value));
+          window.markGuestProfileDataDirty?.(COIN_KEY);
+          refreshProgressUI();
+        }
+      })).catch(() => {});
+    } catch { return; }
   } });
+  async function purchaseItem(item, owner, eventId) {
+    if (!runnerOwnerCurrent(owner)) return { saved: false, reason: 'auth/identity-changed' };
+    try {
+      if (owner.uid) {
+        if (!window.commitProfileIntent) return { saved: false, reason: 'profile/unavailable' };
+        return await window.commitProfileIntent({ type: 'runner-purchase', item, eventId });
+      }
+      return await updateGuestWallet(() => {
+        if (!runnerOwnerCurrent(owner)) return { saved: false, reason: 'auth/identity-changed' };
+        const result = shop.purchaseRunnerItem(walletProfile(), item);
+        if (result.reason) return { saved: true, reason: result.reason };
+        saveGuestShop(result.profile);
+        return { saved: true, applied: true };
+      });
+    } catch { return { saved: false, reason: 'profile/sync-failed' }; }
+  }
   const RunnerBestDistance = Object.freeze({ value() { return Math.floor(progressValue('runnerBestDistance', BEST_DISTANCE_KEY)); }, save(distance) {
     const next = Math.max(0, Math.floor(Number(distance) || 0));
     if (next <= this.value()) return false;
@@ -107,11 +163,18 @@
     });
     const css = document.querySelector('link[data-runner-style]');
     const styles = css ? Promise.resolve() : new Promise((resolve, reject) => {
-      const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'runner.css?v=20261107-runner-entry-1';
+      const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'runner.css?v=20261114-runner-shop-1';
       link.dataset.runnerStyle = ''; link.onload = resolve; link.onerror = () => { link.remove(); reject(new Error('Runner styles unavailable')); };
       document.head.append(link);
     });
-    resources = Promise.all([styles, module('LootLinguaRunnerEngine', 'js/runner-engine.js?v=20261111-runner-1'), module('LootLinguaRunnerRenderer', 'js/runner-renderer.js?v=20261111-jump-4')]).catch(error => { resources = null; throw error; });
+    resources = Promise.all([
+      styles,
+      module('LootLinguaRunnerMaps', 'js/runner-maps.js?v=20261114-maps-3'),
+      module('LootLinguaRunnerEngine', 'js/runner-engine.js?v=20261114-maps-3'),
+      module('LootLinguaRunnerCharacters', 'js/runner-characters.js?v=20261114-characters-2'),
+      module('LootLinguaRunnerRenderer', 'js/runner-renderer.js?v=20261114-characters-1'),
+      import('./runner-shop.mjs?v=20261114-runner-shop-1').then(module => { shop = module; }),
+    ]).catch(error => { resources = null; throw error; });
     return resources;
   }
   function button(label, cls, action) {
@@ -241,8 +304,9 @@
     const options = node('div', 'llr-gate-labels'); options.hidden = true;
     const labels = [0, 1, 2].map(lane => { const label = node('div', 'llr-gate-label'); label.dataset.lane = String(lane); options.append(label); return label; });
     const status = node('p', 'llr-status'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+    const mapNotice = node('div', 'llr-map-notice'); mapNotice.setAttribute('role', 'status'); mapNotice.hidden = true;
     const screen = node('div', 'llr-screen');
-    viewport.append(canvas, hud, challenge, options, status, screen);
+    viewport.append(canvas, hud, challenge, options, status, mapNotice, screen);
     const controls = node('div', 'llr-controls');
     const move = lane => { E.move(state, lane); };
     for (const [label, action, icon] of [
@@ -255,7 +319,7 @@
     window.dispatchEvent(new CustomEvent('lootlingua:runner-input-active'));
     window.lockBackgroundScroll?.('runner');
     let renderer, resizeObserver, raf = 0, previous = 0, destroyed = false, settled = false, gateId = null, feedbackUntil = 0, hudKey = '', rect, lastDueCheck = 0, gesture = null;
-    let gateZ = 0;
+    let gateZ = 0, mapNoticeUntil = 0;
     let settingsOpen = false, resumeAfterSettings = false, demoRenderer = null, demoRaf = 0, demoState = null, demoPrevious = 0, demoIndex = 0;
     let demoPlaying = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const settings = node('section', 'llr-settings'); settings.hidden = true; settings.tabIndex = -1;
@@ -360,6 +424,204 @@
     }
     const startingBest = RunnerBestDistance.value();
     const resize = () => { rect = viewport.getBoundingClientRect(); renderer?.resize(rect.width, rect.height); if (renderer) renderer.draw(state); };
+    const catalog = window.LootLinguaRunnerMaps;
+    const maps = [...catalog.maps].sort((a, b) => shop.runnerPrice(`map:${a.id}`) - shop.runnerPrice(`map:${b.id}`));
+    const mapIds = maps.map(map => map.id);
+    const characters = window.LootLinguaRunnerCharacters;
+    const roster = [...characters.list].sort((a, b) => shop.runnerPrice(`character:${a.id}`) - shop.runnerPrice(`character:${b.id}`));
+    const mapKey = 'lootlingua.runner.map.v1';
+    const characterKey = 'lootlingua.runner.character.v1';
+    let mapIndex = 0, characterIndex = 0, rotateMaps = false;
+    try {
+      const preference = JSON.parse(localStorage.getItem(mapKey));
+      mapIndex = Math.max(0, mapIds.indexOf(preference?.mapId)); rotateMaps = preference?.rotate === true;
+    } catch {}
+    try { characterIndex = roster.indexOf(characters.get(localStorage.getItem(characterKey))); } catch {}
+    function runPicker(free) {
+      const panel = node('div', 'llr-map-picker');
+      let choosingCharacter = false, pickerReady = false, previewTransition, captionTransition, unlockTransition;
+      let purchasePending = null, messageItem = '', purchaseMessage = '';
+      const waitingForSync = new Set();
+      const statusText = {
+        open: 'انفتح وصار جاهز للجري!',
+        pending: 'الشراء قيد المزامنة. رح يظهر الفتح بعد تأكيد الحفظ.',
+      };
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const tabs = node('div', 'llr-picker-tabs');
+      tabs.setAttribute('role', 'group'); tabs.setAttribute('aria-label', 'تجهيز الجولة');
+      const mapsButton = button('الخريطة', 'llr-picker-tab', () => switchPicker(false));
+      const charactersButton = button('الشخصية', 'llr-picker-tab', () => switchPicker(true));
+      tabs.append(mapsButton, charactersButton);
+      const toggle = node('label', 'llr-map-toggle'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = rotateMaps;
+      toggle.append(checkbox, node('span', '', 'التنقّل بين الخرائط'));
+      checkbox.addEventListener('change', () => { rotateMaps = checkbox.checked; });
+      const carousel = node('div', 'llr-map-carousel'); carousel.dir = 'ltr';
+      const card = node('figure', 'llr-map-card'), preview = node('canvas', 'llr-map-preview'); preview.setAttribute('aria-hidden', 'true');
+      const stage = node('div', 'llr-picker-stage');
+      const outgoing = node('canvas', 'llr-map-preview llr-preview-outgoing');
+      outgoing.setAttribute('aria-hidden', 'true'); outgoing.hidden = true;
+      const lock = node('div', 'llr-shop-lock');
+      const lockIcon = node('span', 'llr-shop-lock-icon');
+      lockIcon.append(node('span', 'llr-shop-shackle'));
+      lock.append(lockIcon);
+      lock.setAttribute('aria-hidden', 'true'); lock.hidden = true;
+      stage.append(preview, outgoing, lock, toggle);
+      const caption = node('figcaption'), title = node('strong'), count = node('small'), description = node('span');
+      caption.dir = 'rtl'; caption.setAttribute('aria-live', 'polite'); caption.append(title, count, description); card.append(stage, caption);
+      const select = step => {
+        if (choosingCharacter) characterIndex = (characterIndex + step + roster.length) % roster.length;
+        else mapIndex = (mapIndex + step + maps.length) % maps.length;
+        paint();
+      };
+      const prev = button('‹', 'llr-map-arrow', () => select(-1)), next = button('›', 'llr-map-arrow', () => select(1));
+      carousel.append(prev, card, next);
+      const shopRow = node('div', 'llr-shop-row');
+      const balance = node('span', 'llr-shop-balance');
+      const purchase = button('', 'llr-shop-buy', () => void buySelected());
+      const message = node('small', 'llr-shop-message');
+      message.setAttribute('role', 'status');
+      shopRow.append(balance, purchase, message);
+      panel.append(tabs, carousel, shopRow, node('p', 'llr-map-tip', free ? 'جري حر · لا توجد معانٍ كافية لبوابات الأسئلة.' : 'اعبر بوابة المعنى الصحيح أثناء الجري.'));
+      const sample = E.createState([], { random: () => .5 }); sample.running = false;
+      sample.distance = 145;
+      sample.entities = [
+        { id: 1, kind: 'obstacle', obstacleType: 'train', lane: 2, z: 19, length: 20 },
+        { id: 2, kind: 'obstacle', obstacleType: 'wall', lane: 0, z: 14 },
+        { id: 3, kind: 'obstacle', obstacleType: 'overhead', lane: 1, z: 29 },
+        { id: 4, kind: 'coin', lane: 1, z: 9 }, { id: 5, kind: 'coin', lane: 1, z: 13 },
+      ];
+      const still = window.LootLinguaRunnerRenderer.createRenderer(preview, { dprCap: 1 });
+      const motionAllowed = () => !reduceMotion.matches && !document.body.classList.contains('perf-turbo');
+      const selectedItem = () => choosingCharacter ? `character:${roster[characterIndex].id}` : `map:${maps[mapIndex].id}`;
+      const ownedMapIds = (profile = walletProfile()) => mapIds.filter(id => shop.runnerOwns(profile, `map:${id}`));
+      const formatCoins = new Intl.NumberFormat('ar-JO');
+      const primary = screen.querySelector('.llr-primary');
+      function paintShop() {
+        const wallet = walletProfile();
+        const item = selectedItem(), price = shop.runnerPrice(item);
+        const owned = shop.runnerOwns(wallet, item);
+        const locked = !owned || purchasePending?.item === item;
+        const available = coinCount(wallet.runnerCoins);
+        const animating = lock.hasAttribute('data-unlocking');
+        if (locked && animating) {
+          unlockTransition?.cancel();
+          lock.removeAttribute('data-unlocking');
+        }
+        if (!animating || locked) lock.hidden = !locked;
+        balance.textContent = `رصيدك ${formatCoins.format(available)} عملة`;
+        purchase.hidden = !locked;
+        purchase.textContent = purchasePending?.item === item ? 'جارٍ الفتح…' : `فتح بـ ${formatCoins.format(price)} عملة`;
+        purchase.disabled = Boolean(purchasePending) || available < price;
+        const canRotate = ownedMapIds(wallet).length > 1;
+        checkbox.disabled = !canRotate;
+        checkbox.checked = canRotate && rotateMaps;
+        toggle.title = canRotate ? '' : 'افتح خريطة ثانية لتفعيل التنقّل';
+        toggle.setAttribute('aria-label', canRotate ? 'التنقّل بين الخرائط' : 'التنقّل بين الخرائط يتطلب فتح خريطة ثانية');
+        primary.disabled = Boolean(purchasePending) ||
+          !shop.runnerOwns(wallet, `map:${maps[mapIndex].id}`) ||
+          !shop.runnerOwns(wallet, `character:${roster[characterIndex].id}`);
+        const confirmed = owned && waitingForSync.delete(item);
+        if (confirmed) { messageItem = item; purchaseMessage = statusText.open; }
+        message.textContent = messageItem === item && purchaseMessage ? purchaseMessage
+          : waitingForSync.has(item) ? statusText.pending
+          : locked && available < price ? `ناقصك ${formatCoins.format(price - available)} عملة`
+          : !locked && primary.disabled && !purchasePending ? 'اختَر عنصرًا مفتوحًا من القسم الآخر لبدء الجولة.' : '';
+        message.hidden = !message.textContent;
+        if (confirmed) animateUnlock();
+      }
+      function animateUnlock() {
+        if (!motionAllowed() || !lock.animate) return;
+        unlockTransition?.cancel();
+        lock.hidden = false; lock.setAttribute('data-unlocking', '');
+        unlockTransition = lock.animate([{ opacity: 1 }, { opacity: 1, offset: .36 }, { opacity: 0 }], { duration: 570, easing: 'ease-out' });
+        unlockTransition.onfinish = () => { lock.hidden = true; lock.removeAttribute('data-unlocking'); };
+      }
+      async function buySelected() {
+        if (purchasePending || purchase.disabled || purchase.hidden) return;
+        const item = selectedItem();
+        const eventId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        purchasePending = { item };
+        messageItem = item; purchaseMessage = '';
+        paintShop();
+        const result = await purchaseItem(item, owner, eventId);
+        if (destroyed || !runnerOwnerCurrent(owner)) return;
+        purchasePending = null;
+        const opened = shop.runnerOwns(walletProfile(), item);
+        if (!opened && !result.saved && result.operationId) waitingForSync.add(item);
+        purchaseMessage = opened ? statusText.open
+          : result.reason === 'insufficient-balance' ? 'رصيدك الحالي ما بكفّي للفتح.'
+          : waitingForSync.has(item) ? statusText.pending
+          : 'تعذّر إتمام الشراء. جرّب مرة ثانية.';
+        paintShop();
+        if (opened && selectedItem() === item) {
+          animateUnlock();
+          const focusTarget = primary.disabled ? (choosingCharacter ? mapsButton : charactersButton) : primary;
+          focusTarget.focus({ preventScroll: true });
+        }
+      }
+      function switchPicker(character) {
+        if (pickerReady && character === choosingCharacter) return;
+        previewTransition?.cancel(); captionTransition?.cancel();
+        outgoing.hidden = true;
+        if (pickerReady && motionAllowed() && outgoing.animate) {
+          outgoing.width = preview.width; outgoing.height = preview.height;
+          outgoing.toggleAttribute('data-portrait', choosingCharacter);
+          outgoing.getContext('2d').drawImage(preview, 0, 0);
+          outgoing.hidden = false;
+          previewTransition = outgoing.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 210, easing: 'ease-out' });
+          previewTransition.onfinish = () => { outgoing.hidden = true; };
+          captionTransition = caption.animate([{ opacity: .45, transform: 'translateY(4px)' }, { opacity: 1, transform: 'translateY(0)' }], { duration: 190, easing: 'ease-out' });
+        }
+        choosingCharacter = character;
+        pickerReady = true;
+        tabs.toggleAttribute('data-character', character);
+        mapsButton.setAttribute('aria-pressed', String(!character));
+        charactersButton.setAttribute('aria-pressed', String(character));
+        toggle.hidden = character;
+        prev.setAttribute('aria-label', character ? 'الشخصية السابقة' : 'الخريطة السابقة');
+        next.setAttribute('aria-label', character ? 'الشخصية التالية' : 'الخريطة التالية');
+        still.resize(character ? 320 : 512, 240);
+        preview.toggleAttribute('data-portrait', character);
+        paint();
+      }
+      function paint() {
+        unlockTransition?.cancel();
+        lock.removeAttribute('data-unlocking');
+        const character = roster[characterIndex];
+        const item = choosingCharacter ? character : maps[mapIndex];
+        const index = choosingCharacter ? characterIndex : mapIndex;
+        const total = choosingCharacter ? roster.length : maps.length;
+        title.textContent = item.name; count.textContent = `${index + 1} / ${total}`; description.textContent = item.description;
+        if (choosingCharacter) still.portrait(character);
+        else {
+          sample.mapId = item.id; sample.characterId = character.id;
+          still.draw(sample);
+        }
+        paintShop();
+      }
+      let touchX = null;
+      card.addEventListener('pointerdown', event => {
+        if (event.target.closest('.llr-map-toggle')) return;
+        touchX = event.clientX; card.setPointerCapture?.(event.pointerId);
+      });
+      card.addEventListener('pointerup', event => {
+        if (touchX !== null && Math.abs(event.clientX - touchX) > 30) select(event.clientX < touchX ? 1 : -1);
+        touchX = null;
+      });
+      card.addEventListener('pointercancel', () => { touchX = null; });
+      carousel.addEventListener('keydown', event => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault(); select(event.key === 'ArrowLeft' ? -1 : 1);
+      });
+      switchPicker(false);
+      return { panel, refresh: paintShop, ownedMapIds, release: () => {
+        previewTransition?.cancel(); captionTransition?.cancel(); outgoing.hidden = true;
+        unlockTransition?.cancel();
+        outgoing.width = outgoing.height = 1;
+        still.destroy();
+      } };
+    }
+    let releasePicker;
     const saveRun = () => {
       if (settled || !runnerOwnerCurrent(owner)) return;
       settled = true; RunnerBestDistance.save(Math.floor(state.distance));
@@ -367,6 +629,7 @@
     };
     function cleanup() {
       if (destroyed) return; saveRun(); destroyed = true; cancelAnimationFrame(raf);
+      releasePicker?.(); releasePicker = null;
       cancelAnimationFrame(demoRaf); demoRenderer?.destroy();
       resizeObserver?.disconnect(); renderer?.destroy(); audio.destroy(); speech.cancel();
       window.removeEventListener('resize', resize); window.removeEventListener('keydown', keyboard, true);
@@ -381,6 +644,17 @@
     }
     function showScreen(title, description, cta, action) {
       const primary = button(cta, 'llr-primary', action);
+      let touch;
+      primary.addEventListener('pointerdown', event => {
+        if (event.pointerType === 'touch') touch = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      });
+      primary.addEventListener('pointercancel', () => { touch = null; });
+      primary.addEventListener('pointerup', event => {
+        if (event.pointerId !== touch?.id) return;
+        const tap = Math.hypot(event.clientX - touch.x, event.clientY - touch.y) < 14;
+        touch = null;
+        if (tap && !screen.hidden && primary.isConnected) { event.preventDefault(); primary.click(); }
+      });
       screen.replaceChildren(node('small', 'llr-screen-kicker', 'LOOT RUNNER'), node('h2', '', title), node('p', '', description), primary);
       screen.hidden = false;
       requestAnimationFrame(() => { if (!destroyed && primary.isConnected && !screen.hidden) primary.focus({ preventScroll: true }); });
@@ -445,7 +719,12 @@
       if (now - lastDueCheck > 1000) { lastDueCheck = now; if (practiceLocked(context)) { finish('حان وقت الاختبار الموثوق'); return; } }
       const delta = Math.min(50, Math.max(0, now - previous)); previous = now;
       E.update(state, delta);
+      if (mapNoticeUntil && state.elapsed >= mapNoticeUntil) { mapNotice.hidden = true; mapNoticeUntil = 0; }
       for (const event of state.events) {
+        if (event.type === 'map-arrival') {
+          mapNotice.textContent = catalog.get(event.mapId).name;
+          mapNotice.hidden = false; mapNoticeUntil = state.elapsed + 2200;
+        }
         if (event.type === 'gate') {
           answeredGate = true;
           if (event.correct) correctGates++;
@@ -467,6 +746,7 @@
       if (event.key === 'Tab') return;
       if (settingsOpen) { if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closeSettings(); } return; }
       if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); cleanup(); return; }
+      if (event.target?.closest?.('.llr-map-picker')) return;
       if (event.target?.closest?.('button') && ['Enter', ' '].includes(event.key)) return;
       const key = event.key.toLowerCase();
       const actions = { arrowleft: () => move(state.lane - 1), a: () => move(state.lane - 1), arrowright: () => move(state.lane + 1), d: () => move(state.lane + 1), arrowup: () => E.jump(state), w: () => E.jump(state), ' ': () => E.jump(state), arrowdown: () => E.slide(state), s: () => E.slide(state), p: () => setPaused(!state.paused) };
@@ -475,7 +755,7 @@
     const visibility = () => { if (document.hidden) setPaused(true); resumeDemo(); };
     const authChanged = () => { if (!runnerOwnerCurrent(owner)) cleanup(); };
     viewport.addEventListener('pointerdown', event => {
-      if (event.target.closest('button') || (event.button != null && event.button !== 0)) return;
+      if (event.target.closest('.llr-screen, button') || (event.button != null && event.button !== 0)) return;
       gesture = { id: event.pointerId, x: event.clientX, y: event.clientY, lane: state.lane, acted: false };
       viewport.setPointerCapture?.(event.pointerId); event.preventDefault();
     });
@@ -503,10 +783,31 @@
       window.LootLinguaModalFocus?.open(overlay, { dialog: game, onEscape: cleanup });
       syncHUD(); renderer.draw(state);
       const free = new Set(words.map(w => w.meaning)).size < 3;
-      showScreen('الطريق لك', `${free ? 'هذه جولة جري حر؛ البوابة تحتاج ثلاثة معانٍ مختلفة.' : 'عند ظهور كلمة، اعبر بوابة معناها الصحيح.'} السباق تدريب ولا يزيد الإتقان أو جاهزية البوابة.`, 'انطلق', () => {
+      showScreen('جهّز جولتك', '', 'انطلق', () => {
+        if (state.running || destroyed) return;
+        const mapId = maps[mapIndex].id;
+        const characterId = roster[characterIndex].id;
+        const wallet = walletProfile(), ownedMaps = picker.ownedMapIds(wallet);
+        if (!ownedMaps.includes(mapId) || !shop.runnerOwns(wallet, `character:${characterId}`)) return;
+        E.configureMaps(state, mapId, rotateMaps && ownedMaps.length > 1 ? ownedMaps : []);
+        state.characterId = characterId;
+        try {
+          localStorage.setItem(mapKey, JSON.stringify({ mapId, rotate: rotateMaps }));
+          localStorage.setItem(characterKey, state.characterId);
+        } catch {}
+        releasePicker?.(); releasePicker = null;
+        activeRun.refreshShop = null;
+        screen.classList.remove('llr-map-screen');
+        renderer.draw(state);
         audio.unlock(); screen.hidden = true; state.running = true; state.paused = false; previous = performance.now(); viewport.focus({ preventScroll: true }); raf = requestAnimationFrame(frame);
       });
-      screen.insertBefore(node('div', 'llr-tutorial', '← → مسارات   ↑ قفز   ↓ انزلاق\nالهاتف: اسحب في الاتجاه نفسه أو استخدم الأزرار'), screen.lastChild);
+      screen.classList.add('llr-map-screen');
+      const wallet = walletProfile();
+      if (!shop.runnerOwns(wallet, `map:${maps[mapIndex].id}`)) mapIndex = 0;
+      if (!shop.runnerOwns(wallet, `character:${roster[characterIndex].id}`)) characterIndex = 0;
+      const picker = runPicker(free); releasePicker = picker.release;
+      activeRun.refreshShop = picker.refresh;
+      screen.querySelector('p').replaceWith(picker.panel);
       return true;
     } catch (error) { cleanup(); window.showToast?.('تعذّر تشغيل الرسومات. حاول مجددًا.', 'warning'); return false; }
   }
@@ -552,11 +853,15 @@
     reduced?.addEventListener?.('change', resume);
   }
   window.LootLinguaGateRunner = {
-    render, launch, mountPreview, acceptProfile, refreshProgressUI, reviewIsDue, normalizeWords, RunnerCoinWallet, RunnerBestDistance, MAX_HEARTS,
+    render, launch, mountPreview, acceptProfile, refreshProgressUI, guestShopProfile, reviewIsDue, normalizeWords, RunnerCoinWallet, RunnerBestDistance, MAX_HEARTS,
     createState: (...args) => engine().createState(...args), step: (...args) => engine().update(...args), chooseLane: (...args) => engine().move(...args),
-    getDiagnostics: () => activeRun ? { lane: activeRun.state.lane, action: activeRun.state.action, paused: activeRun.state.paused, entities: activeRun.state.entities.filter(e => e.active !== false).length, distance: activeRun.state.distance } : null,
+    getDiagnostics: () => activeRun ? { lane: activeRun.state.lane, action: activeRun.state.action, paused: activeRun.state.paused, entities: activeRun.state.entities.filter(e => e.active !== false).length, distance: activeRun.state.distance, mapId: activeRun.state.mapId } : null,
   };
   window.addEventListener?.('lootlingua:trusted-quiz-completed', () => { practiceBreak = { rounds: 0, until: 0 }; });
+  window.addEventListener?.('storage', event => {
+    const uid = window.auth?.currentUser?.uid;
+    if (event.key === null || (uid ? event.key === accountProgressKey(uid, 'shop') : [GUEST_SHOP_KEY, COIN_KEY].includes(event.key))) refreshProgressUI();
+  });
   window.addEventListener?.('lootlingua:auth-state', () => {
     practiceBreak = { rounds: 0, until: 0 };
     recentPrompts.clear();
